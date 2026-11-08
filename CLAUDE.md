@@ -29,7 +29,8 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 ## Screen protocol (tested)
 
 - Commands: ASCII ending with `FF FF FF` (Nextion/TJC style). Replies: `01` ok, `03` invalid page, `1A` unknown variable/component.
-- Current firmware (after flashing `agent-gadget.tft`): **9600 baud** at power-up. `connect` -> `comok 2,1073-0,TJC4827X243_011C,...`. `bauds=115200` is accepted
+- Current firmware (after flashing `agent-gadget.tft`): **9600 baud** at power-up. The gadget firmware moves it to **115200** at boot
+  (runtime `baud=115200`, verified by `comok`; `GET /debug/stats` -> `link`: `switched`, `already fast` after an ESP32-only reset). `connect` -> `comok 2,1073-0,TJC4827X243_011C,...`. `bauds=115200` is accepted
   but **not applied**: stay at 9600. The first command after a baud change often returns `1A` (stray byte): send `FF FF FF` first.
 - Drawing commands that work on the blank page: `cls`, `fill`, `draw`, `cirs`, `xstr` (font 0 = `f24`, font 1 = `f16`, ASCII only),
   `pic x,y,id` (ids 0..7 big 36x42 sprites lead, general, explore, plan, review, test, code, generic; 8..15 the same at 24x28).
@@ -65,6 +66,8 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   `pio run -e esp32dev_ota -t upload --upload-port <ip>` (tested OK); browser `/update`. OTA/`/update` password = `OTA_PASSWORD` in `net.h` (default `agent-gadget`: **change it**).
 - PlatformIO: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe` (espressif32 installed). Env `esp32dev_noscreen` builds without a screen (serial backend).
 - Opening COM3 resets the ESP32: wait ~2.5 s before sending. USB-side baud is fixed at 115200.
+- Wi-Fi modem sleep is off (`WiFi.setSleep(false)`): with it, HTTP requests stalled up to 5.6 s.
+- Drawing goes through a non-blocking queue (title bar > command strip > tree); `GET /debug/stats` (test builds) shows it.
 
 ## Claude plugin (very basic)
 
