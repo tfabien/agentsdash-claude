@@ -193,7 +193,7 @@ static void handleDebugStats() {       // GET /debug/stats: draw queue and redra
   j += ",\"loop_max_ms\":" + String(loopMaxUs / 1000) + ",\"loop_max_in\":\"" + loopMaxWhere + "\"";
   loopMaxUs = 0;
   j += ",\"uptime_ms\":" + String(millis()) + ",\"reset_reason\":" + String((int)esp_reset_reason()) +
-       ",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"min_stack\":" + String(uxTaskGetStackHighWaterMark(NULL)) + "}";
+       ",\"rssi\":" + String(WiFi.RSSI()) + ",\"channel\":" + String(WiFi.channel()) + ",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"min_stack\":" + String(uxTaskGetStackHighWaterMark(NULL)) + "}";
   server.send(200, "application/json", j);
 }
 
