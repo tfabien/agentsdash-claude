@@ -21,8 +21,14 @@ FILES = ["net.cpp", "model.cpp", "layout.cpp", "touch.cpp", "notify.py", "README
 def post(host, body):
     req = urllib.request.Request(f"http://{host}/event", data=json.dumps(body).encode("ascii"),
                                  headers={"Content-Type": "application/json", "X-Gadget-Test": "1"}, method="POST")
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        resp.read()
+    for attempt in (1, 2):      # one retry: Wi-Fi loses packets in bursts; events carry full state, so a repeat is harmless
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                resp.read()
+            return
+        except OSError:
+            if attempt == 2:
+                raise
 
 
 def ev(session, project, agent, state, cmd, detail="", role=None, evt="PreToolUse"):
