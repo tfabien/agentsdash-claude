@@ -1,6 +1,7 @@
 #include "net.h"
 #include "model.h"
 #include "display.h"
+#include "layout.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -149,6 +150,33 @@ static void handleDebugConfig() {      // POST /debug/config {"isolate","done_tt
   bool haveDone = jsonLong(body, "done_ttl_ms", done), haveStale = jsonLong(body, "stale_ttl_ms", stale);
   if (haveDone || haveStale) modelConfigure(haveDone ? (uint32_t)done : DONE_TTL_MS, haveStale ? (uint32_t)stale : STALE_TTL_MS);
   server.send(200, "application/json", String("{\"isolate\":") + (isolateMode ? "true" : "false") + "}");
+}
+
+static String rectJson(const Rect& r) {
+  return String("{\"x\":") + r.x + ",\"y\":" + r.y + ",\"w\":" + r.w + ",\"h\":" + r.h + "}";
+}
+
+static int intArg(const char* name, int def) { return server.hasArg(name) ? server.arg(name).toInt() : def; }
+
+static void handleDebugLayout() {      // GET /debug/layout?subs=N&tabs=T: slot rectangles of layout D
+  int subs = intArg("subs", 0), tabs = intArg("tabs", 5);
+  Rect slots[12];
+  int rows = layoutSubs(subs, slots);
+  int nSubs = subs < 0 ? 0 : subs > 12 ? 12 : subs, nTabs = tabs < 0 ? 0 : tabs > 5 ? 5 : tabs;
+  String j = "{\"title\":" + rectJson(layoutTitle()) + ",\"tree\":" + rectJson(layoutTree()) +
+             ",\"lead\":" + rectJson(layoutLead()) + ",\"strip\":" + rectJson(layoutStrip()) +
+             ",\"tabs_more\":" + rectJson(layoutTabsMore(tabs)) + ",\"rows\":" + rows + ",\"tabs\":[";
+  for (int i = 0; i < nTabs; i++) j += (i ? "," : "") + rectJson(layoutTab(i, tabs));
+  j += "],\"subs\":[";
+  for (int i = 0; i < nSubs; i++) j += (i ? "," : "") + rectJson(slots[i]);
+  j += "]}";
+  server.send(200, "application/json", j);
+}
+
+static void handleDebugHit() {         // GET /debug/hit?x&y&tabs&subs
+  Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("tabs", 0), intArg("subs", 0));
+  const char* kind = h.kind == Hit::Tab ? "tab" : h.kind == Hit::Agent ? "agent" : "none";
+  server.send(200, "application/json", String("{\"kind\":\"") + kind + "\",\"index\":" + h.index + "}");
 }
 #endif
 
@@ -313,6 +341,8 @@ void netBegin() {
   server.on("/reset", HTTP_POST, handleReset);
 #ifdef GADGET_DEBUG
   server.on("/debug/config", HTTP_POST, handleDebugConfig);
+server.on("/debug/layout", HTTP_GET, handleDebugLayout);
+server.on("/debug/hit", HTTP_GET, handleDebugHit);
 #endif
   server.on("/config", HTTP_GET, handleConfigPage);
   server.on("/save", HTTP_POST, handleSave);
