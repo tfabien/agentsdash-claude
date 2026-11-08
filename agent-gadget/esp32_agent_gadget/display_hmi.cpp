@@ -1,13 +1,17 @@
 // SCREEN - "agent standup" UI drawn on the HMI screen. Implements display.h.
-// Keeps its own memory of what is on screen (per-row revision) so the core never has to
-// say what to redraw.
+// TEMPORARY (until plan task 8): draws a flat list of the first 5 agents from modelFlat().
+// Keeps its own memory of what is on screen (per-row revision) so the core never says what to redraw.
 #ifndef DISPLAY_SERIAL
 
 #include "display.h"
 #include "hmi_uart.h"
 #include "ui_theme.h"
 
-static uint32_t lastRev[MAX_AGENTS];
+#define FLAT_ROWS 5
+
+static FlatRow rows[FLAT_ROWS];
+static int rowCount = 0;
+static uint32_t lastRev[FLAT_ROWS];
 static uint32_t lastModelRev = 0;
 static uint32_t lastAgeRefresh = 0;
 static bool fullRedraw = true;
@@ -16,10 +20,12 @@ static bool emptyShown = false;
 
 static uint16_t stateColor(AgentState s) {
   switch (s) {
-    case ST_WORKING: return C_GREEN;
-    case ST_WAITING: return C_ORANGE;
-    case ST_DONE:    return C_GREY;
-    default:         return C_RED;
+    case ST_NEEDS_YOU:    return C_ORANGE;
+    case ST_ERROR:        return C_RED;
+    case ST_YOUR_TURN:    return C_BLUEGREY;
+    case ST_WORKING:      return C_GREEN;
+    case ST_WAITING_SUBS: return C_SKY;
+    default:              return C_GREY;
   }
 }
 
@@ -35,28 +41,27 @@ static uint16_t toneColor(Tone t) {
 static void drawHeader() {
   hmiFill(0, 0, SCR_W, HEAD_H, C_DARK);
   hmiText(10, 3, 150, 26, FONT_BIG, C_WHITE, C_DARK, 0, "AGENTS");
-  String c = String(modelCount(ST_WORKING)) + " work";
-  int w = modelCount(ST_WAITING), e = modelCount(ST_ERROR);
-  if (w) c += "  " + String(w) + " wait";
+  String c = String(modelCount(ST_WORKING) + modelCount(ST_WAITING_SUBS)) + " work";
+  int w = modelCount(ST_NEEDS_YOU), e = modelCount(ST_ERROR);
+  if (w) c += "  " + String(w) + " asks";
   if (e) c += "  " + String(e) + " err";
-  hmiText(170, 3, 300, 26, FONT_BIG, C_GREEN, C_DARK, 2, c);
+  hmiText(170, 3, 300, 26, FONT_BIG, w ? C_ORANGE : C_GREEN, C_DARK, 2, c);
 }
 
 static void drawAge(int i) {
   int y = TOP + i * ROW_H;
-  hmiText(370, y + 6, 100, 18, FONT_SMALL, C_GREY, C_BLACK, 2, modelFormatAge((millis() - agents[i].since) / 1000));
+  hmiText(370, y + 6, 100, 18, FONT_SMALL, C_GREY, C_BLACK, 2, modelFormatAge((millis() - rows[i].since) / 1000));
 }
 
 static void drawRow(int i) {
   int y = TOP + i * ROW_H;
   hmiFill(0, y, SCR_W, ROW_H - 1, C_BLACK);
-  if (agents[i].used) {
-    const Agent& a = agents[i];
-    uint16_t col = stateColor(a.state);
+  if (i < rowCount) {
+    uint16_t col = stateColor(rows[i].state);
     hmiCircle(16, y + 16, 7, col);
-    hmiText(32, y + 1, 330, 26, FONT_BIG, C_WHITE, C_BLACK, 0, a.name);
+    hmiText(32, y + 1, 330, 26, FONT_BIG, C_WHITE, C_BLACK, 0, rows[i].name);
     drawAge(i);
-    hmiText(32, y + 27, 438, 18, FONT_SMALL, col, C_BLACK, 0, a.task);
+    hmiText(32, y + 27, 438, 18, FONT_SMALL, col, C_BLACK, 0, rows[i].task);
   }
   hmiFill(0, y + ROW_H - 1, SCR_W, 1, C_DARK);
 }
@@ -116,14 +121,19 @@ void displayRender() {
     emptyShown = false;
     fullRedraw = false;
   }
-  if (modelRev != lastModelRev) { drawHeader(); lastModelRev = modelRev; }
-  if (modelUsed() > 0) {
+  if (modelRev != lastModelRev) {
+    rowCount = modelFlat(rows, FLAT_ROWS);
+    drawHeader();
+    lastModelRev = modelRev;
+  }
+  if (rowCount > 0) {
     if (emptyShown) { clearBody(); emptyShown = false; for (auto& r : lastRev) r = ~0u; }
-    for (int i = 0; i < MAX_AGENTS; i++) {
-      if (agents[i].rev != lastRev[i]) { drawRow(i); lastRev[i] = agents[i].rev; }
+    for (int i = 0; i < FLAT_ROWS; i++) {
+      uint32_t key = i < rowCount ? rows[i].rev : 0;
+      if (key != lastRev[i]) { drawRow(i); lastRev[i] = key; }
     }
     if (now - lastAgeRefresh > AGE_REFRESH_MS) {
-      for (int i = 0; i < MAX_AGENTS; i++) if (agents[i].used) drawAge(i);
+      for (int i = 0; i < rowCount; i++) drawAge(i);
       lastAgeRefresh = now;
     }
   } else if (!emptyShown) {

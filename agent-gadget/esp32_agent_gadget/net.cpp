@@ -9,15 +9,17 @@
 #include <ArduinoOTA.h>
 #include <Update.h>
 
-#define BOOT_PIN 0
+#define FORGET_WIFI_PIN 0
 #define WIFI_TIMEOUT_MS 20000UL
+#define SELECT_HOLD_MS 30000UL
 
 static WebServer server(80);
 static DNSServer dns;
 static Preferences prefs;
 static bool apMode = false;
+static bool isolateMode = false;     // GADGET_DEBUG tests: ignore /event and /reset that lack the X-Gadget-Test header
 
-// ---------- JSON helper (flat objects only) ----------
+// ---------- JSON helpers (flat objects only) ----------
 static bool jsonGet(const String& body, const char* key, char* out, size_t outSize) {
   String pat = String("\"") + key + "\"";
   int k = body.indexOf(pat);
@@ -36,34 +38,113 @@ static bool jsonGet(const String& body, const char* key, char* out, size_t outSi
   return true;
 }
 
+static int jsonValueStart(const String& body, const char* key) {      // index of the first character after `"key":` and spaces
+  String pat = String("\"") + key + "\"";
+  int k = body.indexOf(pat);
+  if (k < 0) return -1;
+  int colon = body.indexOf(':', k + pat.length());
+  if (colon < 0) return -1;
+  int i = colon + 1;
+  while (i < (int)body.length() && body[i] == ' ') i++;
+  return i < (int)body.length() ? i : -1;
+}
+
+static bool jsonLong(const String& body, const char* key, long& out) {
+  int i = jsonValueStart(body, key);
+  if (i < 0) return false;
+  bool neg = body[i] == '-';
+  if (neg) i++;
+  if (i >= (int)body.length() || !isDigit(body[i])) return false;
+  long v = 0;
+  while (i < (int)body.length() && isDigit(body[i])) v = v * 10 + (body[i++] - '0');
+  out = neg ? -v : v;
+  return true;
+}
+
+static bool jsonBool(const String& body, const char* key, bool& out) {
+  int i = jsonValueStart(body, key);
+  if (i < 0) return false;
+  if (body.startsWith("true", i))  { out = true;  return true; }
+  if (body.startsWith("false", i)) { out = false; return true; }
+  return false;
+}
+
 // ---------- HTTP: API ----------
 static void cors() { server.sendHeader("Access-Control-Allow-Origin", "*"); }
 
-static void handleEvent() {            // POST /event {"agent":"x","state":"working","task":"..."}
+static bool ignoredByIsolation() { return isolateMode && !server.hasHeader("X-Gadget-Test"); }
+
+static void handleEvent() {            // POST /event: v2 body, or the old {agent,state,task}
   cors();
+  if (ignoredByIsolation()) { server.send(200, "text/plain", "ignored"); return; }
   String body = server.arg("plain");
-  char name[NAME_LEN], st[12], task[TASK_LEN] = "";
-  if (!jsonGet(body, "agent", name, sizeof name) || !jsonGet(body, "state", st, sizeof st)) {
+  long version = 0;
+  if (jsonLong(body, "v", version) && version == 2) {
+    EventV2 e;
+    memset(&e, 0, sizeof e);
+    char st[16];
+    if (!jsonGet(body, "session", e.session, ID_LEN) || !jsonGet(body, "agent", e.agent, ID_LEN) ||
+        !jsonGet(body, "state", st, sizeof st) || !modelParseState(st, e.state)) {
+      server.send(400, "text/plain", "session, agent and a valid state are required");
+      return;
+    }
+    jsonGet(body, "project", e.project, PROJECT_LEN);
+    jsonGet(body, "role", e.role, ROLE_LEN);
+    jsonGet(body, "evt", e.evt, sizeof e.evt);
+    jsonGet(body, "cmd", e.cmd, CMD_LEN);
+    jsonGet(body, "detail", e.detail, DETAIL_LEN);
+    modelApplyV2(e, millis());
+    server.send(200, "text/plain", "ok");
+    return;
+  }
+  char agent[24], st[12], task[CMD_LEN] = "";
+  if (!jsonGet(body, "agent", agent, sizeof agent) || !jsonGet(body, "state", st, sizeof st)) {
     server.send(400, "text/plain", "agent and state are required");
     return;
   }
-  AgentState s;
-  if (!modelParseState(st, s)) { server.send(400, "text/plain", "invalid state"); return; }
   jsonGet(body, "task", task, sizeof task);
-  modelUpdate(name, s, task);
+  if (!modelApplyV1(agent, st, task, millis())) { server.send(400, "text/plain", "invalid state"); return; }
   server.send(200, "text/plain", "ok");
 }
 
 static void handleState() {            // GET /state
   cors();
-  server.send(200, "application/json", modelToJson());
+  server.send(200, "application/json", modelToJson(millis()));
 }
 
 static void handleReset() {            // POST /reset: remove every agent from the list and the screen
   cors();
+  if (ignoredByIsolation()) { server.send(200, "text/plain", "ignored"); return; }
   modelClear();
   server.send(200, "text/plain", "ok");
 }
+
+static void handleSelect() {           // POST /select {"session","agent","hold_ms"?}: what a tap does
+  cors();
+  String body = server.arg("plain");
+  char session[ID_LEN] = "", agent[ID_LEN] = "";
+  long hold = SELECT_HOLD_MS;
+  if (!jsonGet(body, "session", session, sizeof session) || !jsonGet(body, "agent", agent, sizeof agent)) {
+    server.send(400, "text/plain", "session and agent are required");
+    return;
+  }
+  jsonLong(body, "hold_ms", hold);
+  if (!modelSelect(session, agent, millis(), (uint32_t)hold)) { server.send(404, "text/plain", "unknown session or agent"); return; }
+  server.send(200, "text/plain", "ok");
+}
+
+#ifdef GADGET_DEBUG
+static void handleDebugConfig() {      // POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms"}
+  cors();
+  String body = server.arg("plain");
+  bool flag;
+  long done = -1, stale = -1;
+  if (jsonBool(body, "isolate", flag)) isolateMode = flag;
+  bool haveDone = jsonLong(body, "done_ttl_ms", done), haveStale = jsonLong(body, "stale_ttl_ms", stale);
+  if (haveDone || haveStale) modelConfigure(haveDone ? (uint32_t)done : DONE_TTL_MS, haveStale ? (uint32_t)stale : STALE_TTL_MS);
+  server.send(200, "application/json", String("{\"isolate\":") + (isolateMode ? "true" : "false") + "}");
+}
+#endif
 
 static void handleOptions() {
   cors();
@@ -195,13 +276,13 @@ void netClearWifiConfig() {
 // ---------- Public ----------
 void netBegin() {
   prefs.begin("gadget", false);
-  pinMode(BOOT_PIN, INPUT_PULLUP);
+  pinMode(FORGET_WIFI_PIN, INPUT_PULLUP);
 
-  if (digitalRead(BOOT_PIN) == LOW) {                   // BOOT held at power-up: forget the Wi-Fi
+  if (digitalRead(FORGET_WIFI_PIN) == LOW) {                   // BOOT held at power-up: forget the Wi-Fi
     displayMessage("Hold BOOT for 3 s...", "to forget the saved Wi-Fi", "", "", Tone::Warn);
     uint32_t t0 = millis();
-    while (digitalRead(BOOT_PIN) == LOW && millis() - t0 < 3000) delay(50);
-    if (digitalRead(BOOT_PIN) == LOW) {
+    while (digitalRead(FORGET_WIFI_PIN) == LOW && millis() - t0 < 3000) delay(50);
+    if (digitalRead(FORGET_WIFI_PIN) == LOW) {
       netClearWifiConfig();
       displayMessage("Wi-Fi forgotten", "", "", "", Tone::Ok);
       delay(1500);
@@ -217,10 +298,16 @@ void netBegin() {
     startPortal();
   }
 
+  static const char* headerKeys[] = {"X-Gadget-Test"};
+  server.collectHeaders(headerKeys, 1);
   server.on("/event", HTTP_POST, handleEvent);
   server.on("/event", HTTP_OPTIONS, handleOptions);
   server.on("/state", HTTP_GET, handleState);
+  server.on("/select", HTTP_POST, handleSelect);
   server.on("/reset", HTTP_POST, handleReset);
+#ifdef GADGET_DEBUG
+  server.on("/debug/config", HTTP_POST, handleDebugConfig);
+#endif
   server.on("/config", HTTP_GET, handleConfigPage);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/update", HTTP_GET, handleUpdateForm);

@@ -25,5 +25,7 @@
 #define C_ORANGE 64512
 #define C_RED    63488
 #define C_GREY   33808
+#define C_BLUEGREY 36119         // "your turn": calm grey-blue
+#define C_SKY    15871           // "waiting on sub-agents"
 #define C_BLACK  0
 #define C_DARK   4226

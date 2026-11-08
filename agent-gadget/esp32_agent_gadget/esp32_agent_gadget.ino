@@ -2,7 +2,7 @@
   Agent Gadget - ESP32 + TJC4827X243_011C screen: live status of Claude agents.
 
   This file only wires the two layers together:
-    CORE   model.*  (agent state)   net.*  (Wi-Fi, HTTP API, setup portal, OTA)
+    CORE   model.*  (sessions, agents, states)   net.*  (Wi-Fi, HTTP API, setup portal, OTA)
     SCREEN display.h (interface)    display_hmi.cpp + ui_theme.h + hmi_uart.*  (drawing)
   See ../ARCHITECTURE.md.
 
@@ -17,11 +17,11 @@
 
 static void printTable() {
   Serial.println(F("---- agents ----"));
-  for (auto& a : agents) {
-    if (!a.used) continue;
-    Serial.printf("%-18s %-8s %-6s %s\n", a.name, modelStateName(a.state),
-                  modelFormatAge((millis() - a.since) / 1000).c_str(), a.task);
-  }
+  static FlatRow rows[MAX_SESSIONS * (1 + MAX_SUBS)];
+  int n = modelFlat(rows, MAX_SESSIONS * (1 + MAX_SUBS));
+  for (int i = 0; i < n; i++)
+    Serial.printf("%-19s %-12s %-6s %s\n", rows[i].name, modelStateName(rows[i].state),
+                  modelFormatAge((millis() - rows[i].since) / 1000).c_str(), rows[i].task);
 }
 
 void setup() {
@@ -35,7 +35,7 @@ void setup() {
 
 void loop() {
   netLoop();
-  modelPrune();
+  modelPrune(millis());
   displayRender();
   while (Serial.available()) {
     char c = Serial.read();

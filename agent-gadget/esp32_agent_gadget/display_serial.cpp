@@ -30,11 +30,11 @@ void displayRender() {
   if (messageMode || modelRev == lastModelRev) return;
   lastModelRev = modelRev;
   Serial.println("[display] ---- agents ----");
-  for (auto& a : agents) {
-    if (!a.used) continue;
-    Serial.printf("[display] %-18s %-8s %-6s %s\n", a.name, modelStateName(a.state),
-                  modelFormatAge((millis() - a.since) / 1000).c_str(), a.task);
-  }
+  static FlatRow rows[MAX_SESSIONS * (1 + MAX_SUBS)];
+  int n = modelFlat(rows, MAX_SESSIONS * (1 + MAX_SUBS));
+  for (int i = 0; i < n; i++)
+    Serial.printf("[display] %-19s %-12s %-6s %s\n", rows[i].name, modelStateName(rows[i].state),
+                  modelFormatAge((millis() - rows[i].since) / 1000).c_str(), rows[i].task);
 }
 
 #endif  // DISPLAY_SERIAL

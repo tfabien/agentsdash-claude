@@ -2,6 +2,8 @@
 
 Host: env GADGET_HOST, default 192.168.1.100. The tests talk to a real gadget flashed with the
 `esp32dev_test` (or `esp32dev_test_ota`) PlatformIO env, which enables the /debug endpoints.
+Every request carries `X-Gadget-Test: 1`: with `isolate` on (see `Gadget.configure`), the gadget ignores
+requests without it, so live Claude sessions posting to the same gadget cannot pollute a test.
 """
 import json
 import os
@@ -10,6 +12,7 @@ import urllib.error
 import urllib.request
 
 DEFAULT_HOST = "192.168.1.100"
+DEFAULT_TTLS = {"done_ttl_ms": 120000, "stale_ttl_ms": 600000}
 
 
 class Gadget:
@@ -20,7 +23,7 @@ class Gadget:
     def request(self, method, path, body=None):
         """Return (status, text). HTTP errors are returned, not raised."""
         data = None
-        headers = {}
+        headers = {"X-Gadget-Test": "1"}
         if body is not None:
             data = body if isinstance(body, bytes) else (body if isinstance(body, str) else json.dumps(body)).encode("utf-8")
             headers["Content-Type"] = "application/json"
@@ -54,6 +57,18 @@ class Gadget:
         if status != 200:
             raise AssertionError(f"{path} -> {status}: {text}")
         return json.loads(text) if text else {}
+
+    def configure(self, **cfg):
+        """POST /debug/config: isolate (bool), done_ttl_ms, stale_ttl_ms."""
+        return self.debug("/debug/config", cfg)
+
+    def start_isolated_test(self, **ttls):
+        self.configure(isolate=True, **ttls)
+        self.reset()
+
+    def end_isolated_test(self):
+        self.reset()
+        self.configure(isolate=False, **DEFAULT_TTLS)
 
 
 def require_gadget(host=None):
