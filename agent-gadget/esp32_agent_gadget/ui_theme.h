@@ -22,6 +22,7 @@
 #define L_TAB_PITCH  78
 #define L_TAB_MAX    5           // more sessions show a "+N" marker after the last tab
 #define L_MORE_W     30          // "+N" marker width
+#define L_TAB_HIT_H  28          // tabs answer taps down to y 27: fingers rarely reach y < 29 (docs/touch-findings.md)
 #define L_TREE_Y     22          // tree area: y 22..188
 #define L_TREE_H     166
 #define L_LEAD_X     4           // lead slot, left of the tree

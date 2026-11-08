@@ -13,6 +13,10 @@ void hmiDrain() {
   while (Serial2.available()) Serial2.read();
 }
 
+int hmiRead() {
+  return Serial2.available() ? Serial2.read() : -1;
+}
+
 void hmiClear(uint16_t color) {
   hmiSend("cls " + String(color));
 }

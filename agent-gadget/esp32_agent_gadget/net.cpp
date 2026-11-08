@@ -2,6 +2,7 @@
 #include "model.h"
 #include "display.h"
 #include "layout.h"
+#include "touch.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -171,6 +172,16 @@ static void handleDebugLayout() {      // GET /debug/layout?subs=N&tabs=T: slot 
   for (int i = 0; i < nSubs; i++) j += (i ? "," : "") + rectJson(slots[i]);
   j += "]}";
   server.send(200, "application/json", j);
+}
+
+static void handleDebugTap() {         // POST /debug/tap {"x","y","hold_ms"?}: same path as a touch press
+  cors();
+  String body = server.arg("plain");
+  long x = -1, y = -1, hold = UI_HOLD_MS;
+  if (!jsonLong(body, "x", x) || !jsonLong(body, "y", y)) { server.send(400, "text/plain", "x and y required"); return; }
+  jsonLong(body, "hold_ms", hold);
+  uiTap((int)x, (int)y, (uint32_t)hold);
+  server.send(200, "application/json", "{\"ok\":true}");
 }
 
 static void handleDebugHit() {         // GET /debug/hit?x&y&tabs&subs
@@ -343,6 +354,7 @@ void netBegin() {
   server.on("/debug/config", HTTP_POST, handleDebugConfig);
 server.on("/debug/layout", HTTP_GET, handleDebugLayout);
 server.on("/debug/hit", HTTP_GET, handleDebugHit);
+server.on("/debug/tap", HTTP_POST, handleDebugTap);
 #endif
   server.on("/config", HTTP_GET, handleConfigPage);
   server.on("/save", HTTP_POST, handleSave);

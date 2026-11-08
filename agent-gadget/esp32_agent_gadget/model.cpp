@@ -295,17 +295,18 @@ View modelView(uint32_t now) {
   if (best < 0)                                            // 3. most recently active
     for (int k = 0; k < n; k++) if (best < 0 || earlier(sessions[o[best]].lastActive, sessions[o[k]].lastActive)) best = k;
 
-  const Session& s = sessions[o[best]];
-  int slot = -1;
-  for (int i = 0; i <= modelSubCount(s) && slot < 0; i++) { const Agent* a = modelAgent(s, i); if (a && a->state == ST_NEEDS_YOU) slot = i; }
-  if (slot < 0) {
-    uint32_t newest = 0;
-    for (int i = 0; i <= modelSubCount(s); i++) {
-      const Agent* a = modelAgent(s, i);
-      if (a && (slot < 0 || earlier(newest, a->lastSeen))) { slot = i; newest = a->lastSeen; }
-    }
+  return {(int8_t)best, (int8_t)modelDefaultSlot(sessions[o[best]]), false};
+}
+
+int modelDefaultSlot(const Session& s) {
+  for (int i = 0; i <= modelSubCount(s); i++) { const Agent* a = modelAgent(s, i); if (a && a->state == ST_NEEDS_YOU) return i; }
+  int slot = 0;                                            // else the most recently active agent
+  uint32_t newest = s.lead.lastSeen;
+  for (int i = 1; i <= modelSubCount(s); i++) {
+    const Agent* a = modelAgent(s, i);
+    if (a && earlier(newest, a->lastSeen)) { slot = i; newest = a->lastSeen; }
   }
-  return {(int8_t)best, (int8_t)slot, false};
+  return slot;
 }
 
 bool modelSelect(const char* session, const char* agent, uint32_t now, uint32_t holdMs) {

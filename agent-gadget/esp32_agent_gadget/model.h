@@ -90,6 +90,7 @@ int modelCount(AgentState effective);                     // agents (all session
 int modelUsed();                                          // agents in all sessions
 
 View modelView(uint32_t now);
+int modelDefaultSlot(const Session& s);                   // the agent that needs the user, else the most recently active
 bool modelSelect(const char* session, const char* agent, uint32_t now, uint32_t holdMs);
 
 String modelToJson(uint32_t now);

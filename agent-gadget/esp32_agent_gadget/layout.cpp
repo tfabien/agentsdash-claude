@@ -36,8 +36,11 @@ int layoutSubs(int n, Rect out[12]) {
 
 Hit hitTest(int x, int y, int nTabs, int nSubs) {
   int shown = imin(nTabs, L_TAB_MAX);
-  for (int i = 0; i < shown; i++)
-    if (contains(layoutTab(i, nTabs), x, y)) return {Hit::Tab, (int8_t)i};
+  for (int i = 0; i < shown; i++) {
+    Rect zone = layoutTab(i, nTabs);
+    zone.h = L_TAB_HIT_H;                                  // taller than drawn; tabs win over the top sub-agent row
+    if (contains(zone, x, y)) return {Hit::Tab, (int8_t)i};
+  }
   if (contains(layoutLead(), x, y)) return {Hit::Agent, 0};
   Rect subs[L_SUBS_MAX];
   int n = imin(nSubs, L_SUBS_MAX);
