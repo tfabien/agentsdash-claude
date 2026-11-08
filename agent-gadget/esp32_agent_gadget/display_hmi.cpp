@@ -205,6 +205,9 @@ static void drawTree(const View& v, bool full) {
     for (auto& k : slotSig) k = 0;
     frameSlot = -1;
     if (s) drawLinks(*s, nSubs);
+    if (s && s->more > 0)                          // sub-agents hidden because the session is full
+      hmiText(L_SUBS_X + 6 * L_SMALL_PITCH + 6, t.y + t.h / 2 - 9, SCR_W - (L_SUBS_X + 6 * L_SMALL_PITCH + 6) - 2, 18,
+              FONT_SMALL, C_WHITE, C_BLACK, 0, "+" + String(s->more));
   }
   if (!s) return;
   for (int i = 0; i <= nSubs; i++) {
@@ -388,7 +391,7 @@ static void renderRegions(const View& v, uint32_t now) {
   else if (a && now - lastAgeRefresh > AGE_REFRESH_MS) { drawStripAges(*a, now); lastAgeRefresh = now; }
 
   int nSubs = modelSubCount(*s);
-  uint32_t tree = mix(mix(mixStr(2166136261u, s->id), nSubs), (uint32_t)(uintptr_t)s);
+  uint32_t tree = mix(mix(mix(mixStr(2166136261u, s->id), nSubs), s->more), (uint32_t)(uintptr_t)s);
   for (int i = 1; i <= nSubs; i++) tree = mixStr(tree, modelAgent(*s, i)->id);   // order change: relayout
   drawTree(v, tree != treeSig);
   treeSig = tree;

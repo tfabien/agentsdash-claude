@@ -37,7 +37,9 @@ struct Session {
   char project[PROJECT_LEN];
   Agent lead;
   Agent subs[MAX_SUBS];
-  uint8_t more;                     // sub-agents evicted or dropped because the session was full
+  uint8_t more;                     // distinct sub-agents hidden because the session was full
+  char hidden[8][ID_LEN];           // last hidden sub-agent ids: each one is counted once in `more`
+  uint8_t hiddenNext;
   bool waitingKids;                 // the lead launched sub-agents (Agent/Task call, or Stop while they run)
   uint32_t lastActive;
   uint32_t lastYourTurn;
@@ -69,7 +71,7 @@ struct FlatRow {                    // flat list for simple displays and for the
 };
 
 extern uint32_t modelRev;           // changes whenever anything changes
-extern uint16_t modelMoreSessions;  // sessions dropped or evicted because the table was full
+extern uint16_t modelMoreSessions;  // distinct sessions hidden (dropped or evicted) because the table was full
 
 void modelBegin();
 const char* modelStateName(AgentState s);                 // "needs_you", "working", ...

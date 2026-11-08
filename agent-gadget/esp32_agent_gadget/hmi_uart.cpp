@@ -149,6 +149,7 @@ static String asciiOnly(const String& s) {              // no double quotes, pri
   String r;
   for (size_t i = 0; i < s.length(); i++) {
     char c = s[i];
+    if (c == '\\') c = '/';                               // xstr treats backslash as an escape (Windows paths in `detail`)
     if (c == '"') c = '\'';
     else if ((uint8_t)c < 32 || (uint8_t)c > 126) c = '?';
     r += c;

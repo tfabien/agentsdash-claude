@@ -4,6 +4,17 @@ uint32_t modelRev = 1;
 uint16_t modelMoreSessions = 0;
 
 static Session sessions[MAX_SESSIONS];
+static char hiddenSessions[8][ID_LEN];   // last hidden session ids: each one is counted once in modelMoreSessions
+static uint8_t hiddenSessionsNext = 0;
+
+// Remember `id` in a small ring; true when it was not there yet (so the caller counts it once).
+static bool noteHidden(char ring[][ID_LEN], uint8_t& next, const char* id) {
+  for (int i = 0; i < 8; i++) if (!strcmp(ring[i], id)) return false;
+  strncpy(ring[next], id, ID_LEN - 1);
+  ring[next][ID_LEN - 1] = 0;
+  next = (next + 1) % 8;
+  return true;
+}
 static uint32_t doneTtlMs = DONE_TTL_MS;
 static uint32_t staleTtlMs = STALE_TTL_MS;
 static struct { bool active; char session[ID_LEN]; char agent[ID_LEN]; uint32_t until; } manual;
@@ -26,6 +37,8 @@ void modelConfigure(uint32_t done, uint32_t stale) { doneTtlMs = done; staleTtlM
 void modelClear() {
   memset(sessions, 0, sizeof sessions);
   memset(&manual, 0, sizeof manual);
+  memset(hiddenSessions, 0, sizeof hiddenSessions);
+  hiddenSessionsNext = 0;
   modelMoreSessions = 0;
   modelRev++;
 }
@@ -90,20 +103,22 @@ static void initAgent(Agent* a, const char* id, const char* role, uint32_t now) 
   a->rev = ++modelRev;
 }
 
-static Session* allocSession(uint32_t now) {
+// Table full: the newcomer replaces the least urgent session only when that one is strictly less urgent
+// (never one blocked on the user). Equally urgent sessions keep their place, so busy sessions do not churn.
+static Session* allocSession(AgentState incoming, uint32_t now) {
   for (auto& s : sessions) if (!s.used) { memset(&s, 0, sizeof s); s.used = true; s.lastActive = now; return &s; }
-  Session* victim = nullptr;                          // full: evict the least urgent session that is not blocked on the user
+  Session* victim = nullptr;
   for (auto& s : sessions) {
     if (hasNeedsYou(s)) continue;
     if (!victim) { victim = &s; continue; }
     AgentState dv = modelSessionDot(*victim), ds = modelSessionDot(s);
     if (ds > dv || (ds == dv && earlier(s.lastActive, victim->lastActive))) victim = &s;
   }
-  if (!victim) return nullptr;
+  if (!victim || modelSessionDot(*victim) <= incoming) return nullptr;
+  if (noteHidden(hiddenSessions, hiddenSessionsNext, victim->id)) modelMoreSessions++;
   memset(victim, 0, sizeof *victim);
   victim->used = true;
   victim->lastActive = now;
-  modelMoreSessions++;
   return victim;
 }
 
@@ -112,9 +127,12 @@ static Agent* findSub(Session& s, const char* id) {
   return nullptr;
 }
 
-static Agent* allocSub(Session& s, uint32_t now) {
+// Session full: evict a finished sub-agent first, else the oldest one strictly less urgent than the newcomer,
+// never a blocked one. Equally urgent sub-agents keep their slots, so 13+ busy sub-agents do not churn.
+static Agent* allocSub(Session& s, AgentState incoming, uint32_t now) {
+  (void)now;
   for (auto& a : s.subs) if (!a.used) return &a;
-  Agent* victim = nullptr;                            // full: evict a finished sub-agent first, else the oldest, never a blocked one
+  Agent* victim = nullptr;
   for (auto& a : s.subs) {
     if (a.state == ST_NEEDS_YOU) continue;
     if (!victim) { victim = &a; continue; }
@@ -122,22 +140,35 @@ static Agent* allocSub(Session& s, uint32_t now) {
     if (fa != fv) { if (fa) victim = &a; continue; }
     if (fa ? earlier(a.since, victim->since) : earlier(a.lastSeen, victim->lastSeen)) victim = &a;
   }
-  if (victim) s.more++;
+  if (!victim) return nullptr;
+  bool finished = victim->state == ST_DONE || victim->state == ST_ERROR;
+  if (!finished && victim->state <= incoming) return nullptr;
+  if (noteHidden(s.hidden, s.hiddenNext, victim->id)) s.more++;
   return victim;
 }
 
 // ---------- events ----------
 bool modelApplyV2(const EventV2& e, uint32_t now) {
+  bool isLead = !strcmp(e.agent, "lead");
   Session* s = findSession(e.session);
   if (!s) {
-    s = allocSession(now);
-    if (!s) { modelMoreSessions++; modelRev++; return true; }     // everything is blocked on the user: drop the newcomer
+    if (!isLead && !strcmp(e.evt, "SubagentStop")) { modelRev++; return true; }   // stop of a session never seen: no ghost
+    s = allocSession(e.state, now);
+    if (!s) {                                                     // no room for it: hidden, counted once
+      if (noteHidden(hiddenSessions, hiddenSessionsNext, e.session)) modelMoreSessions++;
+      modelRev++;
+      return true;
+    }
     copyStr(s->id, ID_LEN, e.session);
+    if (!isLead) {                    // first news from a sub-agent (e.g. the gadget rebooted): its lead waits on it
+      initAgent(&s->lead, "lead", "lead", now);
+      s->lead.state = ST_WORKING;
+      s->waitingKids = true;
+    }
   }
   if (e.project[0]) copyStr(s->project, PROJECT_LEN, e.project);
   s->lastActive = now;
 
-  bool isLead = !strcmp(e.agent, "lead");
   Agent* a;
   bool fresh = false;
   if (isLead) {
@@ -147,8 +178,12 @@ bool modelApplyV2(const EventV2& e, uint32_t now) {
     a = findSub(*s, e.agent);
     if (!a) {
       if (!strcmp(e.evt, "SubagentStop")) { modelRev++; return true; }   // stop of an agent never seen: no ghost row
-      a = allocSub(*s, now);
-      if (!a) { s->more++; modelRev++; return true; }                    // all sub-agents blocked on the user: drop
+      a = allocSub(*s, e.state, now);
+      if (!a) {                                                          // no room for it: hidden, counted once
+        if (noteHidden(s->hidden, s->hiddenNext, e.agent)) s->more++;
+        modelRev++;
+        return true;
+      }
       initAgent(a, e.agent, e.role[0] ? e.role : "agent", now);
       fresh = true;
     }

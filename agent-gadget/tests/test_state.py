@@ -117,17 +117,17 @@ class StateTest(unittest.TestCase):
         self.assertEqual(len(session["agents"]), 13)                      # lead + 12 sub-agents
         self.assertEqual(session["more"], 1)
         self.assertEqual(find_agent(self.state(), "aaaa", "s05")["state"], "needs_you")
-        self.assertIsNotNone(find_agent(self.state(), "aaaa", "s13"))
+        self.assertIsNone(find_agent(self.state(), "aaaa", "s13"))        # as urgent as the others: waits outside (no churn)
 
     def test_sixth_session_never_evicts_needs_you(self):
         self.post("ses1", "lead", "needs_you", "Approve? Bash ls", evt="PermissionRequest")
         for i in range(2, 6):
             self.post(f"ses{i}", "lead", "working", "Edit x")
-        self.post("ses6", "lead", "working", "Edit x")
+        self.post("ses6", "lead", "needs_you", "Approve? Bash ls", evt="PermissionRequest")
         state = self.state()
         self.assertEqual(len(state["sessions"]), 5)
         self.assertIsNotNone(find_session(state, "ses1"))
-        self.assertIsNotNone(find_session(state, "ses6"))
+        self.assertIsNotNone(find_session(state, "ses6"))                 # more urgent than a working session: gets in
         self.assertEqual(state["more_sessions"], 1)
 
     def test_all_sessions_blocked_drops_the_newcomer(self):
@@ -138,6 +138,40 @@ class StateTest(unittest.TestCase):
         self.assertEqual(len(state["sessions"]), 5)
         self.assertIsNone(find_session(state, "ses6"))
         self.assertEqual(state["more_sessions"], 1)
+
+    def test_overflow_does_not_churn(self):
+        # Review finding 2: with tables full of equally urgent agents, each event of a hidden one used to evict another.
+        self.post("aaaa", "lead", "working", "Agent x")
+        for i in range(1, 13):
+            self.post("aaaa", f"s{i:02d}", "working", "Edit x", evt="SubagentStart")
+        visible = {a["id"] for a in find_session(self.state(), "aaaa")["agents"]}
+        for _ in range(3):
+            self.post("aaaa", "s13", "working", "Read y")
+            self.post("aaaa", "s01", "working", "Read z")
+        session = find_session(self.state(), "aaaa")
+        self.assertEqual({a["id"] for a in session["agents"]}, visible)
+        self.assertEqual(session["more"], 1)                              # one hidden agent, counted once
+        for i in range(1, 6):
+            self.post(f"ses{i}", "lead", "working", "Edit x")
+        for _ in range(3):
+            self.post("ses6", "lead", "working", "Edit y")
+        state = self.state()
+        self.assertEqual({s["id"] for s in state["sessions"]}, {"aaaa", "ses1", "ses2", "ses3", "ses4"})
+        self.assertIsNone(find_session(state, "ses6"))
+        self.assertEqual(state["more_sessions"], 2)                       # ses5 and ses6 were never shown, each counted once
+
+    def test_session_created_by_a_subagent_has_no_phantom_needs_you(self):
+        # Review finding 1: after a gadget reboot the first event of a session can come from a sub-agent.
+        self.post("bbbb", "s001", "working", "Read a.py", role="Explore")
+        state = self.state()
+        session = find_session(state, "bbbb")
+        self.assertNotEqual(session["dot"], "needs_you")
+        self.assertNotIn("needs_you", [a["state"] for a in session["agents"]])
+        self.assertEqual(find_agent(state, "bbbb", "lead")["state"], "waiting_subs")
+
+    def test_subagent_stop_for_an_unknown_session_creates_nothing(self):
+        self.post("cccc", "s001", "done", "Finished", evt="SubagentStop", role="Explore")
+        self.assertIsNone(find_session(self.state(), "cccc"))
 
     def test_out_of_order_events_leave_no_ghost(self):
         self.g.configure(done_ttl_ms=1000)
