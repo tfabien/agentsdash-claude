@@ -32,7 +32,8 @@ class Gadget:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return resp.status, resp.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as err:
-            return err.code, err.read().decode("utf-8", "replace")
+            with err:
+                return err.code, err.read().decode("utf-8", "replace")
 
     def reset(self):
         return self.request("POST", "/reset")[0]

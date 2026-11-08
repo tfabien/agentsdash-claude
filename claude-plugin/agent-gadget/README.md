@@ -24,8 +24,8 @@ role is its `agent_type`. Hook payloads actually observed: `../../docs/hook-payl
 
 ## Protocol switch
 
-Until the gadget firmware understands v2, the plugin sends the old flat event `{agent, state, task}`
-(`DEFAULT_PROTOCOL = 1` in `scripts/notify.py`). Force v2 with `CLAUDE_GADGET_PROTOCOL=2`.
+The plugin sends v2 events by default (`DEFAULT_PROTOCOL = 2` in `scripts/notify.py`). For a gadget still flashed
+with the old firmware, set `CLAUDE_GADGET_PROTOCOL=1` to send the old flat event `{agent, state, task}`.
 
 ## Setup
 

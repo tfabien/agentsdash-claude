@@ -31,8 +31,14 @@ static bool jsonGet(const String& body, const char* key, char* out, size_t outSi
   int q2 = q1 + 1;
   size_t n = 0;
   while (q2 < (int)body.length() && body[q2] != '"' && n < outSize - 1) {
-    if (body[q2] == '\\' && q2 + 1 < (int)body.length()) q2++;
-    out[n++] = body[q2++];
+    char c = body[q2++];
+    if (c == '\\' && q2 < (int)body.length()) {          // JSON escapes: \" \\ \/ copied, \n \r \t -> space, \uXXXX -> '?'
+      char e = body[q2++];
+      if (e == 'n' || e == 'r' || e == 't') c = ' ';
+      else if (e == 'u') { q2 = min(q2 + 4, (int)body.length()); c = '?'; }
+      else c = e;
+    }
+    out[n++] = c;
   }
   out[n] = 0;
   return true;

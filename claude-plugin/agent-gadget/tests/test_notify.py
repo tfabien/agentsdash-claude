@@ -158,6 +158,9 @@ class LegacyProtocolTest(unittest.TestCase):
         self.assertEqual(notify.to_v1(sub), {"agent": "general-purp-aa0b", "state": "waiting", "task": "Edit app.py"})
         self.assertEqual(notify.to_v1({**lead, "state": "your_turn"})["state"], "done")
 
+    def test_default_protocol_is_v2_once_the_firmware_accepts_it(self):
+        self.assertEqual(notify.DEFAULT_PROTOCOL, 2)
+
     def test_default_protocol_is_selectable_by_env(self):
         self.assertEqual(notify.protocol({}), notify.DEFAULT_PROTOCOL)
         self.assertEqual(notify.protocol({"CLAUDE_GADGET_PROTOCOL": "2"}), 2)

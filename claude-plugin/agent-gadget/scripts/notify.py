@@ -158,7 +158,7 @@ def build_event(payload, env=None, state_dir=None):
     return None
 
 
-DEFAULT_PROTOCOL = 1        # flipped to 2 once the gadget firmware understands v2 events (plan, end of task 4)
+DEFAULT_PROTOCOL = 2        # 1 = old flat {agent,state,task} for a gadget flashed before the v2 firmware
 V1_STATES = {"working": "working", "needs_you": "waiting", "your_turn": "done", "done": "done", "error": "error"}
 
 
