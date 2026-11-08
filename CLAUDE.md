@@ -65,6 +65,7 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   `agent-gadget.local` (mDNS) does **not** resolve on this PC (ping fails): use the IP.
 - HTTP API (details in `agent-gadget/ARCHITECTURE.md`): `POST /event` v2 (old `{"agent","state","task"}` still accepted), `GET /state`,
   `POST /select`, `POST /reset`, `GET /update` (browser firmware upload, user `admin`). `/debug/*` only in test builds (`esp32dev_test*`).
+  `POST /usage`: context and plan quotas with pace, sent by the status line script.
 - **Updates**: USB `pio run -t upload` from `esp32_agent_gadget/` (auto reset, no BOOT button); Wi-Fi
   `pio run -e esp32dev_ota -t upload --upload-port <ip>` (tested OK); browser `/update`. OTA/`/update` password = `OTA_PASSWORD` in `net.h` (default `agent-gadget`: **change it**).
 - PlatformIO: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe` (espressif32 installed). Env `esp32dev_noscreen` builds without a screen (serial backend).
@@ -79,9 +80,13 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 Installed at user level, read **live from this working tree** (`agent-gadget@agent-gadget-local`): a broken `notify.py` breaks every session's hooks.
 `CLAUDE_GADGET_PROTOCOL=1` sends the old format; `CLAUDE_GADGET_DUMP=<file>` appends raw payloads. With `defaultMode: auto` no permission prompt appears, so no orange. Host: env `CLAUDE_GADGET_HOST`, or `~/.claude/agent-gadget.json` `{"host": "..."}`, default `agent-gadget.local` (**does not resolve here: configure the IP**).
 `claude plugin validate` passes. Tests: `python -m unittest discover -s claude-plugin/agent-gadget/tests` (no hardware).
+`scripts/statusline.py` is a status line (manual install in `~/.claude/settings.json`, see the plugin README) that posts context and quotas
+to `/usage`. The **desktop app does not run status lines**: one terminal session feeds the quotas. Hooks add tokens, a context estimate and
+the session title read from the transcripts (`scripts/transcript_usage.py`).
 
 ## Pitfalls
 
+- Flashing with output redirected to a file: set `PYTHONIOENCODING=utf-8`, or esptool crashes on its progress bar (cp1252).
 - Work PC (Windows 10 Enterprise, Fortinet VPN, Dell dock); prefer a personal PC to install new tools.
 - `EdtHmiStudio-0.9.1-win-x64-setup.exe` (632 MB) is in the repo root: origin unverified, **never run**.
 - Do not reproduce the author's e-mail address found in the metadata of Vampiro1's `LCD.tft`.
