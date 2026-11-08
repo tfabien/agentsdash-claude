@@ -10,10 +10,12 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 
 - `agent-gadget/` - ESP32 firmware (PlatformIO) and helper scripts. Architecture: `agent-gadget/ARCHITECTURE.md`.
   - `esp32_agent_gadget/` - the gadget firmware, split in **core** (`model.*`, `net.*`) and **screen**
-    (`display.h` interface, `display_hmi.cpp`, `ui_theme.h`, `hmi_uart.*`, `display_serial.cpp`).
+    (`display.h` interface, `display_hmi.cpp`, `layout.*`, `touch.*`, `ui_theme.h`, `hmi_uart.*`, `display_serial.cpp`).
   - `hmi_bridge/` - transparent USB<->screen UART bridge (used to flash the screen from the editor). `hmi_probe/` - baud/protocol probe.
-  - `mock_agents.py` (fake agents -> `POST /event`), `ux_mockup.html`, `hmi_*.py` (test scripts through the bridge).
-- `claude-plugin/agent-gadget/` - Claude Code plugin: hooks -> `scripts/notify.py` -> `POST /event` (very basic v0.1, spec to come).
+  - `scenario.py` (5 fake sessions, 12 sub-agents -> `POST /event` v2), `mock_agents.py` (old v0.1 events), `ux_mockup.html`,
+    `hmi_*.py` (test scripts through the bridge), `tools/make_sprites.py` (sprite PNGs), `tests/` (API tests on a real gadget).
+- `claude-plugin/agent-gadget/` - Claude Code plugin v0.2: hooks -> `scripts/notify.py` -> `POST /event` v2 (sessions, sub-agents, needs-you).
+- `docs/superpowers/` - spec, plan and ideas of the agent UI; `docs/hook-payloads.md`, `docs/touch-findings.md` - captured facts.
 - `agent-gadget.HMI`, `agent-gadget.tft` - current USART HMI project of the screen (black page, 2 fonts, 16 sprite pictures).
   `blank.HMI`, `blank.tft` - the same without pictures (baseline). `f24.zi`, `f16.zi` - the fonts.
 - `guide/` - annotated screenshots of the USART HMI editor steps. `USARTHMIsetup_latest/` - editor installer.
@@ -61,7 +63,8 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   credentials are saved in flash. Config page stays at `http://<ip>/config`. Forget the Wi-Fi: hold BOOT 3 s at power-up, or `w` on the serial monitor.
 - The gadget is reachable at **http://192.168.1.100/** (DHCP: may change; the IP is shown on the screen when no agent is displayed).
   `agent-gadget.local` (mDNS) does **not** resolve on this PC (ping fails): use the IP.
-- HTTP API: `POST /event {"agent","state","task"}` (`working|waiting|done|error`), `GET /state`, `GET /update` (browser firmware upload, user `admin`).
+- HTTP API (details in `agent-gadget/ARCHITECTURE.md`): `POST /event` v2 (old `{"agent","state","task"}` still accepted), `GET /state`,
+  `POST /select`, `POST /reset`, `GET /update` (browser firmware upload, user `admin`). `/debug/*` only in test builds (`esp32dev_test*`).
 - **Updates**: USB `pio run -t upload` from `esp32_agent_gadget/` (auto reset, no BOOT button); Wi-Fi
   `pio run -e esp32dev_ota -t upload --upload-port <ip>` (tested OK); browser `/update`. OTA/`/update` password = `OTA_PASSWORD` in `net.h` (default `agent-gadget`: **change it**).
 - PlatformIO: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe` (espressif32 installed). Env `esp32dev_noscreen` builds without a screen (serial backend).
@@ -69,11 +72,13 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 - Wi-Fi modem sleep is off (`WiFi.setSleep(false)`): with it, HTTP requests stalled up to 5.6 s.
 - Drawing goes through a non-blocking queue (title bar > command strip > tree); `GET /debug/stats` (test builds) shows it.
 
-## Claude plugin (very basic)
+## Claude plugin (v0.2)
 
-`claude-plugin/agent-gadget/`: hooks `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `Notification`, `Stop`, `SessionEnd` -> `scripts/notify.py` (Python stdlib, never blocks,
-never prints). Host: env `CLAUDE_GADGET_HOST`, or `~/.claude/agent-gadget.json` `{"host": "..."}`, default `agent-gadget.local` (**does not resolve here: configure the IP**).
-Load with `claude --plugin-dir <path>`; `claude plugin validate` passes. Next step: a spec of what the gadget should really show.
+`claude-plugin/agent-gadget/`: hooks `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse(Failure)`, `PermissionRequest`, `PermissionDenied`,
+`Notification`, `SubagentStart`, `SubagentStop`, `Stop`, `SessionEnd` -> `scripts/notify.py` (Python stdlib, never blocks, never prints).
+Installed at user level, read **live from this working tree** (`agent-gadget@agent-gadget-local`): a broken `notify.py` breaks every session's hooks.
+`CLAUDE_GADGET_PROTOCOL=1` sends the old format; `CLAUDE_GADGET_DUMP=<file>` appends raw payloads. With `defaultMode: auto` no permission prompt appears, so no orange. Host: env `CLAUDE_GADGET_HOST`, or `~/.claude/agent-gadget.json` `{"host": "..."}`, default `agent-gadget.local` (**does not resolve here: configure the IP**).
+`claude plugin validate` passes. Tests: `python -m unittest discover -s claude-plugin/agent-gadget/tests` (no hardware).
 
 ## Pitfalls
 
