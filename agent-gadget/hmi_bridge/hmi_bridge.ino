@@ -1,19 +1,25 @@
 /*
-  Pont série transparent : USB (PC) <-> UART2 (écran HMI).
-  Sert à envoyer des commandes à l'écran depuis le PC (scripts Python, éditeur USART HMI).
+  Transparent serial bridge: USB (PC) <-> UART2 (HMI screen).
+  Sends commands to the screen from the PC (Python scripts, USART HMI editor).
   D16 (RX2) <- TX écran,  D17 (TX2) -> RX écran.
 
-  Côté USB : 115200 bauds fixes. Côté écran : 9600 au démarrage (vitesse du projet blank.tft,
-  ce qui permet aussi de télécharger depuis l'éditeur USART HMI), modifiable à chaud par
-  la séquence spéciale (jamais présente dans les commandes de l'écran) :
-      7E 7E 42 b0 b1 b2 b3     (b0..b3 = vitesse en bauds, little-endian)
+  USB side: fixed 115200 baud. Screen side: SCREEN_BAUD at boot (115200), changeable on the fly with
+  the special sequence (never present in screen commands):
+      7E 7E 42 b0 b1 b2 b3     (b0..b3 = baud rate, little-endian)
+
+  Why 115200 at boot: the USART HMI editor opens COM3 (which resets the ESP32) and waits only
+  1000000/baud + 30 ms (39 ms at 115200) for "comok". A screen at 9600 answers too slowly, so before
+  flashing from the editor, put the screen at 115200: bridge to 9600 (7E 7E 42 80 25 00 00), send
+  baud=115200, bridge back to 115200 (7E 7E 42 00 C2 01 00). The screen keeps it until power-off. Scripts that talk to a screen at 9600
+  must first send 7E 7E 42 80 25 00 00.
 */
+#define SCREEN_BAUD 115200
 uint8_t st = 0, n = 0;
 uint32_t baud = 0;
 
 void setup() {
   Serial.begin(115200);
-  Serial2.begin(9600, SERIAL_8N1, 16, 17);
+  Serial2.begin(SCREEN_BAUD, SERIAL_8N1, 16, 17);
 }
 
 void loop() {

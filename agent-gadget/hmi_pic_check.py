@@ -6,6 +6,7 @@ Needs hmi_bridge on the ESP32 and the .tft that holds the sprites. Expected: top
 other than 01 for an id means that picture is missing in the project.
 Usage: python agent-gadget/hmi_pic_check.py [COM3]
 """
+import struct
 import sys
 import time
 
@@ -25,6 +26,8 @@ def main():
     ser = serial.Serial(PORT, 115200, timeout=0.2)
     time.sleep(2.5)                                   # opening the port resets the ESP32
     ser.reset_input_buffer()
+    ser.write(bytes([0x7E, 0x7E, 0x42]) + struct.pack("<I", 9600))   # bridge boots at 115200; a freshly flashed screen runs at 9600
+    time.sleep(0.2)
     send(ser, "")                                     # flush a stray byte (first command often returns 1A)
     send(ser, "bkcmd=3")
     send(ser, "cls 0")
