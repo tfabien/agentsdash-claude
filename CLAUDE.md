@@ -48,6 +48,8 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   http://filedown.tjc1688.com/tjcwiki/factory_project/X2/TJC4827X243.HMI, datasheet
   http://filedown.tjc1688.com/tjcwiki/new_datasheet/TJC_X2/TJC4827X243_011C.pdf (wiki is HTTP only: http://wiki.tjc1688.com).
 - Project `agent-gadget.HMI` (made from `blank.HMI`): model `TJC4827X243_011`, direction 0 (landscape), `page0` solid black (`bco`=0), fonts `f24` (ID 0) and `f16` (ID 1), ASCII.
+- **Easiest flash: the gadget's web page `http://<ip>/tft`** (user `admin`, `OTA_PASSWORD`): pick the exported `.tft`, ~1 min over Wi-Fi,
+  no editor download, no bridge, no USB. Same as `curl -u admin:<pw> -F tft=@agent-gadget.tft "http://<ip>/tft?size=<bytes>"`.
 - The compile button does not write a file: **文件 -> 输出生产文件** exports the `.tft`. Flash it with **下载** (serial, port COM3, 115200) through
   `hmi_bridge` on the ESP32 (no SD card needed, ~49 s), or from a FAT32 microSD. A firmware-version warning is normal.
 - Re-flashing a `.tft` needs `hmi_bridge` on the ESP32 again. The editor opens COM3 (resets the ESP32) and waits only ~39 ms for
@@ -64,7 +66,7 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 - The gadget is reachable at **http://192.168.1.100/** (DHCP: may change; the IP is shown on the screen when no agent is displayed).
   `agent-gadget.local` (mDNS) does **not** resolve on this PC (ping fails): use the IP.
 - HTTP API (details in `agent-gadget/ARCHITECTURE.md`): `POST /event` v2 (old `{"agent","state","task"}` still accepted), `GET /state`,
-  `POST /select`, `POST /reset`, `GET /update` (browser firmware upload, user `admin`). `/debug/*` only in test builds (`esp32dev_test*`).
+  `POST /select`, `POST /reset`, `GET /update` (browser firmware upload, user `admin`), `GET /tft` (screen .tft upload, same user). `/debug/*` only in test builds (`esp32dev_test*`).
 - **Updates**: USB `pio run -t upload` from `esp32_agent_gadget/` (auto reset, no BOOT button); Wi-Fi
   `pio run -e esp32dev_ota -t upload --upload-port <ip>` (tested OK); browser `/update`. OTA/`/update` password = `OTA_PASSWORD` in `net.h` (default `agent-gadget`: **change it**).
 - PlatformIO: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe` (espressif32 installed). Env `esp32dev_noscreen` builds without a screen (serial backend).

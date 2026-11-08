@@ -26,6 +26,12 @@ void displayInvalidate() {
   lastModelRev = ~0u;
 }
 
+bool displayTftBegin(uint32_t, String& err) { err = "no screen in this build"; return false; }
+bool displayTftWrite(const uint8_t*, size_t, String& err) { err = "no screen in this build"; return false; }
+bool displayTftEnd(String& err) { err = "no screen in this build"; return false; }
+void displayTftAbort() {}
+String displayTftStatus() { return "{\"state\":\"idle\",\"sent\":0,\"total\":0,\"last_error\":\"no screen\"}"; }
+
 String displayStats() {
   return "{\"screen\":false,\"baud\":0,\"queued_bytes\":0,\"est_ms\":0,\"titlebar_ms\":0,\"title_count\":0}";
 }

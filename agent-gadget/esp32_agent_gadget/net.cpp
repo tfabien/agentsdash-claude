@@ -197,6 +197,10 @@ static void handleDebugStats() {       // GET /debug/stats: draw queue and redra
   server.send(200, "application/json", j);
 }
 
+static void handleDebugTft() {         // GET /debug/tft: state of the last screen firmware download
+  server.send(200, "application/json", displayTftStatus());
+}
+
 static void handleDebugHit() {         // GET /debug/hit?x&y&tabs&subs
   Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("tabs", 0), intArg("subs", 0));
   const char* kind = h.kind == Hit::Tab ? "tab" : h.kind == Hit::Agent ? "agent" : "none";
@@ -259,6 +263,57 @@ static void handleSave() {
 }
 
 // ---------- HTTP: firmware update from a browser (http://<ip>/update) ----------
+// ---------- HTTP: screen firmware (.tft) ----------
+static int tftHttpStatus = 0;              // 0 = fine so far, else the HTTP status to answer
+static String tftHttpMsg;
+
+static long tftSizeArg() {                 // ?size=<bytes>, digits only, > 0; -1 when missing or invalid
+  String s = server.arg("size");
+  if (s.length() == 0 || s.length() > 9) return -1;
+  for (size_t i = 0; i < s.length(); i++) if (!isDigit(s[i])) return -1;
+  long v = s.toInt();
+  return v > 0 ? v : -1;
+}
+
+static void handleTftForm() {
+  if (!server.authenticate("admin", OTA_PASSWORD)) return server.requestAuthentication();
+  server.send(200, "text/html", F("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<body style='font-family:system-ui;max-width:420px;margin:24px auto;padding:0 16px'>"
+    "<h2>Screen update (.tft)</h2><p>Export the .tft from the USART HMI editor, then upload it here (about 1 minute).</p>"
+    "<input type=file id=f accept=.tft><br><br><button id=b>Upload</button><p id=s></p>"
+    "<script>b.onclick=async()=>{const x=f.files[0];if(!x)return;b.disabled=1;s.textContent='Uploading, do not unplug...';"
+    "const d=new FormData();d.append('tft',x);"
+    "const r=await fetch('/tft?size='+x.size,{method:'POST',body:d});s.textContent=r.status+': '+await r.text();b.disabled=0}</script>"));
+}
+
+static void handleTftDone() {
+  if (!server.authenticate("admin", OTA_PASSWORD)) return server.requestAuthentication();
+  if (tftSizeArg() < 0) { server.send(400, "text/plain", "size missing or invalid (?size=<bytes>)"); return; }
+  if (tftHttpStatus) { server.send(tftHttpStatus, "text/plain", tftHttpMsg); return; }
+  server.send(200, "text/plain", "OK, screen updated");
+}
+
+static void handleTftUpload() {
+  if (!server.authenticate("admin", OTA_PASSWORD)) return;
+  HTTPUpload& up = server.upload();
+  if (up.status == UPLOAD_FILE_START) {
+    tftHttpStatus = 0;
+    tftHttpMsg = "";
+    long size = tftSizeArg();
+    if (size < 0) { tftHttpStatus = 400; tftHttpMsg = "size missing or invalid"; return; }
+    if (!displayTftBegin((uint32_t)size, tftHttpMsg)) tftHttpStatus = 500;
+  } else if (up.status == UPLOAD_FILE_WRITE) {
+    if (!tftHttpStatus && !displayTftWrite(up.buf, up.currentSize, tftHttpMsg)) tftHttpStatus = 500;
+  } else if (up.status == UPLOAD_FILE_END) {
+    if (!tftHttpStatus) { if (!displayTftEnd(tftHttpMsg)) tftHttpStatus = 500; }
+    else if (tftHttpStatus == 500) displayTftEnd(tftHttpMsg);      // failed midway: still try to get the screen back
+  } else if (up.status == UPLOAD_FILE_ABORTED) {
+    displayTftAbort();
+    tftHttpStatus = 500;
+    tftHttpMsg = "upload aborted";
+  }
+}
+
 static void handleUpdateForm() {
   if (!server.authenticate("admin", OTA_PASSWORD)) return server.requestAuthentication();
   server.send(200, "text/html", F("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
@@ -370,10 +425,13 @@ server.on("/debug/layout", HTTP_GET, handleDebugLayout);
 server.on("/debug/hit", HTTP_GET, handleDebugHit);
 server.on("/debug/tap", HTTP_POST, handleDebugTap);
 server.on("/debug/stats", HTTP_GET, handleDebugStats);
+server.on("/debug/tft", HTTP_GET, handleDebugTft);
 #endif
   server.on("/config", HTTP_GET, handleConfigPage);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/update", HTTP_GET, handleUpdateForm);
+  server.on("/tft", HTTP_GET, handleTftForm);
+  server.on("/tft", HTTP_POST, handleTftDone, handleTftUpload);
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   server.on("/", HTTP_GET, []() {
     if (apMode) { server.sendHeader("Location", "http://192.168.4.1/config"); server.send(302, "text/plain", ""); }

@@ -8,6 +8,9 @@ uint32_t hmiConnect(uint32_t fast);                    // find the screen speed,
 uint32_t hmiBaud();
 const char* hmiLinkResult();                           // outcome of hmiConnect, for /debug/stats
 void hmiSend(const String& cmd);                       // raw command + FF FF FF (queued when a region is targeted)
+void hmiSendNow(const String& cmd);                    // raw command + FF FF FF, written at once (no queue)
+void hmiWriteRaw(const uint8_t* data, size_t n);       // raw bytes (blocking), e.g. .tft packets
+bool hmiPing(uint32_t waitMs);                         // "connect" answered by "comok" at the current speed
 
 // Draw queue: commands go to the targeted region's queue and leave without blocking, title bar first,
 // then command strip, then tree (spec call 13). With no target, hmiSend writes directly (messages, boot).

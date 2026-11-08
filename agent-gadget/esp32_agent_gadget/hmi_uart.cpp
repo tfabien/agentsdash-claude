@@ -62,6 +62,12 @@ uint32_t hmiConnect(uint32_t fast) {
   return baud;
 }
 
+void hmiSendNow(const String& cmd) { writeCommand(cmd); }
+
+void hmiWriteRaw(const uint8_t* data, size_t n) { Serial2.write(data, n); }
+
+bool hmiPing(uint32_t waitMs) { return answers(waitMs); }
+
 void hmiTarget(HmiRegion r, bool reset) {
   target = r;
   if (r == HMI_DIRECT || !reset) return;

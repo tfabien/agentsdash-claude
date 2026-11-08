@@ -8,6 +8,7 @@
 #include "hmi_uart.h"
 #include "layout.h"
 #include "touch.h"
+#include "tft_upload.h"
 #include "ui_theme.h"
 
 #define SLOTS (1 + MAX_SUBS)
@@ -267,15 +268,20 @@ static void drawEmpty() {
   emptyShown = true;
 }
 
-void displayBegin() {
-  hmiBegin(HMI_BAUD, HMI_RX_PIN, HMI_TX_PIN);
-  delay(500);
+static void screenSetup() {                  // after power-up or a new .tft: link speed, quiet acks, touch frames
   uint32_t baud = hmiConnect(HMI_FAST_BAUD);
   Serial.print("[display] screen link at ");
   Serial.println(baud);
-  hmiSend("");                              // flush a stray byte (the first command often returns 1A)
-  hmiSend("bkcmd=0");                       // no acknowledgements: less traffic, cleaner touch frames
+  hmiTarget(HMI_DIRECT, false);
+  hmiSend("");                               // flush a stray byte (the first command often returns 1A)
+  hmiSend("bkcmd=0");                        // no acknowledgements: less traffic, cleaner touch frames
   touchBegin();
+}
+
+void displayBegin() {
+  hmiBegin(HMI_BAUD, HMI_RX_PIN, HMI_TX_PIN);
+  delay(500);
+  screenSetup();
   hmiClear(C_BLACK);
 }
 
@@ -293,6 +299,35 @@ void displayMessage(const String& title, const String& l1, const String& l2, con
   if (l2.length()) hmiText(10, 132, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, l2);
   if (l3.length()) hmiText(10, 158, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, l3);
 }
+
+// ---------- screen firmware download ----------
+bool displayTftBegin(uint32_t size, String& err) {
+  displayMessage("Updating the screen", "Do not unplug", "about 1 minute", "", Tone::Warn);
+  delay(50);
+  return tftBegin(size, err);
+}
+
+bool displayTftWrite(const uint8_t* data, size_t n, String& err) { return tftWrite(data, n, err); }
+
+bool displayTftEnd(String& err) {
+  bool ok = tftEnd(err);
+  delay(ok ? 3000 : 500);                    // the screen reboots on the new project (9600 at power-up)
+  for (int i = 0; i < 10; i++) {
+    screenSetup();
+    if (strcmp(hmiLinkResult(), "no answer at 9600") != 0) break;
+    delay(1000);
+  }
+  displayInvalidate();
+  return ok;
+}
+
+void displayTftAbort() {
+  tftAbort("upload aborted");
+  screenSetup();
+  displayInvalidate();
+}
+
+String displayTftStatus() { return tftStatusJson(); }
 
 String displayStats() {
   uint32_t q = hmiQueuedBytes();
@@ -313,6 +348,7 @@ void displayInvalidate() {
 static void renderRegions(const View& v, uint32_t now);
 
 void displayRender() {
+  if (tftActive()) return;                       // the .tft download owns the UART (acks must not be read as touch)
   touchPoll();
   hmiPump();
   if (messageMode) return;

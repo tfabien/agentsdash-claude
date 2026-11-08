@@ -25,4 +25,10 @@ void displayMessage(const String& title, const String& l1 = "", const String& l2
 void displayProgress(int percent);          // progress (0-100) under a message
 void displayInvalidate();                   // back to the agent list, fully redrawn
 void displayRender();                       // call often: only draws what changed
+// Screen firmware (.tft) download, driven by the core's /tft upload handler. Drawing and touch stop meanwhile.
+bool displayTftBegin(uint32_t size, String& err);
+bool displayTftWrite(const uint8_t* data, size_t n, String& err);
+bool displayTftEnd(String& err);          // waits for the screen to reboot, then redraws everything
+void displayTftAbort();
+String displayTftStatus();                // JSON for GET /debug/tft
 String displayStats();                      // JSON for GET /debug/stats: {"screen", "baud", "queued_bytes", "est_ms", "titlebar_ms", "title_count"}

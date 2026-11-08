@@ -29,7 +29,8 @@ A body without `"v"` is the old `{"agent","state","task"}` (a one-agent session)
 States: `needs_you`, `error`, `your_turn`, `working`, `waiting_subs` (derived, leads only), `done`.
 
 Other endpoints: `POST /select {"session","agent","hold_ms"?}` (404 if unknown), `POST /reset`,
-`GET /config` (Wi-Fi), `GET /update` (firmware upload, user `admin`).
+`GET /config` (Wi-Fi), `GET /update` (firmware upload, user `admin`), `GET /tft` + `POST /tft?size=<bytes>`
+(screen `.tft` upload, same user: `tft_upload.cpp` speaks the TJC download protocol, drawing and touch pause meanwhile).
 
 Test builds only (`-DGADGET_DEBUG`, envs `esp32dev_test*`): `POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms"}`
 (isolate = ignore requests without the `X-Gadget-Test` header), `GET /debug/layout?subs=N&tabs=T`,
@@ -54,6 +55,7 @@ core never says what to redraw.
 | `display_hmi.cpp` | The UI: tabs (state dot, name, count, "+N", "N asks you"), tree (sprites by role, state markers, session-colored links, yellow selection frame), command strip (name, state, elapsed, command, detail, previous command). Implements `display.h`. |
 | `touch.h/.cpp` | Touch frames `67 xh xl yh yl st FF FF FF` -> `uiTap(x, y)` -> `hitTest` -> `modelSelect` (30 s hold). |
 | `hmi_uart.h/.cpp` | Screen commands (`cls`, `fill`, `cirs`, `draw`, `pic`, `xstr`), link speed setup (9600 at power-up -> 115200), and the non-blocking draw queue: title bar > command strip > tree. |
+| `tft_upload.h/.cpp` | Screen firmware download over the UART (`whmi-wri`, 4096-byte packets acked by `0x05`), used by `/tft`. |
 | `display_serial.cpp` | Alternative backend with no screen (`-DDISPLAY_SERIAL`, envs `esp32dev_noscreen`, `esp32dev_test`). |
 
 The screen runs the `agent-gadget.tft` project (`../agent-gadget.HMI`): one black page, the fonts
