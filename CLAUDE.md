@@ -14,7 +14,8 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   - `hmi_bridge/` - transparent USB<->screen UART bridge (used to flash the screen from the editor). `hmi_probe/` - baud/protocol probe.
   - `mock_agents.py` (fake agents -> `POST /event`), `ux_mockup.html`, `hmi_*.py` (test scripts through the bridge).
 - `claude-plugin/agent-gadget/` - Claude Code plugin: hooks -> `scripts/notify.py` -> `POST /event` (very basic v0.1, spec to come).
-- `blank.HMI`, `blank.tft`, `f24.zi`, `f16.zi` - USART HMI project of the screen (one empty black page + 2 fonts).
+- `agent-gadget.HMI`, `agent-gadget.tft` - current USART HMI project of the screen (black page, 2 fonts, 16 sprite pictures).
+  `blank.HMI`, `blank.tft` - the same without pictures (baseline). `f24.zi`, `f16.zi` - the fonts.
 - `guide/` - annotated screenshots of the USART HMI editor steps. `USARTHMIsetup_latest/` - editor installer.
 
 ## Hardware (identified from photos, the .tft metadata and the TJC wiki)
@@ -28,9 +29,12 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 ## Screen protocol (tested)
 
 - Commands: ASCII ending with `FF FF FF` (Nextion/TJC style). Replies: `01` ok, `03` invalid page, `1A` unknown variable/component.
-- Current firmware (after flashing `blank.tft`): **9600 baud**. `connect` -> `comok 2,1073-0,TJC4827X243_011C,...`. `bauds=115200` is accepted
+- Current firmware (after flashing `agent-gadget.tft`): **9600 baud** at power-up. `connect` -> `comok 2,1073-0,TJC4827X243_011C,...`. `bauds=115200` is accepted
   but **not applied**: stay at 9600. The first command after a baud change often returns `1A` (stray byte): send `FF FF FF` first.
-- Drawing commands that work on the blank page: `cls`, `fill`, `draw`, `cirs`, `xstr` (font 0 = `f24`, font 1 = `f16`, ASCII only).
+- Drawing commands that work on the blank page: `cls`, `fill`, `draw`, `cirs`, `xstr` (font 0 = `f24`, font 1 = `f16`, ASCII only),
+  `pic x,y,id` (ids 0..7 big 36x42 sprites lead, general, explore, plan, review, test, code, generic; 8..15 the same at 24x28).
+- Touch: after `sendxy=1` (send at every boot) the page reports `67 xh xl yh yl st FF FF FF`, pixels, `st` 01 press / 00 release
+  (`docs/touch-findings.md`). `baud=115200` (runtime) is applied until power-off.
   Nothing redraws over them because the page has no component. `bkcmd=0` silences acknowledgements.
 - The original Artillery firmware (115200, ~17 pages, portrait UI) was **overwritten** by the flash.
 
@@ -40,10 +44,13 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   editor http://filedown.tjc1688.com/USARTHMI/USARTHMIsetup_latest.zip, factory project
   http://filedown.tjc1688.com/tjcwiki/factory_project/X2/TJC4827X243.HMI, datasheet
   http://filedown.tjc1688.com/tjcwiki/new_datasheet/TJC_X2/TJC4827X243_011C.pdf (wiki is HTTP only: http://wiki.tjc1688.com).
-- Project `blank.HMI`: model `TJC4827X243_011`, direction 0 (landscape), `page0` solid black (`bco`=0), fonts `f24` (ID 0) and `f16` (ID 1), ASCII.
+- Project `agent-gadget.HMI` (made from `blank.HMI`): model `TJC4827X243_011`, direction 0 (landscape), `page0` solid black (`bco`=0), fonts `f24` (ID 0) and `f16` (ID 1), ASCII.
 - The compile button does not write a file: **文件 -> 输出生产文件** exports the `.tft`. Flash it with **下载** (serial, port COM3, 115200) through
   `hmi_bridge` on the ESP32 (no SD card needed, ~49 s), or from a FAT32 microSD. A firmware-version warning is normal.
-- Re-flashing a `.tft` needs `hmi_bridge` on the ESP32 again (its screen side defaults to 9600).
+- Re-flashing a `.tft` needs `hmi_bridge` on the ESP32 again. The editor opens COM3 (resets the ESP32) and waits only ~39 ms for
+  `comok` at 115200: a screen at 9600 answers too slowly ("联机失败"). `hmi_bridge` boots at 115200 on the screen side; before
+  下载, put the screen at 115200 (bridge escape `7E 7E 42` + 9600 LE, `baud=115200`, escape + 115200 LE). Do not unplug in between.
+  Scripts talking to a freshly powered screen (9600) through the bridge must send the escape for 9600 first (`hmi_pic_check.py` does).
 - No open-source tool builds a TJC `.tft` without the official editor (checked: TFTTool, tjc-hmi-toolchain, YXerer668's toolchain automates the editor).
   Vampiro1's `LCD_Artillery_x3` repo ships a Klipper UI `.tft` for the same screen family (not used).
 
