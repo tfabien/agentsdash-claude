@@ -1,50 +1,61 @@
 # agent-gadget (Claude Code plugin)
 
-Very basic first version: Claude Code hooks that send what each session is doing to the
-agent gadget (ESP32 + HMI screen, see `../../agent-gadget/`).
+Claude Code hooks that send what each session and sub-agent is doing to the agent gadget (ESP32 + HMI
+screen, see `../../agent-gadget/`).
 
 ## What it sends
 
-One `POST http://<gadget>/event` per hook, with `{ "agent", "state", "task" }`:
+One `POST http://<gadget>/event` per hook (wire format v2, ASCII JSON):
+`{"v":2,"session","project","agent":"lead"|"<id4>","role","evt","state","cmd","detail"}`.
 
-| Hook | state | task |
+| Hook | state | cmd |
 |---|---|---|
-| `SessionStart` | `done` | `Session started` |
-| `UserPromptSubmit` | `working` | `Prompt: <first words>` |
-| `PreToolUse` (every tool) | `working` | `Edit app.py`, `Bash git status`, ... |
-| `SubagentStart` | `working` | `Started` |
-| `SubagentStop` | `done` | the subagent's last message, or `Finished` |
-| `Notification` | `waiting` | the notification message (permission request, idle) |
-| `Stop` | `done` | `Done, waiting for you` |
+| `SessionStart` | `your_turn` | `Session started` |
+| `UserPromptSubmit` | `working` | `Prompt: <first words>` (a `<task-notification>` prompt is a sub-agent report: `Sub-agent report`) |
+| `PreToolUse` | `working` | `Edit app.py`, `Bash git status`, ... (`detail` = path or command) |
+| `PermissionRequest`, `Notification` (`permission_prompt`, `elicitation_*`, `agent_needs_input`) | `needs_you` | `Approve? Bash ...` / the message |
+| `PostToolUse`, `PostToolUseFailure`, `PermissionDenied` | `working` | `Resumed` / `Denied, continuing` (sent only when they clear a "needs you") |
+| `Notification` (`idle_prompt`), `Stop` | `your_turn` | `Waiting for you` / `Done, waiting for you` |
+| `SubagentStart` / `SubagentStop` | `working` / `done` | `Started` / the sub-agent's last message |
 | `SessionEnd` | `done` | `Session ended` |
 
-The agent name is `<project folder>-<first 4 chars of the session id>` for the session itself, and
-`<agent type>-<first 4 chars of agent_id>` for each subagent (hooks inside a subagent carry `agent_id`
-and `agent_type`). Max 19 chars, ASCII. The gadget shows 5 rows: more agents evict the oldest.
-The script never prints to stdout, never fails, and gives up after 1.5 s.
+The lead is the event without `agent_id`; a sub-agent is identified by `agent_id` (first 4 characters) and its
+role is its `agent_type`. Hook payloads actually observed: `../../docs/hook-payloads.md`.
+
+## Protocol switch
+
+Until the gadget firmware understands v2, the plugin sends the old flat event `{agent, state, task}`
+(`DEFAULT_PROTOCOL = 1` in `scripts/notify.py`). Force v2 with `CLAUDE_GADGET_PROTOCOL=2`.
 
 ## Setup
 
-1. Tell the plugin where the gadget is (first match wins):
-   - env var `CLAUDE_GADGET_HOST=192.168.1.100`
-   - or `~/.claude/agent-gadget.json`: `{ "host": "192.168.1.100" }`
-   - default: `agent-gadget.local` (mDNS)
-2. Load the plugin: `claude --plugin-dir <path>/claude-plugin/agent-gadget`
-   (check it first with `claude plugin validate <path>/claude-plugin/agent-gadget`).
+1. Tell the plugin where the gadget is (first match wins): env var `CLAUDE_GADGET_HOST=192.168.1.100`, or
+   `~/.claude/agent-gadget.json` `{ "host": "192.168.1.100" }`, default `agent-gadget.local` (mDNS).
+2. Load it: `claude --plugin-dir <path>/claude-plugin/agent-gadget`, or install it at user level from the local
+   marketplace of this repo (`claude plugin marketplace add <repo>` then
+   `claude plugin install agent-gadget@agent-gadget-local --scope user`).
+   Check with `claude plugin validate <path>/claude-plugin/agent-gadget`.
 
 Requires Python 3 on the PATH (`python` or `python3`), standard library only.
+The script never prints to stdout, always exits 0 and gives up after 1.5 s: it cannot slow Claude down.
 
-## Try it without Claude
+## Privacy
 
-```bash
-echo '{"hook_event_name":"PreToolUse","session_id":"abcd1234","cwd":"C:/work/demo","tool_name":"Edit","tool_input":{"file_path":"src/app.py"}}' \
-  | CLAUDE_GADGET_HOST=192.168.1.100 python scripts/notify.py
-```
+Prompts, commands and file paths are sent **in clear text over your local network** and shown on a screen on
+your desk. A command containing a secret would be displayed. Set `CLAUDE_GADGET_MASK=1` to send only tool names
+(no prompts, commands or paths).
 
-Add `CLAUDE_GADGET_DRY_RUN=1` to print the event instead of sending it.
+## Options for debugging
 
-## Limits of this first version
+`CLAUDE_GADGET_DRY_RUN=1` prints the event to stderr instead of sending it; `CLAUDE_GADGET_DUMP=<file>` appends every
+raw hook payload to a file.
 
-- A session that is idle stays "done" until it disappears from the screen (2 min).
-- `PostToolUse`, subagents and permission denials are not reported yet.
-- No slash command and no configuration UI: to be decided in the spec.
+## Tests
+
+`python -m unittest discover -s claude-plugin/agent-gadget/tests -v`
+
+## Known limits
+
+- There is no "approved" hook: after an approval, a long command keeps the agent in `needs_you` until it finishes.
+- A "needs you" marker lives in the temp folder (`agent-gadget-plugin/`); a crash can leave a stale one, which is
+  cleared by the next prompt or stop of that agent.

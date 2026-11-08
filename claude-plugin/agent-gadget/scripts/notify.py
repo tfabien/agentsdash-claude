@@ -1,30 +1,40 @@
 #!/usr/bin/env python3
 """
-Claude Code hook -> agent gadget.
+Claude Code hook -> agent gadget (wire format v2).
 
-Reads the hook payload (JSON on stdin), maps it to {agent, state, task} and POSTs it to the
-gadget (http://<host>/event). Standard library only. It never prints to stdout (stdout of some
-hooks is injected into Claude's context), never fails, and gives up after 1.5 s so it can
-never slow Claude down.
+Reads the hook payload (JSON on stdin), maps it to an event and POSTs it to http://<host>/event.
+Standard library only. It never prints to stdout (stdout of some hooks is injected into Claude's
+context), never fails, and gives up after 1.5 s so it can never slow Claude down.
 
-Host (first match): env CLAUDE_GADGET_HOST, then "host" in ~/.claude/agent-gadget.json,
-then agent-gadget.local.
-Debug: CLAUDE_GADGET_DRY_RUN=1 prints the event to stderr instead of sending it.
+Event (ASCII JSON): {"v":2,"session":"<id4>","project":"<=14","agent":"lead"|"<id4>","role":"lead"|"<type>",
+"evt":"<hook>","state":"working|needs_you|your_turn|done|error","cmd":"<=43","detail":"<=60"}.
+See docs/hook-payloads.md (payloads observed) and the design spec section 10 (hook -> state mapping).
+
+Host (first match): env CLAUDE_GADGET_HOST, then "host" in ~/.claude/agent-gadget.json, then agent-gadget.local.
+Options: CLAUDE_GADGET_MASK=1 hides commands and prompts (only tool names are sent);
+CLAUDE_GADGET_DRY_RUN=1 prints the event to stderr instead of sending it;
+CLAUDE_GADGET_DUMP=<file> appends every raw payload to a file (debugging).
+
+"Needs you" has no "approved" hook: a marker file (temp folder) remembers that an agent is blocked, so the
+PostToolUse hook only sends something when it clears that state.
 """
 import json
 import os
+import re
 import sys
+import tempfile
 import unicodedata
 import urllib.request
 
 TIMEOUT = 1.5
+NEEDS_YOU_TYPES = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
+CLEARING_EVENTS = {"PostToolUse", "PostToolUseFailure", "PermissionDenied"}
 
 
 def ascii_clean(text, limit):
     """The screen is ASCII only: strip accents, drop the rest, collapse whitespace, truncate."""
     text = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("ascii")
-    text = " ".join(text.split())
-    return text[:limit]
+    return " ".join(text.split())[:limit]
 
 
 def host():
@@ -38,59 +48,133 @@ def host():
         return "agent-gadget.local"
 
 
-def tool_summary(name, tool_input):
-    """Short, readable description of a tool call, e.g. 'Edit app.py' or 'Bash git status'."""
-    ti = tool_input or {}
+def tool_parts(name, tool_input):
+    """(short argument, detail) of a tool call, e.g. ('app.py', 'src/app.py') or ('git status', 'git status')."""
+    ti = tool_input if isinstance(tool_input, dict) else {}
     if name in ("Edit", "Write", "Read", "NotebookEdit", "MultiEdit"):
-        arg = os.path.basename(str(ti.get("file_path") or ti.get("notebook_path") or ""))
-    elif name in ("Bash", "PowerShell"):
-        arg = ti.get("command", "")
-    elif name in ("Grep", "Glob"):
-        arg = ti.get("pattern", "")
-    elif name in ("WebFetch", "WebSearch"):
-        arg = ti.get("url") or ti.get("query") or ""
-    elif name in ("Agent", "Task"):
-        arg = ti.get("description", "")
-    else:
-        arg = ""
-    return f"{name} {arg}".strip()
+        path = str(ti.get("file_path") or ti.get("notebook_path") or "")
+        return os.path.basename(path.replace("\\", "/")), path
+    if name in ("Bash", "PowerShell"):
+        cmd = str(ti.get("command", ""))
+        return cmd, cmd
+    if name in ("Grep", "Glob"):
+        pattern = str(ti.get("pattern", ""))
+        return pattern, pattern
+    if name in ("WebFetch", "WebSearch"):
+        target = str(ti.get("url") or ti.get("query") or "")
+        return target, target
+    if name in ("Agent", "Task"):
+        desc = str(ti.get("description", ""))
+        return desc, desc
+    return "", ""
 
 
-def agent_name(payload):
-    """One row per agent: the session itself, or each subagent (hooks inside a subagent carry agent_id)."""
+def marker_path(state_dir, session_id, agent):
+    safe = re.sub(r"[^A-Za-z0-9]", "", str(session_id))[:12] or "session"
+    return os.path.join(state_dir, f"{safe}-{agent}.needs")
+
+
+def set_marker(path):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="ascii") as f:
+            f.write("1")
+    except Exception:
+        pass
+
+
+def clear_marker(path):
+    """True when a marker existed (the agent was blocked on the user)."""
+    try:
+        os.remove(path)
+        return True
+    except Exception:
+        return False
+
+
+def build_event(payload, env=None, state_dir=None):
+    """Map one hook payload to a v2 event dict, or None when nothing should be sent."""
+    env = os.environ if env is None else env
+    state_dir = state_dir or os.path.join(tempfile.gettempdir(), "agent-gadget-plugin")
+    hook = payload.get("hook_event_name", "")
+    mask = bool(env.get("CLAUDE_GADGET_MASK"))
+
     agent_id = str(payload.get("agent_id") or "")
-    if agent_id:
-        kind = ascii_clean(payload.get("agent_type") or "agent", 12)
-        return (kind + "-" + agent_id[:4])[:19]                      # e.g. general-purp-a834
+    agent = agent_id[:4] if agent_id else "lead"
+    role = ascii_clean(payload.get("agent_type") or "agent", 12) if agent_id else "lead"
     cwd = payload.get("cwd") or os.getcwd()
-    project = os.path.basename(cwd.rstrip("/\\")) or "claude"
-    sid = str(payload.get("session_id", ""))[:4]
-    return (ascii_clean(project, 14) + ("-" + sid if sid else ""))[:19]   # firmware limit: 19 chars
+    session_id = payload.get("session_id", "")
+    marker = marker_path(state_dir, session_id, agent)
 
+    def event(state, cmd, detail=""):
+        return {"v": 2, "session": re.sub(r"[^A-Za-z0-9]", "", str(session_id))[:4],
+                "project": ascii_clean(os.path.basename(str(cwd).rstrip("/\\")) or "claude", 14),
+                "agent": agent, "role": role, "evt": hook, "state": state,
+                "cmd": ascii_clean(cmd, 43), "detail": "" if mask else ascii_clean(detail, 60)}
 
-def build_event(payload):
-    event = payload.get("hook_event_name", "")
-    name = agent_name(payload)
+    def tool_event(state, prefix=""):
+        name = str(payload.get("tool_name", ""))
+        if name == "SubagentHandback":
+            return event(state, "Reporting back")
+        arg, detail = tool_parts(name, payload.get("tool_input"))
+        return event(state, prefix + (name if mask else f"{name} {arg}"), detail)
 
-    if event == "SubagentStart":
-        state, task = "working", "Started"
-    elif event == "SubagentStop":
-        state, task = "done", ascii_clean(payload.get("last_assistant_message") or "Finished", 43)
-    elif event == "SessionStart":
-        state, task = "done", "Session started"
-    elif event == "UserPromptSubmit":
-        state, task = "working", "Prompt: " + ascii_clean(payload.get("prompt", ""), 36)
-    elif event == "PreToolUse":
-        state, task = "working", ascii_clean(tool_summary(payload.get("tool_name", ""), payload.get("tool_input")), 43)
-    elif event == "Notification":
-        state, task = "waiting", ascii_clean(payload.get("message", "Needs your attention"), 43)
-    elif event == "Stop":
-        state, task = "done", "Done, waiting for you"
-    elif event == "SessionEnd":
-        state, task = "done", "Session ended"
-    else:
+    if hook == "SessionStart":
+        return event("your_turn", "Session started")
+    if hook == "UserPromptSubmit":
+        clear_marker(marker)
+        prompt = str(payload.get("prompt", ""))
+        if prompt.lstrip().startswith("<task-notification>"):
+            return event("working", "Sub-agent report")
+        return event("working", "Prompt" if mask else "Prompt: " + prompt)
+    if hook == "PreToolUse":
+        return tool_event("working")
+    if hook == "PermissionRequest":
+        set_marker(marker)
+        return tool_event("needs_you", "Approve? ")
+    if hook in CLEARING_EVENTS:
+        if not clear_marker(marker):
+            return None
+        return event("working", "Resumed" if hook != "PermissionDenied" else "Denied, continuing")
+    if hook == "SubagentStart":
+        return event("working", "Started")
+    if hook == "SubagentStop":
+        clear_marker(marker)
+        return event("done", "Finished" if mask else (payload.get("last_assistant_message") or "Finished"))
+    if hook == "Notification":
+        kind = payload.get("notification_type", "")
+        if kind in NEEDS_YOU_TYPES:
+            set_marker(marker)
+            return event("needs_you", payload.get("message") or "Needs your attention")
+        if kind == "idle_prompt":
+            return event("your_turn", "Waiting for you")
         return None
-    return {"agent": name[:19], "state": state, "task": task}
+    if hook == "Stop":
+        clear_marker(marker)
+        return event("your_turn", "Done, waiting for you")
+    if hook == "SessionEnd":
+        clear_marker(marker)
+        return event("done", "Session ended")
+    return None
+
+
+DEFAULT_PROTOCOL = 1        # flipped to 2 once the gadget firmware understands v2 events (plan, end of task 4)
+V1_STATES = {"working": "working", "needs_you": "waiting", "your_turn": "done", "done": "done", "error": "error"}
+
+
+def protocol(env=None):
+    env = os.environ if env is None else env
+    value = env.get("CLAUDE_GADGET_PROTOCOL", "")
+    return int(value) if value in ("1", "2") else DEFAULT_PROTOCOL
+
+
+def to_v1(ev):
+    """Old gadget format {agent, state, task}: one flat row per session (project-id) or sub-agent (role-id)."""
+    if ev["agent"] == "lead":
+        name = f"{ev['project'][:14]}-{ev['session']}"
+    else:
+        name = f"{ev['role'][:12]}-{ev['agent']}"
+    return {"agent": name[:19], "state": V1_STATES.get(ev["state"], "working"), "task": ev["cmd"]}
 
 
 def main():
@@ -108,6 +192,8 @@ def main():
     ev = build_event(payload)
     if not ev:
         return
+    if protocol() == 1:
+        ev = to_v1(ev)
     if os.environ.get("CLAUDE_GADGET_DRY_RUN"):
         sys.stderr.write(json.dumps(ev) + "\n")
         return

@@ -1,6 +1,6 @@
 {
   "name": "agent-gadget",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shows what Claude Code is doing on an ESP32 + HMI screen gadget (very basic first version).",
   "author": { "name": "agent-gadget" }
 }
