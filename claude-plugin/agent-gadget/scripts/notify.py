@@ -18,6 +18,7 @@ CLAUDE_GADGET_DUMP=<file> appends every raw payload to a file (debugging).
 "Needs you" has no "approved" hook: a marker file (temp folder) remembers that an agent is blocked, so the
 PostToolUse hook only sends something when it clears that state.
 """
+import hashlib
 import json
 import os
 import re
@@ -74,13 +75,46 @@ def marker_path(state_dir, session_id, agent):
     return os.path.join(state_dir, f"{safe}-{agent}.needs")
 
 
-def set_marker(path):
+def set_marker(path, key="any"):
+    """key: the blocked tool call ("<tool_name>|<hash of tool_input>"), or "any" when unknown (Notification)."""
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="ascii") as f:
-            f.write("1")
+            f.write(key)
     except Exception:
         pass
+
+
+def read_marker(path):
+    try:
+        with open(path, encoding="ascii") as f:
+            key = f.read().strip()
+        return "any" if key in ("", "1") else key        # "1": marker written by plugin 0.2.0
+    except Exception:
+        return None
+
+
+def session_has_marker(state_dir, session_id):
+    safe = re.sub(r"[^A-Za-z0-9]", "", str(session_id))[:12] or "session"
+    try:
+        return any(n.startswith(safe + "-") and n.endswith(".needs") for n in os.listdir(state_dir))
+    except Exception:
+        return False
+
+
+def call_key(payload):
+    """Identify a tool call across PermissionRequest (no tool_use_id) and PostToolUse: name + arguments."""
+    raw = json.dumps(payload.get("tool_input", {}), sort_keys=True, ensure_ascii=True)
+    return f"{payload.get('tool_name', '')}|{hashlib.sha1(raw.encode('ascii')).hexdigest()[:12]}"
+
+
+def same_call(key, payload):
+    if key == "any":
+        return True
+    name, _, digest = key.partition("|")
+    if payload.get("tool_name", "") != name:
+        return False
+    return "tool_input" not in payload or call_key(payload) == key
 
 
 def clear_marker(path):
@@ -128,13 +162,17 @@ def build_event(payload, env=None, state_dir=None):
             return event("working", "Sub-agent report")
         return event("working", "Prompt" if mask else "Prompt: " + prompt)
     if hook == "PreToolUse":
+        if read_marker(marker) is not None:      # a parallel call starts while a prompt waits: stay "needs you"
+            return None
         return tool_event("working")
     if hook == "PermissionRequest":
-        set_marker(marker)
+        set_marker(marker, call_key(payload))
         return tool_event("needs_you", "Approve? ")
     if hook in CLEARING_EVENTS:
-        if not clear_marker(marker):
+        key = read_marker(marker)
+        if key is None or not same_call(key, payload):   # another (parallel) call finished: the prompt still waits
             return None
+        clear_marker(marker)
         return event("working", "Resumed" if hook != "PermissionDenied" else "Denied, continuing")
     started = marker[:-len(".needs")] + ".started"       # SubagentStart seen for this agent
     if hook == "SubagentStart":
@@ -150,6 +188,10 @@ def build_event(payload, env=None, state_dir=None):
     if hook == "Notification":
         kind = payload.get("notification_type", "")
         if kind in NEEDS_YOU_TYPES:
+            # permission_prompt has no agent_id and comes ~6 s after PermissionRequest: when a marker already
+            # exists in this session (often a sub-agent's), the prompt is known, so do not paint the lead orange.
+            if kind == "permission_prompt" and session_has_marker(state_dir, session_id):
+                return None
             set_marker(marker)
             return event("needs_you", payload.get("message") or "Needs your attention")
         if kind == "idle_prompt":

@@ -109,6 +109,32 @@ class BuildEventTest(unittest.TestCase):
         self.assertEqual(os.listdir(self.state_dir), [])
         self.assertIsNone(self.build(payload(SUB, "PostToolUse", tool_name="Bash")))             # nothing to clear
 
+    def test_late_permission_notification_of_a_subagent_does_not_mark_the_lead(self):
+        # Review finding 4: Notification(permission_prompt) has no agent_id and arrives ~6 s after PermissionRequest.
+        self.build(payload(SUB, "PermissionRequest", tool_name="Bash", tool_input={"command": "make"}))
+        late = self.build(payload(LEAD, "Notification", notification_type="permission_prompt",
+                                  message="Claude needs your permission"))
+        self.assertIsNone(late)
+        self.assertEqual(len(os.listdir(self.state_dir)), 1)                  # only the sub-agent's marker
+
+    def test_parallel_tool_call_does_not_clear_needs_you(self):
+        # Review finding 5: Read and Bash run in parallel, only Bash asks. Read finishing must not clear the prompt.
+        bash = {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}}
+        read = {"tool_name": "Read", "tool_input": {"file_path": "a.py"}}
+        self.build(payload(LEAD, "PermissionRequest", **bash))
+        self.assertIsNone(self.build(payload(LEAD, "PostToolUse", tool_use_id="toolu_read", **read)))
+        self.assertIsNone(self.build(payload(LEAD, "PreToolUse", tool_use_id="toolu_other", **read)))   # stays orange
+        cleared = self.build(payload(LEAD, "PostToolUse", tool_use_id="toolu_bash", **bash))
+        self.assertEqual((cleared["state"], cleared["cmd"]), ("working", "Resumed"))
+        self.assertEqual(os.listdir(self.state_dir), [])
+
+    def test_marker_from_the_previous_plugin_version_still_clears(self):
+        path = notify.marker_path(self.state_dir, LEAD["session_id"], "lead")
+        with open(path, "w", encoding="ascii") as f:
+            f.write("1")
+        cleared = self.build(payload(LEAD, "PostToolUse", tool_name="Bash", tool_input={"command": "ls"}))
+        self.assertEqual(cleared["state"], "working")
+
     def test_stop_and_denial_also_clear_needs_you(self):
         self.build(payload(LEAD, "PermissionRequest", tool_name="Bash", tool_input={"command": "ls"}))
         self.assertEqual(self.build(payload(LEAD, "Stop"))["state"], "your_turn")
