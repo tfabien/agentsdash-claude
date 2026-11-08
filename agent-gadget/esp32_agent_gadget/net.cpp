@@ -190,13 +190,15 @@ static String rectJson(const Rect& r) {
 static int intArg(const char* name, int def) { return server.hasArg(name) ? server.arg(name).toInt() : def; }
 
 static void handleDebugLayout() {      // GET /debug/layout?subs=N&tabs=T: slot rectangles of layout D
-  int subs = intArg("subs", 0), tabs = intArg("tabs", 5);
+  int subs = intArg("subs", 0), tabs = intArg("tabs", 5), ctx = intArg("ctx", 255);
   Rect slots[12];
   int rows = layoutSubs(subs, slots);
   int nSubs = subs < 0 ? 0 : subs > 12 ? 12 : subs, nTabs = tabs < 0 ? 0 : tabs > 5 ? 5 : tabs;
   String j = "{\"title\":" + rectJson(layoutTitle()) + ",\"tree\":" + rectJson(layoutTree()) +
              ",\"lead\":" + rectJson(layoutLead()) + ",\"strip\":" + rectJson(layoutStrip()) +
-             ",\"tabs_more\":" + rectJson(layoutTabsMore(tabs)) + ",\"rows\":" + rows + ",\"tabs\":[";
+             ",\"tabs_more\":" + rectJson(layoutTabsMore(tabs)) + ",\"tab_fill\":" + rectJson(layoutTabFill(0, tabs, ctx)) +
+             ",\"strip_tokens\":" + rectJson(layoutStripTokens()) + ",\"quota_line\":" + rectJson(layoutQuotaLine()) +
+             ",\"rows\":" + rows + ",\"tabs\":[";
   for (int i = 0; i < nTabs; i++) j += (i ? "," : "") + rectJson(layoutTab(i, tabs));
   j += "],\"subs\":[";
   for (int i = 0; i < nSubs; i++) j += (i ? "," : "") + rectJson(slots[i]);

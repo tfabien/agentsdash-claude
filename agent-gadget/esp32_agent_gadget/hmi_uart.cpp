@@ -150,6 +150,11 @@ static String asciiOnly(const String& s) {              // no double quotes, pri
   return r;
 }
 
+void hmiTextClear(int x, int y, int w, int h, int font, uint16_t fg, int xcen, const String& s) {
+  hmiSend("xstr " + String(x) + "," + String(y) + "," + String(w) + "," + String(h) + "," +
+          String(font) + "," + String(fg) + ",0," + String(xcen) + ",1,3,\"" + asciiOnly(s) + "\"");
+}
+
 void hmiText(int x, int y, int w, int h, int font, uint16_t fg, uint16_t bg, int xcen, const String& s) {
   hmiSend("xstr " + String(x) + "," + String(y) + "," + String(w) + "," + String(h) + "," +
           String(font) + "," + String(fg) + "," + String(bg) + "," + String(xcen) + ",1,1,\"" + asciiOnly(s) + "\"");

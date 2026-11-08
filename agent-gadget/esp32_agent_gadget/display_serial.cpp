@@ -39,6 +39,18 @@ void displayRender() {
   for (int i = 0; i < n; i++)
     Serial.printf("[display] %-19s %-12s %-6s %s\n", rows[i].name, modelStateName(rows[i].state),
                   modelFormatAge((millis() - rows[i].since) / 1000).c_str(), rows[i].task);
+  String usage = "[display] ctx";
+  for (int t = 0; t < modelSessionCount(); t++) {
+    const Session* s = modelSession(t);
+    uint8_t c = modelSessionCtx(*s, millis());
+    usage += String(" ") + s->id + "=" + (c == CTX_UNKNOWN ? String("?") : String(c) + "%") + " tok " + modelFormatTokens(s->stok);
+  }
+  uint32_t now = millis();
+  if (modelQuotas.h5.known) usage += " | 5h " + String(modelQuotas.h5.pct) + "% proj " + String(modelQuotas.h5.proj) +
+                                     " reset " + String(modelQuotaResetLeft(modelQuotas.h5.resetS, now)) + "s";
+  if (modelQuotas.d7.known) usage += " | 7d " + String(modelQuotas.d7.pct) + "% proj " + String(modelQuotas.d7.proj) +
+                                     " reset " + String(modelQuotaResetLeft(modelQuotas.d7.resetS, now)) + "s";
+  Serial.println(usage);
 }
 
 #endif  // DISPLAY_SERIAL

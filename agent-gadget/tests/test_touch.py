@@ -69,7 +69,7 @@ class TouchTest(unittest.TestCase):
         self.post("aaaa", "sub1", "working", "Read a.py")
         before = self.view()
         lay = self.g.debug("/debug/layout?subs=1&tabs=1")
-        for point in (center(lay["strip"]), (470, 100), (lay["tabs"][0]["x"] + 2 * 78 + 30, 10)):   # strip, right of the tree, empty tab place
+        for point in (center(lay["strip"]), (470, 100), (460, 10)):   # strip, right of the tree, right zone of the title bar
             self.tap(point)
             self.assertEqual(self.view(), before, point)
 
