@@ -5,7 +5,8 @@
 // --- Link to the screen ---
 #define HMI_RX_PIN 16            // ESP32 receives <- screen TX
 #define HMI_TX_PIN 17            // ESP32 sends    -> screen RX
-#define HMI_BAUD   9600          // current screen speed (see CLAUDE.md)
+#define HMI_BAUD   9600          // screen speed at power-up (project setting, see CLAUDE.md)
+#define HMI_FAST_BAUD 115200     // the ESP32 moves the screen to this speed at boot (runtime baud=, kept until power-off)
 
 // --- Geometry ---
 #define SCR_W   480

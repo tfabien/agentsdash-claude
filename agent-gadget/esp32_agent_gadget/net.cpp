@@ -184,6 +184,19 @@ static void handleDebugTap() {         // POST /debug/tap {"x","y","hold_ms"?}: 
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
+extern uint32_t loopMaxUs;
+extern const char* loopMaxWhere;
+
+static void handleDebugStats() {       // GET /debug/stats: draw queue and redraw budget (screen layer), uptime, last reset
+  String j = displayStats();
+  j.remove(j.length() - 1);
+  j += ",\"loop_max_ms\":" + String(loopMaxUs / 1000) + ",\"loop_max_in\":\"" + loopMaxWhere + "\"";
+  loopMaxUs = 0;
+  j += ",\"uptime_ms\":" + String(millis()) + ",\"reset_reason\":" + String((int)esp_reset_reason()) +
+       ",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"min_stack\":" + String(uxTaskGetStackHighWaterMark(NULL)) + "}";
+  server.send(200, "application/json", j);
+}
+
 static void handleDebugHit() {         // GET /debug/hit?x&y&tabs&subs
   Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("tabs", 0), intArg("subs", 0));
   const char* kind = h.kind == Hit::Tab ? "tab" : h.kind == Hit::Agent ? "agent" : "none";
@@ -304,6 +317,7 @@ static bool connectSaved() {
   String ssid = prefs.getString("ssid", "");
   if (ssid.length() == 0) return false;
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);              // modem sleep drops packets: HTTP requests stalled up to 5.6 s (TCP retries)
   WiFi.setHostname("agent-gadget");
   WiFi.begin(ssid.c_str(), prefs.getString("pass", "").c_str());
   Serial.printf("Connecting to %s", ssid.c_str());
@@ -355,6 +369,7 @@ void netBegin() {
 server.on("/debug/layout", HTTP_GET, handleDebugLayout);
 server.on("/debug/hit", HTTP_GET, handleDebugHit);
 server.on("/debug/tap", HTTP_POST, handleDebugTap);
+server.on("/debug/stats", HTTP_GET, handleDebugStats);
 #endif
   server.on("/config", HTTP_GET, handleConfigPage);
   server.on("/save", HTTP_POST, handleSave);

@@ -4,7 +4,20 @@
 #include <Arduino.h>
 
 void hmiBegin(uint32_t baud, int rxPin, int txPin);
-void hmiSend(const String& cmd);                       // raw command + FF FF FF
+uint32_t hmiConnect(uint32_t fast);                    // find the screen speed, move it to `fast` when possible; returns the baud in use
+uint32_t hmiBaud();
+const char* hmiLinkResult();                           // outcome of hmiConnect, for /debug/stats
+void hmiSend(const String& cmd);                       // raw command + FF FF FF (queued when a region is targeted)
+
+// Draw queue: commands go to the targeted region's queue and leave without blocking, title bar first,
+// then command strip, then tree (spec call 13). With no target, hmiSend writes directly (messages, boot).
+enum HmiRegion : int8_t { HMI_DIRECT = -1, HMI_TITLE = 0, HMI_STRIP, HMI_TREE, HMI_REGIONS };
+void hmiTarget(HmiRegion r, bool reset);               // reset: drop what the region still had queued (a full redraw follows)
+void hmiPump();                                        // call every loop: sends whole commands while the UART has room
+bool hmiTakeOverflow(HmiRegion r);                     // true once after a region dropped commands (queue full): redraw it
+uint32_t hmiQueuedBytes();                             // queued + still in the UART buffer
+uint32_t hmiTitleMs();                                 // last measured time from a title bar redraw to its last byte sent
+uint32_t hmiTitleCount();                              // number of measured title bar redraws
 void hmiDrain();                                       // discard bytes received from the screen
 int  hmiRead();                                        // next byte from the screen, -1 when none
 void hmiClear(uint16_t color);                         // cls

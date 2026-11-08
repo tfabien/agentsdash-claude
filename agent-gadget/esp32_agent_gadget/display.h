@@ -25,3 +25,4 @@ void displayMessage(const String& title, const String& l1 = "", const String& l2
 void displayProgress(int percent);          // progress (0-100) under a message
 void displayInvalidate();                   // back to the agent list, fully redrawn
 void displayRender();                       // call often: only draws what changed
+String displayStats();                      // JSON for GET /debug/stats: {"screen", "baud", "queued_bytes", "est_ms", "titlebar_ms", "title_count"}

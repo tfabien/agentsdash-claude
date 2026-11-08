@@ -26,6 +26,10 @@ void displayInvalidate() {
   lastModelRev = ~0u;
 }
 
+String displayStats() {
+  return "{\"screen\":false,\"baud\":0,\"queued_bytes\":0,\"est_ms\":0,\"titlebar_ms\":0,\"title_count\":0}";
+}
+
 void displayRender() {
   if (messageMode || modelRev == lastModelRev) return;
   lastModelRev = modelRev;

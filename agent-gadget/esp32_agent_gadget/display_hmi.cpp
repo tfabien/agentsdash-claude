@@ -15,6 +15,7 @@
 static bool fullRedraw = true;
 static bool messageMode = false;
 static bool emptyShown = false;
+static bool clsPending = false;                // a cls is queued in the title region
 static uint32_t titleSig = 0, stripSig = 0, treeSig = 0;
 static uint32_t slotSig[SLOTS];
 static int frameSlot = -1;                 // slot that has the selection frame on screen
@@ -98,6 +99,8 @@ static uint32_t titleSignature(const View& v) {
 }
 
 static void drawTitle(const View& v) {
+  hmiTarget(HMI_TITLE, !clsPending);              // after a full clear, keep the queued cls in front
+  clsPending = false;
   hmiFill(0, 0, SCR_W, L_TITLE_H, C_DARK);
   int n = modelSessionCount();
   int shown = n < L_TAB_MAX ? n : L_TAB_MAX;
@@ -194,6 +197,7 @@ static void drawFrame(int slot, int nSubs, uint16_t color) {
 static void drawTree(const View& v, bool full) {
   const Session* s = selectedSession(v);
   int nSubs = s ? modelSubCount(*s) : 0;
+  hmiTarget(HMI_TREE, full);
   if (full) {
     Rect t = layoutTree();
     hmiFill(t.x, t.y, t.w, t.h, C_BLACK);
@@ -219,6 +223,7 @@ static void drawTree(const View& v, bool full) {
 
 // ---------- command strip ----------
 static void drawStripAges(const Agent& a, uint32_t now) {
+  hmiTarget(HMI_STRIP, false);
   Rect r = layoutStrip();
   hmiText(r.x + 380, r.y + 2, 96, 26, FONT_BIG, C_GREY, C_STRIP, 2, modelFormatAge((now - a.since) / 1000));
   if (a.prevCmd[0]) {
@@ -228,6 +233,7 @@ static void drawStripAges(const Agent& a, uint32_t now) {
 }
 
 static void drawStrip(const View& v, uint32_t now) {
+  hmiTarget(HMI_STRIP, true);
   Rect r = layoutStrip();
   hmiFill(r.x, r.y, r.w, r.h, C_STRIP);
   const Session* s = selectedSession(v);
@@ -244,6 +250,8 @@ static void drawStrip(const View& v, uint32_t now) {
 
 // ---------- empty screen and messages ----------
 static void drawEmpty() {
+  hmiTarget(HMI_TREE, true);
+  hmiTarget(HMI_STRIP, true);
   hmiFill(0, L_TREE_Y, SCR_W, SCR_H - L_TREE_Y, C_BLACK);
   if (deviceInfo.apMode) {
     hmiText(10, 66, 460, 26, FONT_BIG, C_ORANGE, C_BLACK, 1, "Wi-Fi setup");
@@ -262,19 +270,34 @@ static void drawEmpty() {
 void displayBegin() {
   hmiBegin(HMI_BAUD, HMI_RX_PIN, HMI_TX_PIN);
   delay(500);
+  uint32_t baud = hmiConnect(HMI_FAST_BAUD);
+  Serial.print("[display] screen link at ");
+  Serial.println(baud);
   hmiSend("");                              // flush a stray byte (the first command often returns 1A)
   hmiSend("bkcmd=0");                       // no acknowledgements: less traffic, cleaner touch frames
   touchBegin();
   hmiClear(C_BLACK);
 }
 
+static void dropQueues() {
+  for (int r = 0; r < HMI_REGIONS; r++) hmiTarget((HmiRegion)r, true);
+  hmiTarget(HMI_DIRECT, false);
+}
+
 void displayMessage(const String& title, const String& l1, const String& l2, const String& l3, Tone tone) {
   messageMode = true;
+  dropQueues();
   hmiClear(C_BLACK);
   hmiText(10, 66, 460, 26, FONT_BIG, toneColor(tone), C_BLACK, 1, title);
   if (l1.length()) hmiText(10, 106, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, l1);
   if (l2.length()) hmiText(10, 132, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, l2);
   if (l3.length()) hmiText(10, 158, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, l3);
+}
+
+String displayStats() {
+  uint32_t q = hmiQueuedBytes();
+  return String("{\"screen\":true,\"link\":\"") + hmiLinkResult() + "\",\"baud\":" + hmiBaud() + ",\"queued_bytes\":" + q + ",\"est_ms\":" +
+         (uint32_t)((uint64_t)q * 10000 / hmiBaud()) + ",\"titlebar_ms\":" + hmiTitleMs() + ",\"title_count\":" + hmiTitleCount() + "}";
 }
 
 void displayProgress(int percent) {
@@ -287,17 +310,32 @@ void displayInvalidate() {
 }
 
 // ---------- render ----------
+static void renderRegions(const View& v, uint32_t now);
+
 void displayRender() {
   touchPoll();
+  hmiPump();
   if (messageMode) return;
   uint32_t now = millis();
   View v = modelView(now);
   if (fullRedraw) {
-    hmiClear(C_BLACK);
+    dropQueues();
+    hmiTarget(HMI_TITLE, true);
+    hmiClear(C_BLACK);                            // drawTitle below keeps it (clsPending)
+    clsPending = true;
     titleSig = stripSig = treeSig = 0;
     emptyShown = false;
     fullRedraw = false;
   }
+  if (hmiTakeOverflow(HMI_TITLE)) titleSig = 0;    // a queue was full: redraw that region from scratch
+  if (hmiTakeOverflow(HMI_STRIP)) stripSig = 0;
+  if (hmiTakeOverflow(HMI_TREE)) treeSig = 0;
+  renderRegions(v, now);
+  hmiTarget(HMI_DIRECT, false);
+  hmiPump();
+}
+
+static void renderRegions(const View& v, uint32_t now) {
   uint32_t t = titleSignature(v);
   if (t != titleSig) { drawTitle(v); titleSig = t; }
 

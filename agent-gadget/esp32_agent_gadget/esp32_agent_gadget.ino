@@ -33,10 +33,17 @@ void setup() {
   Serial.println(F("Ready. r=redraw, t=table, w=forget Wi-Fi"));
 }
 
+uint32_t loopMaxUs = 0;        // longest loop pass since the last GET /debug/stats (diagnostics)
+const char* loopMaxWhere = "";
+
 void loop() {
+  uint32_t t0 = micros();
   netLoop();
+  uint32_t t1 = micros();
   modelPrune(millis());
   displayRender();
+  uint32_t t2 = micros();
+  if (t2 - t0 > loopMaxUs) { loopMaxUs = t2 - t0; loopMaxWhere = (t1 - t0 > t2 - t1) ? "net" : "display"; }
   while (Serial.available()) {
     char c = Serial.read();
     if (c == 'r') displayInvalidate();
