@@ -1,0 +1,9 @@
+# installers and downloads (large, third-party)
+USARTHMIsetup_latest/
+EdtHmiStudio-*.exe
+*.exe
+# build and tooling output
+.pio/
+.superpowers/
+__pycache__/
+*.pyc

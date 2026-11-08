@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Gadget - maquette 480x272</title>
+<style>
+  :root { --bg:#0e1116; --panel:#171b22; --line:#262c36; --text:#e6e9ee; --muted:#8b94a3;
+          --working:#2ecc71; --waiting:#ff9f1a; --done:#7d8794; --error:#ff4d4f; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+         gap:16px; background:#06080b; color:var(--text); font-family:system-ui,Segoe UI,sans-serif; padding:16px; }
+  .bezel { padding:14px; background:#1c2027; border-radius:14px; box-shadow:0 8px 30px #000a; }
+  /* L'écran réel fait 480x272 px : on l'affiche en taille réelle, agrandi via --zoom */
+  .screen { --zoom:1.6; width:calc(480px*var(--zoom)); height:calc(272px*var(--zoom)); overflow:hidden; background:var(--bg); }
+  .inner { width:480px; height:272px; transform:scale(var(--zoom)); transform-origin:0 0; display:flex; flex-direction:column; }
+  header { height:32px; display:flex; align-items:center; justify-content:space-between; padding:0 12px;
+           background:var(--panel); border-bottom:1px solid var(--line); font-size:13px; letter-spacing:.08em; }
+  header b { font-size:14px; }
+  .counts span { margin-left:10px; font-variant-numeric:tabular-nums; }
+  .row { height:48px; display:grid; grid-template-columns:14px 1fr 54px; column-gap:10px; align-items:center;
+         padding:0 12px; border-bottom:1px solid var(--line); }
+  .dot { width:12px; height:12px; border-radius:50%; background:var(--c); }
+  .name { font-size:16px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .name small { margin-left:8px; font-size:11px; font-weight:500; color:var(--c); text-transform:uppercase; letter-spacing:.06em; }
+  .task { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .age { text-align:right; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .row.waiting { background:#2a2110; animation:blink 1.2s steps(2,jump-none) infinite; }
+  .row.empty { opacity:.25; }
+  @keyframes blink { 50% { background:#3a2c10; } }
+  .info { font-size:13px; color:var(--muted); text-align:center; max-width:760px; line-height:1.5; }
+  code { background:#161a21; padding:1px 6px; border-radius:4px; }
+  .ok { color:var(--working); } .ko { color:var(--error); }
+</style>
+</head>
+<body>
+  <div class="bezel"><div class="screen"><div class="inner" id="screen"></div></div></div>
+  <div class="info" id="info"></div>
+
+<script>
+const MAX = 5;
+const COLORS = { working:'--working', waiting:'--waiting', done:'--done', error:'--error' };
+const params = new URLSearchParams(location.search);
+const ESP = params.get('esp');          // ex. ?esp=http://192.168.1.50  -> lit /state de l'ESP32
+
+// ---------- simulation locale (même logique que mock_agents.py) ----------
+const AGENTS = {
+  'refacto-api':  ['Read src/api/routes.py','Edit src/api/routes.py',"Grep 'def handler'",'Bash pytest -q'],
+  'doc-writer':   ['Read README.md','Write docs/usage.md','Edit docs/usage.md','WebFetch docs.python.org'],
+  'bug-hunter':   ["Grep 'TODO|FIXME'",'Read logs/error.log','Bash git log -n 20','Edit src/core.py'],
+  'migration-db': ['Read schema.sql','Bash alembic upgrade head','Edit models.py','Bash pytest tests/db'],
+  'code-review':  ['Read diff.patch',"Grep 'password'",'Read src/auth.py','Write review.md'],
+};
+const WAITS = ['Valider: Bash rm -rf build/','Valider: Edit .env','Valider: Bash git push','Question: quelle branche ?'];
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const sim = Object.entries(AGENTS).map(([name,tasks],i) => ({
+  name, tasks, state:'done', task:'', steps:0, since:Date.now(), resume:Date.now()+i*1500+Math.random()*3000, shown:false }));
+
+function simStep(a, now) {
+  const set = (s,t) => { a.state=s; a.task=t; a.since=now; a.shown=true; };
+  if (a.state==='done' || a.state==='error') {
+    if (now >= a.resume) { a.steps = 4+Math.floor(Math.random()*6); set('working', pick(a.tasks)); }
+  } else if (a.state==='waiting') {
+    if (Math.random()<.2) set('working', pick(a.tasks));
+  } else {
+    const r = Math.random();
+    if (r<.06) set('waiting', pick(WAITS));
+    else if (r<.08) { set('error','Échec: exit code 1'); a.resume = now+8000+Math.random()*7000; }
+    else if (--a.steps<=0) { set('done','Terminé'); a.resume = now+10000+Math.random()*15000; }
+    else a.task = pick(a.tasks);
+  }
+}
+setInterval(() => { if (!ESP) sim.forEach(a => { if (Math.random()<.5) simStep(a, Date.now()); }); }, 1200);
+
+// ---------- données à afficher ----------
+let remote = [];
+async function poll() {
+  try {
+    const r = await fetch(ESP.replace(/\/$/,'') + '/state');
+    remote = (await r.json()).agents;
+    setInfo(true);
+  } catch (e) { setInfo(false); }
+}
+if (ESP) { poll(); setInterval(poll, 1000); }
+
+function current() {
+  if (ESP) return remote.map(a => ({ name:a.name, state:a.state, task:a.task, age:a.age }));
+  return sim.filter(a => a.shown).map(a => ({ name:a.name, state:a.state, task:a.task, age:Math.floor((Date.now()-a.since)/1000) }));
+}
+
+function fmt(s) { return s<60 ? s+'s' : s<3600 ? Math.floor(s/60)+'m'+String(s%60).padStart(2,'0')+'s' : Math.floor(s/3600)+'h'+Math.floor(s%3600/60)+'m'; }
+function esc(t) { return String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function render() {
+  const list = current().slice(0, MAX);
+  const n = s => list.filter(a => a.state===s).length;
+  let h = `<header><b>AGENTS</b><div class="counts">
+    <span style="color:var(--working)">● ${n('working')}</span>
+    <span style="color:var(--waiting)">● ${n('waiting')}</span>
+    <span style="color:var(--error)">● ${n('error')}</span></div></header>`;
+  for (let i=0;i<MAX;i++) {
+    const a = list[i];
+    if (!a) { h += `<div class="row empty"><div class="dot" style="--c:var(--line)"></div><div class="name">&nbsp;</div><div class="age"></div></div>`; continue; }
+    h += `<div class="row ${a.state}" style="--c:var(${COLORS[a.state]})">
+      <div class="dot"></div>
+      <div><div class="name">${esc(a.name)}<small>${a.state}</small></div><div class="task">${esc(a.task)}</div></div>
+      <div class="age">${fmt(a.age)}</div></div>`;
+  }
+  document.getElementById('screen').innerHTML = h;
+}
+setInterval(render, 500); render();
+
+function setInfo(ok) {
+  const el = document.getElementById('info');
+  if (!ESP) { el.innerHTML = 'Mode <b>simulation locale</b>. Pour lire un vrai ESP32 : <code>ux_mockup.html?esp=http://IP_ESP32</code>'; return; }
+  el.innerHTML = ok ? `<span class="ok">Connecté</span> à ${esc(ESP)}/state` : `<span class="ko">ESP32 injoignable</span> (${esc(ESP)})`;
+}
+setInfo(true);
+</script>
+</body>
+</html>

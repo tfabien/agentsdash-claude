@@ -1,0 +1,12 @@
+{
+  "name": "agent-gadget-local",
+  "owner": { "name": "agent-gadget" },
+  "plugins": [
+    {
+      "name": "agent-gadget",
+      "source": "./claude-plugin/agent-gadget",
+      "description": "Shows what Claude Code sessions and subagents are doing on an ESP32 + HMI screen gadget.",
+      "version": "0.1.0"
+    }
+  ]
+}

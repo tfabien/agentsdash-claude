@@ -1,0 +1,29 @@
+{
+  "description": "Send Claude Code activity to the agent gadget (POST /event).",
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ],
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+    ]
+  }
+}
