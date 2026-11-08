@@ -22,6 +22,25 @@ One `POST http://<gadget>/event` per hook (wire format v2, ASCII JSON):
 The lead is the event without `agent_id`; a sub-agent is identified by `agent_id` (first 4 characters) and its
 role is its `agent_type`. Hook payloads actually observed: `../../docs/hook-payloads.md`.
 
+## Status line (context and plan quotas)
+
+`scripts/statusline.py` is a Claude Code status line. It prints `ctx 42% | 5h 48% 1h20 | 7d 61% 2d03h` and posts the
+numbers to `POST http://<gadget>/usage` (when they change, at most once a minute otherwise):
+context fill, the 5-hour and weekly quotas with their reset times, and the **pace**: burn rate (%/h) and the projected %
+at reset. The gadget colors the quotas from that projection (green under 85 %, orange 85 to 100 %, red when you would
+run out before the reset). The pace history is shared by all sessions in `<temp>/agent-gadget-plugin/quota_history.json`.
+
+Install it by hand in `~/.claude/settings.json` (one status line command only):
+
+```json
+"statusLine": {"type": "command", "command": "python <repo>/claude-plugin/agent-gadget/scripts/statusline.py", "refreshInterval": 10}
+```
+
+The Claude desktop app does not run status lines (checked 2026-11-08). Quotas are account-wide, so one terminal
+`claude` session is enough to feed them. Desktop sessions still get their context, tokens and title from the hooks,
+which read the transcripts (`scripts/transcript_usage.py`): `tok`, `stok`, `ctx_k`, `ctx_pct`, `title` on v2 events.
+Quotas are only reported to Pro/Max subscribers.
+
 ## Protocol switch
 
 The plugin sends v2 events by default (`DEFAULT_PROTOCOL = 2` in `scripts/notify.py`). For a gadget still flashed
