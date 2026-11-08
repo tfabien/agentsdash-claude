@@ -2,6 +2,7 @@
 
 uint32_t modelRev = 1;
 uint16_t modelMoreSessions = 0;
+Quotas modelQuotas;
 
 static Session sessions[MAX_SESSIONS];
 static uint32_t doneTtlMs = DONE_TTL_MS;
@@ -17,6 +18,7 @@ void modelBegin() {
   memset(&manual, 0, sizeof manual);
   modelRev = 1;
   modelMoreSessions = 0;
+  memset(&modelQuotas, 0, sizeof modelQuotas);
   doneTtlMs = DONE_TTL_MS;
   staleTtlMs = STALE_TTL_MS;
 }
@@ -27,6 +29,7 @@ void modelClear() {
   memset(sessions, 0, sizeof sessions);
   memset(&manual, 0, sizeof manual);
   modelMoreSessions = 0;
+  memset(&modelQuotas, 0, sizeof modelQuotas);
   modelRev++;
 }
 
@@ -90,8 +93,15 @@ static void initAgent(Agent* a, const char* id, const char* role, uint32_t now) 
   a->rev = ++modelRev;
 }
 
+static void initSession(Session* s, uint32_t now) {
+  memset(s, 0, sizeof *s);
+  s->used = true;
+  s->lastActive = now;
+  s->ctxPct = CTX_UNKNOWN;
+}
+
 static Session* allocSession(uint32_t now) {
-  for (auto& s : sessions) if (!s.used) { memset(&s, 0, sizeof s); s.used = true; s.lastActive = now; return &s; }
+  for (auto& s : sessions) if (!s.used) { initSession(&s, now); return &s; }
   Session* victim = nullptr;                          // full: evict the least urgent session that is not blocked on the user
   for (auto& s : sessions) {
     if (hasNeedsYou(s)) continue;
@@ -100,9 +110,7 @@ static Session* allocSession(uint32_t now) {
     if (ds > dv || (ds == dv && earlier(s.lastActive, victim->lastActive))) victim = &s;
   }
   if (!victim) return nullptr;
-  memset(victim, 0, sizeof *victim);
-  victim->used = true;
-  victim->lastActive = now;
+  initSession(victim, now);
   modelMoreSessions++;
   return victim;
 }
@@ -124,6 +132,71 @@ static Agent* allocSub(Session& s, uint32_t now) {
   }
   if (victim) s.more++;
   return victim;
+}
+
+// ---------- usage (context, tokens, title, quotas) ----------
+static bool statusLineFresh(const Session& s, uint32_t now) { return s.ctxFromStatusLine && now - s.ctxAt < CTX_STATUSLINE_MS; }
+
+static void applyLeadUsage(Session& s, const EventV2& e, uint32_t now) {
+  bool changed = false;
+  if (e.title[0] && strcmp(s.title, e.title) != 0) { copyStr(s.title, TITLE_LEN, e.title); changed = true; }
+  if (e.stok >= 0 && (uint32_t)e.stok != s.stok) { s.stok = (uint32_t)e.stok; changed = true; }
+  if (e.ctxPct >= 0 && !statusLineFresh(s, now)) {          // transcript estimate: only without a fresh status line value
+    uint8_t pct = e.ctxPct > 254 ? 254 : (uint8_t)e.ctxPct;
+    if (pct != s.ctxPct || s.ctxFromStatusLine) { s.ctxPct = pct; s.ctxFromStatusLine = false; changed = true; }
+    if (e.ctxK >= 0) s.ctxK = (uint16_t)e.ctxK;
+  }
+  if (changed) s.usageRev = ++modelRev;
+}
+
+static void setWindow(QuotaWindow& w, long pct, long resetS, long rate10, long proj, long emptyS) {
+  if (pct == LONG_MIN) return;
+  w.known = true;
+  w.pct = pct < 0 ? 0 : (pct > 255 ? 255 : (uint8_t)pct);
+  w.resetS = resetS == LONG_MIN || resetS < 0 ? 0 : (uint32_t)resetS;
+  bool pace = proj != LONG_MIN;
+  w.rate10 = pace && rate10 != LONG_MIN ? (int16_t)constrain(rate10, -32000L, 32000L) : 0;
+  w.proj = pace ? (int16_t)constrain(proj, 0L, 32000L) : -1;
+  w.emptyS = pace && emptyS != LONG_MIN ? (int32_t)emptyS : -1;
+}
+
+void modelApplyUsage(const UsageV1& u, uint32_t now) {
+  if (u.h5Pct != LONG_MIN || u.d7Pct != LONG_MIN) {
+    setWindow(modelQuotas.h5, u.h5Pct, u.h5ResetS, u.h5Rate10, u.h5Proj, u.h5EmptyS);
+    setWindow(modelQuotas.d7, u.d7Pct, u.d7ResetS, u.d7Rate10, u.d7Proj, u.d7EmptyS);
+    modelQuotas.receivedAt = now;
+    modelQuotas.rev = ++modelRev;
+  }
+  Session* s = u.session[0] ? findSession(u.session) : nullptr;   // unknown session: no new tab for a status line
+  if (s && u.ctxPct != LONG_MIN) {
+    s->ctxPct = u.ctxPct < 0 ? 0 : (u.ctxPct > 254 ? 254 : (uint8_t)u.ctxPct);
+    if (u.ctxK != LONG_MIN && u.ctxK >= 0) s->ctxK = (uint16_t)u.ctxK;
+    s->ctxFromStatusLine = true;
+    s->ctxAt = now;
+    s->usageRev = ++modelRev;
+  }
+}
+
+uint32_t modelQuotaResetLeft(uint32_t resetS, uint32_t now) {
+  uint32_t gone = (now - modelQuotas.receivedAt) / 1000;
+  return resetS > gone ? resetS - gone : 0;
+}
+
+PaceLevel modelPaceLevel(const QuotaWindow& w) {
+  if (!w.known) return PACE_UNKNOWN;
+  if (w.pct >= 100) return PACE_OVER;
+  if (w.proj < 0) return PACE_UNKNOWN;
+  if (w.proj > 100) return PACE_OVER;
+  return w.proj >= 85 ? PACE_TIGHT : PACE_OK;
+}
+
+uint8_t modelSessionCtx(const Session& s, uint32_t now) { (void)now; return s.ctxPct; }
+
+String modelFormatTokens(uint32_t t) {
+  if (t < 1000) return String(t);
+  if (t < 1000000) return String((t + 500) / 1000) + "k";
+  uint32_t tenths = (t + 50000) / 100000;                  // 1.6M
+  return String(tenths / 10) + "." + String(tenths % 10) + "M";
 }
 
 // ---------- events ----------
@@ -159,6 +232,8 @@ bool modelApplyV2(const EventV2& e, uint32_t now) {
     copyStr(a->cmd, CMD_LEN, e.cmd);
   }
   copyStr(a->detail, DETAIL_LEN, e.detail);
+  if (e.tok >= 0) a->tok = (uint32_t)e.tok;
+  if (isLead) applyLeadUsage(*s, e, now);
   AgentState before = a->state;
   if (fresh || before != e.state) a->since = now;
   a->state = e.state;
@@ -180,6 +255,7 @@ bool modelApplyV2(const EventV2& e, uint32_t now) {
 bool modelApplyV1(const char* agent, const char* state, const char* task, uint32_t now) {
   EventV2 e;
   memset(&e, 0, sizeof e);
+  e.tok = e.stok = e.ctxPct = e.ctxK = -1;
   if (!strcmp(state, "working"))      e.state = ST_WORKING;
   else if (!strcmp(state, "waiting")) e.state = ST_NEEDS_YOU;
   else if (!strcmp(state, "done"))    e.state = ST_DONE;
@@ -349,11 +425,26 @@ static const char* flatState(AgentState s) {              // state names of the 
 }
 
 static String agentJson(const Session& s, const Agent& a, bool isLead, uint32_t now) {
-  String j = "{\"id\":\"" + jsonEscape(a.id) + "\",\"parent\":\"" + (isLead ? "" : "lead") + "\",\"role\":\"" + jsonEscape(a.role) +
+  String j = "{\"tok\":" + String(a.tok) + ",\"id\":\"" + jsonEscape(a.id) + "\",\"parent\":\"" + (isLead ? "" : "lead") + "\",\"role\":\"" + jsonEscape(a.role) +
              "\",\"state\":\"" + modelStateName(modelEffectiveState(s, a)) + "\",\"cmd\":\"" + jsonEscape(a.cmd) +
              "\",\"detail\":\"" + jsonEscape(a.detail) + "\",\"prev\":\"" + jsonEscape(a.prevCmd) + "\",\"prev_age\":" +
              String(a.prevCmd[0] ? (now - a.prevAt) / 1000 : 0) + ",\"age\":" + String((now - a.since) / 1000) + "}";
   return j;
+}
+
+static String windowJson(const char* k, const QuotaWindow& w, uint32_t now) {
+  String p = String(",\"") + k;
+  String j = p + "_pct\":" + String(w.pct) + p + "_reset_s\":" + String(modelQuotaResetLeft(w.resetS, now));
+  if (w.proj >= 0) j += p + "_rate10\":" + String(w.rate10) + p + "_proj\":" + String(w.proj) + p + "_empty_s\":" + String(w.emptyS);
+  return j;
+}
+
+static String quotasJson(uint32_t now) {                   // ,"usage":{...} or nothing before the first report
+  if (!modelQuotas.h5.known && !modelQuotas.d7.known) return "";
+  String j = ",\"usage\":{\"age_s\":" + String((now - modelQuotas.receivedAt) / 1000);
+  if (modelQuotas.h5.known) j += windowJson("h5", modelQuotas.h5, now);
+  if (modelQuotas.d7.known) j += windowJson("d7", modelQuotas.d7, now);
+  return j + "}";
 }
 
 String modelToJson(uint32_t now) {
@@ -364,7 +455,10 @@ String modelToJson(uint32_t now) {
     const Session& s = sessions[o[t]];
     if (t) j += ",";
     j += "{\"id\":\"" + jsonEscape(s.id) + "\",\"project\":\"" + jsonEscape(s.project) + "\",\"dot\":\"" + modelStateName(modelSessionDot(s)) +
-         "\",\"count\":" + String(1 + modelSubCount(s)) + ",\"more\":" + String(s.more) + ",\"agents\":[" + agentJson(s, s.lead, true, now);
+         "\",\"count\":" + String(1 + modelSubCount(s)) + ",\"more\":" + String(s.more) + ",\"title\":\"" + jsonEscape(s.title) +
+         "\",\"ctx_pct\":" + (s.ctxPct == CTX_UNKNOWN ? String("null") : String(s.ctxPct)) + ",\"ctx_k\":" + String(s.ctxK) +
+         ",\"ctx_src\":\"" + (s.ctxPct == CTX_UNKNOWN ? "" : (s.ctxFromStatusLine ? "statusline" : "transcript")) +
+         "\",\"tok\":" + String(s.stok) + ",\"agents\":[" + agentJson(s, s.lead, true, now);
     for (int i = 1; i <= modelSubCount(s); i++) j += "," + agentJson(s, *modelAgent(s, i), false, now);
     j += "]}";
   }
@@ -372,7 +466,7 @@ String modelToJson(uint32_t now) {
   String vs, va;
   if (v.session >= 0) { const Session* s = modelSession(v.session); vs = s->id; va = modelAgent(*s, v.agent)->id; }
   j += "],\"more_sessions\":" + String(modelMoreSessions) + ",\"view\":{\"session\":\"" + jsonEscape(vs.c_str()) + "\",\"agent\":\"" +
-       jsonEscape(va.c_str()) + "\",\"mode\":\"" + (v.manual ? "manual" : "auto") + "\"},\"agents\":[";
+       jsonEscape(va.c_str()) + "\",\"mode\":\"" + (v.manual ? "manual" : "auto") + "\"}" + quotasJson(now) + ",\"agents\":[";
   static FlatRow rows[MAX_SESSIONS * (1 + MAX_SUBS)];       // static: too big for the loop task's stack
   int count = modelFlat(rows, MAX_SESSIONS * (1 + MAX_SUBS));
   for (int i = 0; i < count; i++) {
