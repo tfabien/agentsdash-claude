@@ -21,13 +21,13 @@ FILES = ["net.cpp", "model.cpp", "layout.cpp", "touch.cpp", "notify.py", "README
 def post(host, body):
     req = urllib.request.Request(f"http://{host}/event", data=json.dumps(body).encode("ascii"),
                                  headers={"Content-Type": "application/json", "X-Gadget-Test": "1"}, method="POST")
-    for attempt in (1, 2):      # one retry: Wi-Fi loses packets in bursts; events carry full state, so a repeat is harmless
+    for attempt in (1, 2, 3):   # retries: Wi-Fi loses packets in bursts; events carry full state, so a repeat is harmless
         try:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 resp.read()
             return
         except OSError:
-            if attempt == 2:
+            if attempt == 3:
                 raise
 
 

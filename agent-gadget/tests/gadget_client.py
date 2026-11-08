@@ -28,7 +28,7 @@ class Gadget:
             data = body if isinstance(body, bytes) else (body if isinstance(body, str) else json.dumps(body)).encode("utf-8")
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(f"http://{self.host}{path}", data=data, headers=headers, method=method)
-        for attempt in (1, 2):      # one retry: the 2.4 GHz link loses packets in bursts (23% over 60 s once, RSSI -50)
+        for attempt in (1, 2, 3):   # retries: the 2.4 GHz link loses packets in bursts (up to 83% loss seen, RSSI -50 to -76)
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                     return resp.status, resp.read().decode("utf-8", "replace")
@@ -36,7 +36,7 @@ class Gadget:
                 with err:
                     return err.code, err.read().decode("utf-8", "replace")
             except (TimeoutError, urllib.error.URLError, ConnectionError):
-                if attempt == 2:
+                if attempt == 3:
                     raise
 
     def reset(self):
