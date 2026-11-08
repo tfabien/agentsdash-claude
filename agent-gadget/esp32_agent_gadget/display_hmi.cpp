@@ -65,6 +65,8 @@ static String fit(const char* s, int width, int charW) {   // cut to the box wid
   return r;
 }
 
+static String cut(const char* s, int width, int charW) { return String(s).substring(0, width / charW); }
+
 static int pictureFor(const char* role) {      // role -> sprite id (big); unknown roles get the generic look
   String r(role);
   r.toLowerCase();
@@ -105,10 +107,10 @@ static void drawTitle(const View& v) {
     uint16_t bg = i == v.session ? C_TAB_SEL : C_TAB;
     hmiFill(r.x, r.y, r.w, r.h, bg);
     hmiFill(r.x, r.y + r.h - 2, r.w, 2, sessionColor(*s));
-    hmiCircle(r.x + 7, r.y + 9, 4, stateColor(modelSessionDot(*s)));
+    hmiCircle(r.x + 6, r.y + 9, 4, stateColor(modelSessionDot(*s)));
     String count(1 + modelSubCount(*s));
-    hmiText(r.x + 13, r.y + 1, r.w - 15 - 8 * count.length(), 17, FONT_SMALL, C_WHITE, bg, 0,
-            fit(s->project, r.w - 15 - 8 * count.length(), FONT_SMALL_CW));
+    int nameW = r.w - 12 - 2 - 8 * count.length();
+    hmiText(r.x + 11, r.y + 1, nameW, 17, FONT_SMALL, C_WHITE, bg, 0, cut(s->project, nameW, FONT_SMALL_CW));
     hmiText(r.x + r.w - 1 - 8 * count.length(), r.y + 1, 8 * count.length(), 17, FONT_SMALL, C_GREY, bg, 2, count);
   }
   int x = layoutTabsMore(n).x;
@@ -146,7 +148,8 @@ static void drawLinks(const Session& s, int nSubs) {
   Rect lead = layoutLead();
   int busX = L_SUBS_X - 9;
   int leadY = lead.y + 4 + PIC_BIG_H / 2;
-  hmiFill(lead.x + lead.w + 2, leadY, busX - (lead.x + lead.w + 2), 2, col);
+  int leadX = lead.x + (lead.w + PIC_BIG_W) / 2 + 3;      // right of the lead sprite (inside the lead slot)
+  hmiFill(leadX, leadY, busX - leadX, 2, col);
   int top = leadY, bottom = leadY;
   for (int i = 1; i <= nSubs; i++) {
     Rect r = slotRect(i, nSubs);
@@ -201,7 +204,11 @@ static void drawTree(const View& v, bool full) {
   if (!s) return;
   for (int i = 0; i <= nSubs; i++) {
     uint32_t k = agentSignature(*s, *modelAgent(*s, i));
-    if (k != slotSig[i]) { drawSlot(*s, i, nSubs); slotSig[i] = k; }   // the frame sits outside the slot: untouched
+    if (k != slotSig[i]) {                          // the frame sits outside the slot: untouched
+      drawSlot(*s, i, nSubs);
+      slotSig[i] = k;
+      if (i == 0) drawLinks(*s, nSubs);             // the lead link starts inside the lead slot
+    }
   }
   if (frameSlot != v.agent) {
     if (frameSlot >= 0 && frameSlot <= nSubs) { drawFrame(frameSlot, nSubs, C_BLACK); drawLinks(*s, nSubs); }
@@ -228,8 +235,8 @@ static void drawStrip(const View& v, uint32_t now) {
   if (!a) return;
   AgentState st = modelEffectiveState(*s, *a);
   String name = v.agent == 0 ? String(s->project) + " (lead)" : String(a->role) + " " + a->id;
-  hmiText(r.x + 4, r.y + 2, 200, 26, FONT_BIG, C_WHITE, C_STRIP, 0, fit(name.c_str(), 200, FONT_BIG_CW));
-  hmiText(r.x + 206, r.y + 6, 172, 18, FONT_SMALL, stateColor(st), C_STRIP, 0, fit(stateLabel(st), 172, FONT_SMALL_CW));
+  hmiText(r.x + 4, r.y + 2, 264, 26, FONT_BIG, C_WHITE, C_STRIP, 0, fit(name.c_str(), 264, FONT_BIG_CW));
+  hmiText(r.x + 270, r.y + 6, 108, 18, FONT_SMALL, stateColor(st), C_STRIP, 0, fit(stateLabel(st), 108, FONT_SMALL_CW));
   hmiText(r.x + 4, r.y + 28, r.w - 8, 18, FONT_SMALL, C_WHITE, C_STRIP, 0, fit(a->cmd, r.w - 8, FONT_SMALL_CW));
   hmiText(r.x + 4, r.y + 45, r.w - 8, 18, FONT_SMALL, C_GREY, C_STRIP, 0, fit(a->detail, r.w - 8, FONT_SMALL_CW));
   drawStripAges(*a, now);
