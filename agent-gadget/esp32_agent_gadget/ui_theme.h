@@ -54,3 +54,18 @@
 #define C_SKY    15871           // "waiting on sub-agents"
 #define C_BLACK  0
 #define C_DARK   4226
+#define C_TAB    8456            // tab background
+#define C_TAB_SEL 21130          // selected tab background
+#define C_YELLOW 65504           // selection frame
+#define C_STRIP  2113            // command strip background
+// Session identity colors (tab underline and link lines); they avoid the state colors.
+#define C_SESSION_PALETTE {0xA81F, 0x07FF, 0xFB56, 0xFFE0, 0x5D1C}
+
+// --- Sprites baked into agent-gadget.tft (plan Task 7): ids 0..7 big 36x42, 8..15 small 24x28 ---
+#define PIC_BIG_W 36
+#define PIC_BIG_H 42
+#define PIC_SMALL_W 24
+#define PIC_SMALL_H 28
+#define PIC_SMALL_OFFSET 8
+#define FONT_SMALL_CW 8          // f16 character width (ASCII)
+#define FONT_BIG_CW 12           // f24 character width (ASCII)

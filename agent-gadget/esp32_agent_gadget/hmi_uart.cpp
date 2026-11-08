@@ -25,6 +25,10 @@ void hmiFill(int x, int y, int w, int h, uint16_t color) {
   hmiSend("fill " + String(x) + "," + String(y) + "," + String(w) + "," + String(h) + "," + String(color));
 }
 
+void hmiRect(int x, int y, int w, int h, uint16_t color) {
+  hmiSend("draw " + String(x) + "," + String(y) + "," + String(x + w - 1) + "," + String(y + h - 1) + "," + String(color));
+}
+
 void hmiPic(int x, int y, int id) {
   hmiSend("pic " + String(x) + "," + String(y) + "," + String(id));
 }
