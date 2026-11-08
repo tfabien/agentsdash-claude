@@ -41,3 +41,12 @@ Observed order for one lead turn with two sub-agents: `SessionStart`, `UserPromp
 - A lead with at least one sub-agent not done is "waiting on sub-agents" **even after a `Stop`**.
 - Prompts starting with `<task-notification>` are reports, not user prompts; `SubagentHandback` is not shown as a command.
 - `Notification` `idle_prompt` and `Stop` both mean "your turn" (for a lead with no running sub-agent).
+
+## Captured 2026-11-08 (interactive session, `--permission-mode default`)
+
+- `PermissionRequest`: `tool_name`, `tool_input`, `permission_suggestions` (as documented). Fires as soon as the prompt shows.
+- `Notification` `permission_prompt`: `{"message": "Claude needs your permission", "notification_type": "permission_prompt"}`,
+  about 6 s after `PermissionRequest`. `idle_prompt`: `"Claude is waiting for your input"`. No `agent_id` on either.
+- **Every lead turn ends with `Stop` then a bare `SubagentStop`** from an internal agent: new `agent_id` each time, `agent_type` `""`,
+  no `SubagentStart` and no tool hooks before it. The plugin drops a `SubagentStop` that had no `SubagentStart` and no `agent_type`.
+- With `defaultMode: auto` no permission prompt appears at all, so "needs you" only shows in modes that ask.

@@ -84,6 +84,19 @@ class BuildEventTest(unittest.TestCase):
         stop = self.build(payload(SUB, "SubagentStop", last_assistant_message="All done: README ok"))
         self.assertEqual((stop["state"], stop["cmd"]), ("done", "All done: README ok"))
 
+    def test_hidden_agent_stop_is_ignored(self):
+        # Observed 2026-11-08: every lead turn ends with a SubagentStop from an internal agent (agent_type "",
+        # no SubagentStart, no tool use). Sending it would show a ghost "done" sub-agent for 2 min.
+        hidden = {**SUB, "agent_id": "af03f2548ed9639d4", "agent_type": ""}
+        self.assertIsNone(self.build(payload(hidden, "SubagentStop", last_assistant_message="x")))
+
+    def test_untyped_agent_that_started_still_reports_done(self):
+        untyped = {**SUB, "agent_type": ""}
+        self.build(payload(untyped, "SubagentStart"))
+        stop = self.build(payload(untyped, "SubagentStop"))
+        self.assertEqual(stop["state"], "done")
+        self.assertEqual(os.listdir(self.state_dir), [])                    # start marker removed
+
     def test_permission_request_needs_you_and_posttooluse_clears(self):
         ask = self.build(payload(SUB, "PermissionRequest", tool_name="Bash", tool_input={"command": "rm -rf build"}))
         self.assertEqual(ask["state"], "needs_you")

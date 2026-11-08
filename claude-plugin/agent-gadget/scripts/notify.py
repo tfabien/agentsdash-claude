@@ -136,10 +136,16 @@ def build_event(payload, env=None, state_dir=None):
         if not clear_marker(marker):
             return None
         return event("working", "Resumed" if hook != "PermissionDenied" else "Denied, continuing")
+    started = marker[:-len(".needs")] + ".started"       # SubagentStart seen for this agent
     if hook == "SubagentStart":
+        set_marker(started)
         return event("working", "Started")
     if hook == "SubagentStop":
         clear_marker(marker)
+        # Internal agents of Claude Code end every lead turn with a bare SubagentStop (agent_type "",
+        # no SubagentStart): drop it, or the screen shows a ghost sub-agent.
+        if not clear_marker(started) and not payload.get("agent_type"):
+            return None
         return event("done", "Finished" if mask else (payload.get("last_assistant_message") or "Finished"))
     if hook == "Notification":
         kind = payload.get("notification_type", "")
