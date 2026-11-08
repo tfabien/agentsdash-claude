@@ -162,10 +162,15 @@ static void setWindow(QuotaWindow& w, long pct, long resetS, long rate10, long p
 
 void modelApplyUsage(const UsageV1& u, uint32_t now) {
   if (u.h5Pct != LONG_MIN || u.d7Pct != LONG_MIN) {
+    QuotaWindow h5 = modelQuotas.h5, d7 = modelQuotas.d7;
     setWindow(modelQuotas.h5, u.h5Pct, u.h5ResetS, u.h5Rate10, u.h5Proj, u.h5EmptyS);
     setWindow(modelQuotas.d7, u.d7Pct, u.d7ResetS, u.d7Rate10, u.d7Proj, u.d7EmptyS);
     modelQuotas.receivedAt = now;
-    modelQuotas.rev = ++modelRev;
+    // rev moves only when what the screen shows from the report changes (resets count down on their own)
+    bool same = h5.known == modelQuotas.h5.known && h5.pct == modelQuotas.h5.pct && h5.proj == modelQuotas.h5.proj &&
+                h5.rate10 == modelQuotas.h5.rate10 && d7.known == modelQuotas.d7.known && d7.pct == modelQuotas.d7.pct &&
+                d7.proj == modelQuotas.d7.proj && d7.rate10 == modelQuotas.d7.rate10;
+    if (!same) modelQuotas.rev = ++modelRev;
   }
   Session* s = u.session[0] ? findSession(u.session) : nullptr;   // unknown session: no new tab for a status line
   if (s && u.ctxPct != LONG_MIN) {

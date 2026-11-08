@@ -267,7 +267,7 @@ static int drawQuota(int x, int y, uint16_t bg, const char* label, const QuotaWi
   String t = String(w.pct) + "%";
   if (rate && w.proj >= 0) t += " +" + String((w.rate10 + 5) / 10) + "/h";
   uint32_t gone = (now - modelQuotas.receivedAt) / 1000;
-  if (modelPaceLevel(w) == PACE_OVER && w.emptyS >= 0)
+  if (modelPaceLevel(w) == PACE_OVER && w.emptyS > 0 && w.pct < 100)
     t += " empty " + fmtDuration(w.emptyS > (int32_t)gone ? w.emptyS - gone : 0);
   else
     t += " " + fmtDuration(modelQuotaResetLeft(w.resetS, now));
@@ -417,15 +417,19 @@ static void renderRegions(const View& v, uint32_t now) {
 
   const Session* s = selectedSession(v);
   if (!s) {
-    static uint32_t emptyQuotaRev = 0;
-    if (!emptyShown || emptyQuotaRev != modelQuotas.rev) { drawEmpty(); stripSig = treeSig = 0; emptyQuotaRev = modelQuotas.rev; }
+    if (!emptyShown) { drawEmpty(); stripSig = treeSig = 0; lastAgeRefresh = now; }
+    else if (now - lastAgeRefresh > AGE_REFRESH_MS && !deviceInfo.apMode && (modelQuotas.h5.known || modelQuotas.d7.known)) {
+      hmiTarget(HMI_STRIP, false);
+      drawQuotaLine(C_BLACK, now);
+      lastAgeRefresh = now;
+    }
     return;
   }
   if (emptyShown) { emptyShown = false; stripSig = treeSig = 0; }
 
   const Agent* a = modelAgent(*s, v.agent);
   uint32_t k = mix(mixStr(mix(2166136261u, v.agent), s->id), a ? agentSignature(*s, *a) : 0);
-  k = mix(mix(k, modelQuotas.rev), s->usageRev);
+  k = mix(k, s->usageRev);
   if (k != stripSig) { drawStrip(v, now); stripSig = k; lastAgeRefresh = now; }
   else if (a && now - lastAgeRefresh > AGE_REFRESH_MS) { drawStripAges(*a, now); lastAgeRefresh = now; }
 
