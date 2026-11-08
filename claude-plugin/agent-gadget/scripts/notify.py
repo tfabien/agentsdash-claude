@@ -98,6 +98,13 @@ def main():
         payload = json.load(sys.stdin)
     except Exception:
         return
+    dump_path = os.environ.get("CLAUDE_GADGET_DUMP")        # debugging: keep every raw hook payload
+    if dump_path:
+        try:
+            with open(dump_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload) + "\n")
+        except Exception:
+            pass
     ev = build_event(payload)
     if not ev:
         return
