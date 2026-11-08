@@ -206,6 +206,86 @@ class LegacyProtocolTest(unittest.TestCase):
         self.assertEqual(notify.protocol({"CLAUDE_GADGET_PROTOCOL": "junk"}), notify.DEFAULT_PROTOCOL)
 
 
+def usage_line(mid, inp=0, cc=0, cr=0, out=0):
+    return json.dumps({"type": "assistant", "message": {"id": mid, "model": "claude-opus-5-5", "usage": {
+        "input_tokens": inp, "cache_creation_input_tokens": cc, "cache_read_input_tokens": cr, "output_tokens": out}}}) + "\n"
+
+
+class UsageTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.state_dir = os.path.join(self.root, "state")
+        self.lead_path = os.path.join(self.root, "abcd1234-0000.jsonl")
+        self.sub_path = os.path.join(self.root, "abcd1234-0000", "subagents", "agent-aa0bc7f345def841f.jsonl")
+        os.makedirs(os.path.dirname(self.sub_path))
+
+    def write(self, path, text):
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(text)
+
+    def lead_payload(self, **kw):
+        return {**LEAD, "hook_event_name": "Stop", "transcript_path": self.lead_path, **kw}
+
+    def sub_payload(self, **kw):
+        return {**SUB, "hook_event_name": "PreToolUse", "transcript_path": self.lead_path, **kw}
+
+    def add(self, payload, mask=False):
+        ev = notify.build_event(payload, {}, self.state_dir)
+        return notify.add_usage(ev, payload, self.state_dir, mask)
+
+    def test_lead_event_has_tokens_and_context(self):
+        self.write(self.lead_path, usage_line("m1", 2, 6051, 145121, 460))
+        ev = self.add(self.lead_payload())
+        self.assertEqual((ev["tok"], ev["stok"], ev["ctx_k"], ev["ctx_pct"]), (6513, 6513, 151, 76))
+
+    def test_subagent_event_uses_its_own_transcript(self):
+        self.write(self.lead_path, usage_line("m1", 2, 6051, 145121, 460))
+        self.write(self.sub_path, usage_line("s1", 100, 0, 0, 20))
+        ev = self.add(self.sub_payload())
+        self.assertEqual(ev["tok"], 120)
+        self.assertNotIn("ctx_pct", ev)
+        self.assertNotIn("stok", ev)
+
+    def test_session_total_includes_subagents(self):
+        self.write(self.lead_path, usage_line("m1", 2, 6051, 145121, 460))
+        self.write(self.sub_path, usage_line("s1", 100, 0, 0, 20))
+        self.add(self.sub_payload())
+        ev = self.add(self.lead_payload())
+        self.assertEqual(ev["stok"], 6513 + 120)
+
+    def test_missing_transcript_sends_event_without_usage(self):
+        ev = self.add(self.lead_payload())
+        self.assertNotIn("tok", ev)
+        self.assertEqual(ev["state"], "your_turn")
+
+    def test_subagentstop_prefers_agent_transcript_path(self):
+        other = os.path.join(self.root, "elsewhere.jsonl")
+        self.write(other, usage_line("o1", 7, 0, 0, 3))
+        payload = {**SUB, "hook_event_name": "SubagentStop", "transcript_path": self.lead_path,
+                   "agent_transcript_path": other, "last_assistant_message": "ok"}
+        ev = notify.build_event(payload, {}, self.state_dir) or notify.build_event(
+            {**payload, "hook_event_name": "PreToolUse"}, {}, self.state_dir)
+        self.assertEqual(notify.add_usage(ev, payload, self.state_dir)["tok"], 10)
+
+    def test_mask_keeps_numbers(self):
+        self.write(self.lead_path, json.dumps({"type": "custom-title", "customTitle": "Secret"}) + "\n")
+        self.write(self.lead_path, usage_line("m1", 1, 0, 0, 1))
+        ev = self.add(self.lead_payload(), mask=True)
+        self.assertEqual(ev["tok"], 2)
+        self.assertNotIn("title", ev)
+
+    def test_lead_event_has_ascii_title(self):
+        self.write(self.lead_path, json.dumps({"type": "custom-title", "customTitle": "Packs d'icônes pour agents"}) + "\n")
+        self.assertEqual(self.add(self.lead_payload())["title"], "Packs d'icones pour agents")
+        self.write(self.lead_path, json.dumps({"type": "ai-title", "aiTitle": "x" * 40}) + "\n")
+        self.assertEqual(self.add(self.lead_payload())["title"], "x" * 30)
+
+    def test_bad_payload_never_raises(self):
+        ev = {"agent": "lead"}
+        self.assertEqual(notify.add_usage(ev, {"transcript_path": 5}, self.state_dir), ev)
+
+
 class ProcessTest(unittest.TestCase):
     def test_unreachable_host_exits_0_fast_silently(self):
         data = payload(LEAD, "Stop")

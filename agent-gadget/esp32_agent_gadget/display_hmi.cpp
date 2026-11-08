@@ -85,6 +85,16 @@ static int pictureFor(const char* role) {      // role -> sprite id (big); unkno
 static const Session* selectedSession(const View& v) { return v.session >= 0 ? modelSession(v.session) : nullptr; }
 
 // ---------- title bar ----------
+static int ctxBand(uint8_t ctx) { return ctx == CTX_UNKNOWN ? 0 : ctx < CTX_WARN ? 1 : ctx < CTX_HOT ? 2 : 3; }
+
+static uint16_t ctxFillColor(uint8_t ctx) {
+  switch (ctxBand(ctx)) {
+    case 1:  return C_FILL_OK;
+    case 2:  return C_FILL_WARN;
+    default: return C_FILL_HOT;
+  }
+}
+
 static uint32_t titleSignature(const View& v) {
   uint32_t h = mix(2166136261u, modelSessionCount());
   h = mix(h, v.session);
@@ -93,8 +103,12 @@ static uint32_t titleSignature(const View& v) {
   for (int i = 0; i < modelSessionCount() && i < L_TAB_MAX; i++) {
     const Session* s = modelSession(i);
     h = mixStr(h, s->id);
+    h = mixStr(h, s->title);
     h = mix(h, modelSessionDot(*s));
     h = mix(h, 1 + modelSubCount(*s));
+    uint8_t ctx = modelSessionCtx(*s, millis());
+    h = mix(h, layoutTabFill(i, modelSessionCount(), ctx).w / 2);   // redraw when the fill moves by 2 px
+    h = mix(h, ctxBand(ctx));
   }
   return h;
 }
@@ -110,24 +124,24 @@ static void drawTitle(const View& v) {
     Rect r = layoutTab(i, n);
     uint16_t bg = i == v.session ? C_TAB_SEL : C_TAB;
     hmiFill(r.x, r.y, r.w, r.h, bg);
+    uint8_t ctx = modelSessionCtx(*s, millis());
+    Rect f = layoutTabFill(i, n, ctx);
+    if (f.w > 0) hmiFill(f.x, f.y, f.w, f.h - 2, ctxFillColor(ctx));         // context fill, under the text
     hmiFill(r.x, r.y + r.h - 2, r.w, 2, sessionColor(*s));
     hmiCircle(r.x + 6, r.y + 9, 4, stateColor(modelSessionDot(*s)));
     String count(1 + modelSubCount(*s));
     int nameW = r.w - 12 - 2 - 8 * count.length();
-    hmiText(r.x + 11, r.y + 1, nameW, 17, FONT_SMALL, C_WHITE, bg, 0, cut(s->project, nameW, FONT_SMALL_CW));
-    hmiText(r.x + r.w - 1 - 8 * count.length(), r.y + 1, 8 * count.length(), 17, FONT_SMALL, C_GREY, bg, 2, count);
+    const char* name = s->title[0] ? s->title : s->project;
+    hmiTextClear(r.x + 11, r.y + 1, nameW, 17, FONT_SMALL, C_WHITE, 0, fit(name, nameW, FONT_SMALL_CW));
+    hmiTextClear(r.x + r.w - 1 - 8 * count.length(), r.y + 1, 8 * count.length(), 17, FONT_SMALL, C_GREY, 2, count);
   }
-  int x = layoutTabsMore(n).x;
-  if (modelMoreSessions > 0) {
-    hmiText(x, 1, L_MORE_W, 17, FONT_SMALL, C_WHITE, C_DARK, 0, "+" + String(modelMoreSessions));
-    x += L_MORE_W;
-  }
+  Rect z = layoutTabsMore(n);                                  // right zone: "+N" then "N!"
+  String more = modelMoreSessions > 0 ? "+" + String(modelMoreSessions) : String("");
   int asks = modelCount(ST_NEEDS_YOU);
-  if (asks > 0) {
-    String full = String(asks) + (asks == 1 ? " asks you" : " ask you"), shortTxt = String(asks) + " ask";
-    int w = SCR_W - x - 2;
-    hmiText(x, 1, w, 17, FONT_SMALL, C_ORANGE, C_DARK, 2, (int)full.length() * FONT_SMALL_CW <= w ? full : shortTxt);
-  }
+  String ask = asks > 0 ? String(asks) + "!" : String("");
+  int askW = ask.length() * FONT_SMALL_CW;
+  if (more.length()) hmiText(z.x, 1, z.w - askW, 17, FONT_SMALL, C_WHITE, C_DARK, 0, more);
+  if (asks > 0) hmiText(z.x + z.w - askW, 1, askW, 17, FONT_SMALL, C_ORANGE, C_DARK, 2, ask);
 }
 
 // ---------- tree ----------
@@ -226,14 +240,70 @@ static void drawTree(const View& v, bool full) {
 }
 
 // ---------- command strip ----------
+// Quota line: "5h [####--|-] 48% +18/h 1h20   7d [######-|--] 61% 2d03h", colored by the pace at reset.
+static uint16_t paceColor(PaceLevel p) {
+  switch (p) {
+    case PACE_OK:    return C_GREEN;
+    case PACE_TIGHT: return C_ORANGE;
+    case PACE_OVER:  return C_RED;
+    default:         return C_GREY;
+  }
+}
+
+static String fmtDuration(uint32_t s) {                     // "45m", "1h20", "2d03h"
+  if (s < 3600) return String(s / 60) + "m";
+  if (s < 86400) return String(s / 3600) + "h" + (s % 3600 / 60 < 10 ? "0" : "") + String(s % 3600 / 60);
+  return String(s / 86400) + "d" + (s % 86400 / 3600 < 10 ? "0" : "") + String(s % 86400 / 3600) + "h";
+}
+
+static int drawQuota(int x, int y, uint16_t bg, const char* label, const QuotaWindow& w, bool rate, bool stale, uint32_t now) {
+  uint16_t col = stale ? C_GREY : paceColor(modelPaceLevel(w));
+  hmiText(x, y, 20, 17, FONT_SMALL, C_WHITE, bg, 0, label);
+  x += 22;
+  hmiRect(x, y + 3, L_QUOTA_BAR_W, 11, C_GREY);
+  int filled = (L_QUOTA_BAR_W - 2) * (w.pct > 100 ? 100 : w.pct) / 100;
+  if (filled > 0) hmiFill(x + 1, y + 4, filled, 9, col);
+  if (w.proj >= 0) {                                        // tick: projected % at reset
+    int tx = x + 1 + (L_QUOTA_BAR_W - 3) * (w.proj > 100 ? 100 : w.proj) / 100;
+    hmiFill(tx, y + 1, 1, 15, C_WHITE);
+  }
+  x += L_QUOTA_BAR_W + 4;
+  String t = String(w.pct) + "%";
+  if (rate && w.proj >= 0) t += " +" + String((w.rate10 + 5) / 10) + "/h";
+  uint32_t gone = (now - modelQuotas.receivedAt) / 1000;
+  if (modelPaceLevel(w) == PACE_OVER && w.emptyS > 0 && w.pct < 100)
+    t += " empty " + fmtDuration(w.emptyS > (int32_t)gone ? w.emptyS - gone : 0);
+  else
+    t += " " + fmtDuration(modelQuotaResetLeft(w.resetS, now));
+  int tw = t.length() * FONT_SMALL_CW;
+  hmiText(x, y, tw, 17, FONT_SMALL, col, bg, 0, t);
+  return x + tw;
+}
+
+static void drawQuotaLine(uint16_t bg, uint32_t now) {
+  Rect q = layoutQuotaLine();
+  hmiFill(q.x, q.y, q.w, q.h, bg);
+  if (!modelQuotas.h5.known && !modelQuotas.d7.known) {
+    hmiText(q.x + 4, q.y, q.w - 8, 17, FONT_SMALL, C_GREY, bg, 0, "quotas: no status line data");
+    return;
+  }
+  bool stale = now - modelQuotas.receivedAt > 15UL * 60 * 1000;
+  int x = q.x + 4;
+  if (modelQuotas.h5.known) x = drawQuota(x, q.y, bg, "5h", modelQuotas.h5, true, stale, now) + 16;
+  if (modelQuotas.d7.known) drawQuota(x, q.y, bg, "7d", modelQuotas.d7, false, stale, now);
+}
+
+static bool detailUseful(const Agent& a) { return a.detail[0] && !strstr(a.cmd, a.detail); }
+
 static void drawStripAges(const Agent& a, uint32_t now) {
   hmiTarget(HMI_STRIP, false);
   Rect r = layoutStrip();
   hmiText(r.x + 380, r.y + 2, 96, 26, FONT_BIG, C_GREY, C_STRIP, 2, modelFormatAge((now - a.since) / 1000));
-  if (a.prevCmd[0]) {
+  if (!detailUseful(a) && a.prevCmd[0]) {                  // line 3 shows the previous command when the detail adds nothing
     String prev = String("before: ") + a.prevCmd + "  (" + modelFormatAge((now - a.prevAt) / 1000) + " ago)";
-    hmiText(r.x + 4, r.y + 62, r.w - 8, 18, FONT_SMALL, C_GREY, C_STRIP, 0, fit(prev.c_str(), r.w - 8, FONT_SMALL_CW));
+    hmiText(r.x + 4, r.y + 45, r.w - 8, 18, FONT_SMALL, C_GREY, C_STRIP, 0, fit(prev.c_str(), r.w - 8, FONT_SMALL_CW));
   }
+  drawQuotaLine(C_STRIP, now);
 }
 
 static void drawStrip(const View& v, uint32_t now) {
@@ -247,8 +317,13 @@ static void drawStrip(const View& v, uint32_t now) {
   String name = v.agent == 0 ? String(s->project) + " (lead)" : String(a->role) + " " + a->id;
   hmiText(r.x + 4, r.y + 2, 264, 26, FONT_BIG, C_WHITE, C_STRIP, 0, fit(name.c_str(), 264, FONT_BIG_CW));
   hmiText(r.x + 270, r.y + 6, 108, 18, FONT_SMALL, stateColor(st), C_STRIP, 0, fit(stateLabel(st), 108, FONT_SMALL_CW));
-  hmiText(r.x + 4, r.y + 28, r.w - 8, 18, FONT_SMALL, C_WHITE, C_STRIP, 0, fit(a->cmd, r.w - 8, FONT_SMALL_CW));
-  hmiText(r.x + 4, r.y + 45, r.w - 8, 18, FONT_SMALL, C_GREY, C_STRIP, 0, fit(a->detail, r.w - 8, FONT_SMALL_CW));
+  Rect tk = layoutStripTokens();
+  int cmdW = tk.x - 4 - (r.x + 4);
+  hmiText(r.x + 4, r.y + 28, cmdW, 18, FONT_SMALL, C_WHITE, C_STRIP, 0, fit(a->cmd, cmdW, FONT_SMALL_CW));
+  uint32_t tok = v.agent == 0 ? s->stok : a->tok;             // lead: whole session; sub-agent: its own
+  if (tok) hmiText(tk.x, tk.y, tk.w, tk.h, FONT_SMALL, C_GREY, C_STRIP, 2, modelFormatTokens(tok));
+  if (detailUseful(*a))
+    hmiText(r.x + 4, r.y + 45, r.w - 8, 18, FONT_SMALL, C_GREY, C_STRIP, 0, fit(a->detail, r.w - 8, FONT_SMALL_CW));
   drawStripAges(*a, now);
 }
 
@@ -267,6 +342,7 @@ static void drawEmpty() {
     hmiText(10, 118, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, "POST http://" + deviceInfo.ip + "/event");
     hmiText(10, 144, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, "or " + deviceInfo.hostname);
     hmiText(10, 170, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, "Wi-Fi setup: /config");
+    if (modelQuotas.h5.known || modelQuotas.d7.known) drawQuotaLine(C_BLACK, millis());
   }
   emptyShown = true;
 }
@@ -380,13 +456,19 @@ static void renderRegions(const View& v, uint32_t now) {
 
   const Session* s = selectedSession(v);
   if (!s) {
-    if (!emptyShown) { drawEmpty(); stripSig = treeSig = 0; }
+    if (!emptyShown) { drawEmpty(); stripSig = treeSig = 0; lastAgeRefresh = now; }
+    else if (now - lastAgeRefresh > AGE_REFRESH_MS && !deviceInfo.apMode && (modelQuotas.h5.known || modelQuotas.d7.known)) {
+      hmiTarget(HMI_STRIP, false);
+      drawQuotaLine(C_BLACK, now);
+      lastAgeRefresh = now;
+    }
     return;
   }
   if (emptyShown) { emptyShown = false; stripSig = treeSig = 0; }
 
   const Agent* a = modelAgent(*s, v.agent);
   uint32_t k = mix(mixStr(mix(2166136261u, v.agent), s->id), a ? agentSignature(*s, *a) : 0);
+  k = mix(k, s->usageRev);
   if (k != stripSig) { drawStrip(v, now); stripSig = k; lastAgeRefresh = now; }
   else if (a && now - lastAgeRefresh > AGE_REFRESH_MS) { drawStripAges(*a, now); lastAgeRefresh = now; }
 

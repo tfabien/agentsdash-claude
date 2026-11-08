@@ -25,7 +25,17 @@ never touches the network.
 Every event carries the full state of its agent, so the next event repairs a gadget that rebooted.
 A body without `"v"` is the old `{"agent","state","task"}` (a one-agent session). Errors: 400 with a text body.
 
-`GET /state`: `{"sessions":[{"id","project","dot","count","more","agents":[{"id","parent","role","state","cmd","detail","prev","prev_age","age"}]}],"more_sessions":N,"view":{"session","agent","mode":"auto|manual"},"agents":[...flat v0.1 list...]}`.
+Optional usage fields on v2 events (plugin, read from the transcripts): `"tok"` (tokens of this agent) and, on lead
+events, `"stok"` (session total), `"ctx_pct"`, `"ctx_k"` (context estimate) and `"title"` (session title, <= 30 chars).
+
+`POST /usage` (status line script `claude-plugin/agent-gadget/scripts/statusline.py`), every field optional except `v`:
+`{"v":1,"session","ctx_pct","ctx_k","ctx_max_k","h5_pct","h5_reset_s","h5_rate10","h5_proj","h5_empty_s","d7_pct","d7_reset_s","d7_rate10","d7_proj","d7_empty_s"}`.
+Context of a known session (wins over the event estimate for 120 s) and the account-wide plan quotas with their pace
+(`*_rate10` = %/h x 10, `*_proj` = projected % at reset, `*_empty_s` = seconds to 100 % or -1). An unknown session
+creates nothing. 400 without `v`.
+
+`GET /state`: `{"sessions":[{"id","project","title","ctx_pct","ctx_k","ctx_src","tok","dot","count","more","agents":[{"tok","id","parent","role","state","cmd","detail","prev","prev_age","age"}]}],"more_sessions":N,"view":{"session","agent","mode":"auto|manual"},"usage":{"age_s","h5_*","d7_*"},"agents":[...flat v0.1 list...]}`
+(`usage` absent before the first status line report; `ctx_pct` null when unknown).
 States: `needs_you`, `error`, `your_turn`, `working`, `waiting_subs` (derived, leads only), `done`.
 
 Other endpoints: `POST /select {"session","agent","hold_ms"?}` (404 if unknown), `POST /reset`,
@@ -51,8 +61,8 @@ core never says what to redraw.
 | File | Role |
 |---|---|
 | `ui_theme.h` | Pins, baud rates, layout constants, fonts, colors, sprite sizes. First place to tweak the look. |
-| `layout.h/.cpp` | Pure geometry of layout D: title bar and tabs, lead slot, 1 to 12 sub-agent slots (big, or small on two rows of six), command strip, `hitTest()`. |
-| `display_hmi.cpp` | The UI: tabs (state dot, name, count, "+N", "N asks you"), tree (sprites by role, state markers, session-colored links, yellow selection frame), command strip (name, state, elapsed, command, detail, previous command). Implements `display.h`. |
+| `layout.h/.cpp` | Pure geometry of layout D: title bar and tabs (shared width, fill), token zone, quota line, lead slot, 1 to 12 sub-agent slots (big, or small on two rows of six), command strip, `hitTest()`. |
+| `display_hmi.cpp` | The UI: tabs sharing the width (state dot, session title, count, context fill colored by size; right zone "+N" and "N!"), quota line (bars, projection tick, color from the pace at reset), tree (sprites by role, state markers, session-colored links, yellow selection frame), command strip (name, state, elapsed, command, detail, previous command). Implements `display.h`. |
 | `touch.h/.cpp` | Touch frames `67 xh xl yh yl st FF FF FF` -> `uiTap(x, y)` -> `hitTest` -> `modelSelect` (30 s hold). |
 | `hmi_uart.h/.cpp` | Screen commands (`cls`, `fill`, `cirs`, `draw`, `pic`, `xstr`), link speed setup (9600 at power-up -> 115200), and the non-blocking draw queue: title bar > command strip > tree. |
 | `tft_upload.h/.cpp` | Screen firmware download over the UART (`whmi-wri`, 4096-byte packets acked by `0x05`), used by `/tft`. |

@@ -45,6 +45,9 @@ class Gadget:
     def event(self, **fields):
         return self.request("POST", "/event", fields)[0]
 
+    def usage(self, **fields):
+        return self.request("POST", "/usage", fields)[0]
+
     def state(self):
         status, text = self.request("GET", "/state")
         if status != 200:

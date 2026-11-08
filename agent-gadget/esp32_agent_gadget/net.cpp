@@ -1,4 +1,5 @@
 #include "net.h"
+#include <limits.h>
 #include "model.h"
 #include "display.h"
 #include "layout.h"
@@ -90,6 +91,7 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
   if (jsonLong(body, "v", version) && version == 2) {
     EventV2 e;
     memset(&e, 0, sizeof e);
+    e.tok = e.stok = e.ctxPct = e.ctxK = -1;
     char st[16];
     if (!jsonGet(body, "session", e.session, ID_LEN) || !jsonGet(body, "agent", e.agent, ID_LEN) ||
         !jsonGet(body, "state", st, sizeof st) || !modelParseState(st, e.state)) {
@@ -101,6 +103,11 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
     jsonGet(body, "evt", e.evt, sizeof e.evt);
     jsonGet(body, "cmd", e.cmd, CMD_LEN);
     jsonGet(body, "detail", e.detail, DETAIL_LEN);
+    jsonGet(body, "title", e.title, TITLE_LEN);
+    jsonLong(body, "tok", e.tok);
+    jsonLong(body, "stok", e.stok);
+    jsonLong(body, "ctx_pct", e.ctxPct);
+    jsonLong(body, "ctx_k", e.ctxK);
     modelApplyV2(e, millis());
     server.send(200, "text/plain", "ok");
     return;
@@ -112,6 +119,29 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
   }
   jsonGet(body, "task", task, sizeof task);
   if (!modelApplyV1(agent, st, task, millis())) { server.send(400, "text/plain", "invalid state"); return; }
+  server.send(200, "text/plain", "ok");
+}
+
+static long optLong(const String& body, const char* key) {
+  long v;
+  return jsonLong(body, key, v) ? v : LONG_MIN;
+}
+
+static void handleUsage() {            // POST /usage: context and plan quotas from the status line script
+  cors();
+  if (ignoredByIsolation()) { server.send(200, "text/plain", "ignored"); return; }
+  String body = server.arg("plain");
+  long version = 0;
+  if (!jsonLong(body, "v", version)) { server.send(400, "text/plain", "v is required"); return; }
+  UsageV1 u;
+  memset(&u, 0, sizeof u);
+  jsonGet(body, "session", u.session, ID_LEN);
+  u.ctxPct = optLong(body, "ctx_pct");    u.ctxK = optLong(body, "ctx_k");          u.ctxMaxK = optLong(body, "ctx_max_k");
+  u.h5Pct = optLong(body, "h5_pct");      u.h5ResetS = optLong(body, "h5_reset_s"); u.h5Rate10 = optLong(body, "h5_rate10");
+  u.h5Proj = optLong(body, "h5_proj");    u.h5EmptyS = optLong(body, "h5_empty_s");
+  u.d7Pct = optLong(body, "d7_pct");      u.d7ResetS = optLong(body, "d7_reset_s"); u.d7Rate10 = optLong(body, "d7_rate10");
+  u.d7Proj = optLong(body, "d7_proj");    u.d7EmptyS = optLong(body, "d7_empty_s");
+  modelApplyUsage(u, millis());
   server.send(200, "text/plain", "ok");
 }
 
@@ -160,13 +190,15 @@ static String rectJson(const Rect& r) {
 static int intArg(const char* name, int def) { return server.hasArg(name) ? server.arg(name).toInt() : def; }
 
 static void handleDebugLayout() {      // GET /debug/layout?subs=N&tabs=T: slot rectangles of layout D
-  int subs = intArg("subs", 0), tabs = intArg("tabs", 5);
+  int subs = intArg("subs", 0), tabs = intArg("tabs", 5), ctx = intArg("ctx", 255);
   Rect slots[12];
   int rows = layoutSubs(subs, slots);
   int nSubs = subs < 0 ? 0 : subs > 12 ? 12 : subs, nTabs = tabs < 0 ? 0 : tabs > 5 ? 5 : tabs;
   String j = "{\"title\":" + rectJson(layoutTitle()) + ",\"tree\":" + rectJson(layoutTree()) +
              ",\"lead\":" + rectJson(layoutLead()) + ",\"strip\":" + rectJson(layoutStrip()) +
-             ",\"tabs_more\":" + rectJson(layoutTabsMore(tabs)) + ",\"rows\":" + rows + ",\"tabs\":[";
+             ",\"tabs_more\":" + rectJson(layoutTabsMore(tabs)) + ",\"tab_fill\":" + rectJson(layoutTabFill(0, tabs, ctx)) +
+             ",\"strip_tokens\":" + rectJson(layoutStripTokens()) + ",\"quota_line\":" + rectJson(layoutQuotaLine()) +
+             ",\"rows\":" + rows + ",\"tabs\":[";
   for (int i = 0; i < nTabs; i++) j += (i ? "," : "") + rectJson(layoutTab(i, tabs));
   j += "],\"subs\":[";
   for (int i = 0; i < nSubs; i++) j += (i ? "," : "") + rectJson(slots[i]);
@@ -416,6 +448,8 @@ void netBegin() {
   server.collectHeaders(headerKeys, 1);
   server.on("/event", HTTP_POST, handleEvent);
   server.on("/event", HTTP_OPTIONS, handleOptions);
+  server.on("/usage", HTTP_POST, handleUsage);
+  server.on("/usage", HTTP_OPTIONS, handleOptions);
   server.on("/state", HTTP_GET, handleState);
   server.on("/select", HTTP_POST, handleSelect);
   server.on("/reset", HTTP_POST, handleReset);

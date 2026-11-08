@@ -57,7 +57,35 @@ class LayoutTest(unittest.TestCase):
         self.assertEqual(len(self.layout(0, tabs=3)["tabs"]), 3)
         lay = self.layout(0, tabs=3)
         self.assertGreater(lay["tabs_more"]["w"], 0)
-        self.assertGreaterEqual(lay["tabs_more"]["x"], lay["tabs"][2]["x"] + lay["tabs"][2]["w"])
+        self.assertGreaterEqual(lay["tabs_more"]["x"], lay["tabs"][-1]["x"] + lay["tabs"][-1]["w"])
+
+    def test_tab_widths_shared(self):
+        for tabs, width in ((1, 434), (2, 215), (3, 142), (4, 105), (5, 83)):
+            lay = self.layout(0, tabs=tabs)
+            self.assertEqual({t["w"] for t in lay["tabs"]}, {width}, tabs)
+            self.assertLessEqual(lay["tabs"][-1]["x"] + lay["tabs"][-1]["w"], 438)
+            for a, b in itertools.combinations(lay["tabs"], 2):
+                self.assertFalse(overlap(a, b))
+
+    def test_right_zone_fixed(self):
+        for tabs in (1, 5, 7):
+            self.assertEqual(self.layout(0, tabs=tabs)["tabs_more"], {"x": 440, "y": 0, "w": 40, "h": 20})
+
+    def test_tab_fill_widths(self):
+        def fill(ctx):
+            return self.g.debug(f"/debug/layout?subs=0&tabs=5&ctx={ctx}")["tab_fill"]["w"]
+        self.assertEqual([fill(c) for c in (0, 50, 100, 150, 255)], [0, 41, 83, 83, 0])
+
+    def test_strip_token_zone_right_of_command(self):
+        tok = self.layout(0)["strip_tokens"]
+        self.assertLessEqual(tok["x"] + tok["w"], SCREEN_W)
+        self.assertGreaterEqual(tok["x"], 4 + 8 * 40)
+
+    def test_quota_line_inside_strip(self):
+        lay = self.layout(0)
+        q = lay["quota_line"]
+        self.assertGreaterEqual(q["y"], lay["strip"]["y"])
+        self.assertLessEqual(q["y"] + q["h"], SCREEN_H)
 
     def test_strip_height_about_80(self):
         strip = self.layout(4)["strip"]

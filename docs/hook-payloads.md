@@ -10,7 +10,10 @@ before relying on their exact text.
 `session_id` (UUID), `transcript_path`, `cwd`, `scratchpad_dir`, `hook_event_name`; most also `prompt_id`,
 `permission_mode`, `effort {level}`. **`agent_id` and `agent_type` are present only for hooks that fire
 inside a sub-agent** (observed: `agent_id` = 17 hex chars such as `aa0bc7f345def841f`, `agent_type` =
-`general-purpose`). The **lead has neither field**. Nothing in any payload names a parent: the parent of a
+`general-purpose`). The **lead has neither field**.
+Inside a sub-agent, `transcript_path` is still the **lead's** transcript; the sub-agent's own transcript is
+`<transcript_path without .jsonl>/subagents/agent-<agent_id>.jsonl` (same value as `agent_transcript_path` on `SubagentStop`,
+checked on a dump 2026-11-08). Nothing in any payload names a parent: the parent of a
 sub-agent is the session lead (same `session_id`).
 
 ## Per hook

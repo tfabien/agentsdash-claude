@@ -10,13 +10,27 @@ Rect layoutStrip() { return {0, L_STRIP_Y, SCR_W, SCR_H - L_STRIP_Y}; }
 Rect layoutLead()  { return {L_LEAD_X, L_LEAD_Y, L_LEAD_W, L_LEAD_H}; }
 
 Rect layoutTab(int index, int count) {
-  (void)count;                           // fixed positions: a tab does not move when others appear
-  return {(int16_t)(L_TAB_X0 + L_TAB_PITCH * index), 0, L_TAB_W, L_TITLE_H};
+  int k = imin(count, L_TAB_MAX);
+  if (k < 1) k = 1;
+  int w = (L_TABS_W - L_TAB_GAP * (k - 1)) / k;
+  return {(int16_t)(L_TABS_X0 + index * (w + L_TAB_GAP)), 0, (int16_t)w, L_TITLE_H};
 }
 
 Rect layoutTabsMore(int count) {
-  return {(int16_t)(L_TAB_X0 + L_TAB_PITCH * imin(count, L_TAB_MAX)), 0, L_MORE_W, L_TITLE_H};
+  (void)count;
+  return {L_RIGHT_X, 0, L_RIGHT_W, L_TITLE_H};
 }
+
+Rect layoutTabFill(int index, int count, int pct) {
+  Rect r = layoutTab(index, count);
+  if (pct < 0 || pct == 255) pct = 0;
+  if (pct > 100) pct = 100;
+  r.w = (int16_t)(r.w * pct / 100);
+  return r;
+}
+
+Rect layoutStripTokens() { return {(int16_t)(SCR_W - 4 - L_TOK_W), (int16_t)(L_STRIP_Y + 28), L_TOK_W, 17}; }
+Rect layoutQuotaLine()   { return {0, (int16_t)(L_STRIP_Y + 62), SCR_W, 18}; }
 
 int layoutSubs(int n, Rect out[12]) {
   n = imin(n, L_SUBS_MAX);

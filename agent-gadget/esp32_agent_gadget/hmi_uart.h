@@ -30,3 +30,5 @@ void hmiRect(int x, int y, int w, int h, uint16_t color);   // 1 px outline (dra
 void hmiPic(int x, int y, int id);                     // picture `id` of the screen project (pic), top-left at x,y
 // Text (xstr): font from the blank.tft project (0 = f24, 1 = f16), ASCII only; xcen 0 left, 1 center, 2 right.
 void hmiText(int x, int y, int w, int h, int font, uint16_t fg, uint16_t bg, int xcen, const String& s);
+// Same with no background (xstr sta=3): text drawn over what is already there (tab context fill).
+void hmiTextClear(int x, int y, int w, int h, int font, uint16_t fg, int xcen, const String& s);

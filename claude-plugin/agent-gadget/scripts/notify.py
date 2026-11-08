@@ -8,6 +8,8 @@ context), never fails, and gives up after 1.5 s so it can never slow Claude down
 
 Event (ASCII JSON): {"v":2,"session":"<id4>","project":"<=14","agent":"lead"|"<id4>","role":"lead"|"<type>",
 "evt":"<hook>","state":"working|needs_you|your_turn|done|error","cmd":"<=43","detail":"<=60"}.
+Optional usage fields read from the transcripts (transcript_usage.py): "tok" (this agent's tokens) and, on lead
+events, "stok" (session total), "ctx_k", "ctx_pct" (context fallback when no status line) and "title" (session title).
 See docs/hook-payloads.md (payloads observed) and the design spec section 10 (hook -> state mapping).
 
 Host (first match): env CLAUDE_GADGET_HOST, then "host" in ~/.claude/agent-gadget.json, then agent-gadget.local.
@@ -26,6 +28,9 @@ import sys
 import tempfile
 import unicodedata
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import transcript_usage  # noqa: E402
 
 TIMEOUT = 1.5
 NEEDS_YOU_TYPES = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
@@ -206,6 +211,47 @@ def build_event(payload, env=None, state_dir=None):
     return None
 
 
+def subagent_transcript(payload):
+    """Path of a sub-agent's own transcript: agent_transcript_path (SubagentStop) or derived from the lead's path."""
+    if payload.get("agent_transcript_path"):
+        return str(payload["agent_transcript_path"])
+    lead, agent_id = payload.get("transcript_path"), payload.get("agent_id")
+    if not lead or not agent_id:
+        return None
+    base = str(lead)[:-len(".jsonl")] if str(lead).endswith(".jsonl") else str(lead)
+    return os.path.join(base, "subagents", f"agent-{agent_id}.jsonl")
+
+
+def add_usage(ev, payload, state_dir, mask=False):
+    """Add token counts (and, for the lead, session total, context and title) read from the transcripts.
+    Never raises: on any problem the event goes out unchanged."""
+    try:
+        session4 = re.sub(r"[^A-Za-z0-9]", "", str(payload.get("session_id", "")))[:4]
+        is_sub = bool(payload.get("agent_id"))
+        path = subagent_transcript(payload) if is_sub else payload.get("transcript_path")
+        if not isinstance(path, str) or not path or not os.path.exists(path):
+            return ev
+        cache = transcript_usage.load_cache(state_dir, session4)
+        entry = transcript_usage.scan(path, cache.get(path))
+        cache[path] = entry
+        transcript_usage.save_cache(state_dir, session4, cache)
+        out = dict(ev)
+        out["tok"] = entry["tokens"]
+        if not is_sub:
+            out["stok"] = sum(e.get("tokens", 0) for e in cache.values() if isinstance(e, dict))
+            ctx = entry["last_ctx"]
+            if ctx > 0:
+                out["ctx_k"] = round(ctx / 1000)
+                out["ctx_pct"] = round(100 * ctx / transcript_usage.context_window(ctx, entry["model"]))
+            if entry["title"] and not mask:
+                title = ascii_clean(entry["title"], 30)
+                if title:
+                    out["title"] = title
+        return out
+    except Exception:
+        return ev
+
+
 DEFAULT_PROTOCOL = 2        # 1 = old flat {agent,state,task} for a gadget flashed before the v2 firmware
 V1_STATES = {"working": "working", "needs_you": "waiting", "your_turn": "done", "done": "done", "error": "error"}
 
@@ -242,6 +288,9 @@ def main():
         return
     if protocol() == 1:
         ev = to_v1(ev)
+    else:
+        ev = add_usage(ev, payload, os.path.join(tempfile.gettempdir(), "agent-gadget-plugin"),
+                       bool(os.environ.get("CLAUDE_GADGET_MASK")))
     if os.environ.get("CLAUDE_GADGET_DRY_RUN"):
         sys.stderr.write(json.dumps(ev) + "\n")
         return

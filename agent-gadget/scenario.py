@@ -18,8 +18,8 @@ FILES = ["net.cpp", "model.cpp", "layout.cpp", "touch.cpp", "notify.py", "README
          "display_hmi.cpp", "hmi_uart.cpp", "scenario.py", "test_state.py", "ARCHITECTURE.md"]
 
 
-def post(host, body):
-    req = urllib.request.Request(f"http://{host}/event", data=json.dumps(body).encode("ascii"),
+def post(host, body, path="/event"):
+    req = urllib.request.Request(f"http://{host}{path}", data=json.dumps(body).encode("ascii"),
                                  headers={"Content-Type": "application/json", "X-Gadget-Test": "1"}, method="POST")
     for attempt in (1, 2, 3):   # retries: Wi-Fi loses packets in bursts; events carry full state, so a repeat is harmless
         try:
@@ -35,6 +35,25 @@ def ev(session, project, agent, state, cmd, detail="", role=None, evt="PreToolUs
     return {"v": 2, "session": session, "project": project, "agent": agent,
             "role": role or ("lead" if agent == "lead" else "general-purpose"), "evt": evt,
             "state": state, "cmd": cmd, "detail": detail}
+
+
+# Usage numbers: session title, context fill (one per color band), tokens; sent with the lead events.
+USAGE = {"api1": {"title": "Split the big refactor", "ctx_pct": 86, "ctx_k": 172, "stok": 2400000},
+         "web2": {"title": "Fix build warnings", "ctx_pct": 55, "ctx_k": 110, "stok": 410000},
+         "cli3": {"title": "Release notes", "ctx_pct": 20, "ctx_k": 40, "stok": 52000},
+         "dat4": {"ctx_pct": 35, "ctx_k": 70, "stok": 98000},
+         "doc5": {"title": "Proofread the guide", "stok": 15000}}
+QUOTAS = {"v": 1, "session": "api1", "ctx_pct": 86, "ctx_k": 172, "ctx_max_k": 200,
+          "h5_pct": 48, "h5_reset_s": 4800, "h5_rate10": 180, "h5_proj": 72, "h5_empty_s": -1,
+          "d7_pct": 61, "d7_reset_s": 187000, "d7_rate10": 5, "d7_proj": 88, "d7_empty_s": -1}
+
+
+def with_usage(body):
+    if body["agent"] == "lead":
+        body.update(USAGE.get(body["session"], {}))
+    else:
+        body["tok"] = 1000 + 3700 * (sum(map(ord, body["agent"])) % 40)
+    return body
 
 
 def setup_events():
@@ -80,11 +99,12 @@ def main():
     ap.add_argument("--loop", action="store_true", help="replay the timeline until Ctrl+C")
     args = ap.parse_args()
     for body in setup_events():
-        post(args.host, body)
+        post(args.host, with_usage(body))
+    post(args.host, QUOTAS, "/usage")
     while True:
         for delay, body in timeline():
             time.sleep(delay / args.speed)
-            post(args.host, body)
+            post(args.host, with_usage(body))
         if not args.loop:
             break
     print("scenario done")
