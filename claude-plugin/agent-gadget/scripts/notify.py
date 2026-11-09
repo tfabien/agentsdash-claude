@@ -43,6 +43,21 @@ def ascii_clean(text, limit):
     return " ".join(text.split())[:limit]
 
 
+def config():
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".claude", "agent-gadget.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def config_window(cfg):
+    """Default context window: "context_window" of agent-gadget.json (tokens), else 1M."""
+    value = cfg.get("context_window")
+    return value if isinstance(value, int) and value > 0 else 1000000
+
+
 def host():
     h = os.environ.get("CLAUDE_GADGET_HOST")
     if h:
@@ -222,7 +237,7 @@ def subagent_transcript(payload):
     return os.path.join(base, "subagents", f"agent-{agent_id}.jsonl")
 
 
-def add_usage(ev, payload, state_dir, mask=False):
+def add_usage(ev, payload, state_dir, mask=False, window_default=1000000):
     """Add token counts (and, for the lead, session total, context and title) read from the transcripts.
     Never raises: on any problem the event goes out unchanged."""
     try:
@@ -242,7 +257,7 @@ def add_usage(ev, payload, state_dir, mask=False):
             ctx = entry["last_ctx"]
             if ctx > 0:
                 out["ctx_k"] = round(ctx / 1000)
-                out["ctx_pct"] = round(100 * ctx / transcript_usage.context_window(ctx, entry["model"]))
+                out["ctx_pct"] = round(100 * ctx / transcript_usage.context_window(ctx, entry["model"], window_default))
             if entry["title"] and not mask:
                 title = ascii_clean(entry["title"], 30)
                 if title:
@@ -290,7 +305,7 @@ def main():
         ev = to_v1(ev)
     else:
         ev = add_usage(ev, payload, os.path.join(tempfile.gettempdir(), "agent-gadget-plugin"),
-                       bool(os.environ.get("CLAUDE_GADGET_MASK")))
+                       bool(os.environ.get("CLAUDE_GADGET_MASK")), config_window(config()))
     if os.environ.get("CLAUDE_GADGET_DRY_RUN"):
         sys.stderr.write(json.dumps(ev) + "\n")
         return

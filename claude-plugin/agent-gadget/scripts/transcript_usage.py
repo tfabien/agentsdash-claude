@@ -92,9 +92,10 @@ def scan(path, entry, max_read=MAX_READ):
     return entry
 
 
-def context_window(last_ctx, model):
-    """Context window guess when the status line does not give it: 1M for 1M-context models, else 200k."""
-    return 1000000 if last_ctx > 200000 or "[1m]" in str(model) else 200000
+def context_window(last_ctx, model, default=1000000):
+    """Context window guess (transcripts do not record it): 1M when the context is past 200k or the model id says
+    [1m], else `default` (1M: desktop sessions run with a 1M window; set "context_window" in agent-gadget.json)."""
+    return 1000000 if last_ctx > 200000 or "[1m]" in str(model) else default
 
 
 def _cache_path(state_dir, session4):

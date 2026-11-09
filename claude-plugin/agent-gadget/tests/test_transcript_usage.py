@@ -87,7 +87,8 @@ class ScanTest(unittest.TestCase):
         self.assertEqual(e["tokens"], 0)
 
     def test_context_window(self):
-        self.assertEqual(tu.context_window(150000, "claude-opus-5-5"), 200000)
+        self.assertEqual(tu.context_window(150000, "claude-opus-5-5"), 1000000)      # default: 1M (desktop sessions)
+        self.assertEqual(tu.context_window(150000, "claude-opus-5-5", 200000), 200000)
         self.assertEqual(tu.context_window(250000, "x"), 1000000)
         self.assertEqual(tu.context_window(1000, "claude-x[1m]"), 1000000)
 

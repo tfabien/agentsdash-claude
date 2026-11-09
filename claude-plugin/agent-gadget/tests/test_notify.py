@@ -237,7 +237,17 @@ class UsageTest(unittest.TestCase):
     def test_lead_event_has_tokens_and_context(self):
         self.write(self.lead_path, usage_line("m1", 2, 6051, 145121, 460))
         ev = self.add(self.lead_payload())
-        self.assertEqual((ev["tok"], ev["stok"], ev["ctx_k"], ev["ctx_pct"]), (6513, 6513, 151, 76))
+        self.assertEqual((ev["tok"], ev["stok"], ev["ctx_k"], ev["ctx_pct"]), (6513, 6513, 151, 15))
+
+    def test_context_window_from_config(self):
+        self.write(self.lead_path, usage_line("m1", 2, 6051, 145121, 460))
+        ev = notify.build_event(self.lead_payload(), {}, self.state_dir)
+        self.assertEqual(notify.add_usage(ev, self.lead_payload(), self.state_dir, window_default=200000)["ctx_pct"], 76)
+
+    def test_config_window_read(self):
+        self.assertEqual(notify.config_window({"context_window": 200000}), 200000)
+        self.assertEqual(notify.config_window({}), 1000000)
+        self.assertEqual(notify.config_window({"context_window": "junk"}), 1000000)
 
     def test_subagent_event_uses_its_own_transcript(self):
         self.write(self.lead_path, usage_line("m1", 2, 6051, 145121, 460))

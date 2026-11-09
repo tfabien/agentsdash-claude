@@ -40,6 +40,8 @@ The Claude desktop app does not run status lines (checked 2026-11-08). Quotas ar
 `claude` session is enough to feed them. Desktop sessions still get their context, tokens and title from the hooks,
 which read the transcripts (`scripts/transcript_usage.py`): `tok`, `stok`, `ctx_k`, `ctx_pct`, `title` on v2 events.
 Quotas are only reported to Pro/Max subscribers.
+The context estimate from transcripts assumes a 1M window (desktop sessions); set `"context_window": 200000` in
+`~/.claude/agent-gadget.json` for 200k sessions.
 
 ## Protocol switch
 
