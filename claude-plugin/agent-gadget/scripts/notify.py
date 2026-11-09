@@ -298,6 +298,9 @@ def main():
                 f.write(json.dumps(payload) + "\n")
         except Exception:
             pass
+    if not os.environ.get("CLAUDE_GADGET_DRY_RUN"):
+        import quotas                    # plan quotas for the desktop app (no status line), at most once a minute
+        quotas.spawn_if_due()
     ev = build_event(payload)
     if not ev:
         return

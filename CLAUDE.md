@@ -85,6 +85,9 @@ Installed at user level, read **live from this working tree** (`agent-gadget@age
 `scripts/statusline.py` is a status line (manual install in `~/.claude/settings.json`, see the plugin README) that posts context and quotas
 to `/usage`. The **desktop app does not run status lines**: one terminal session feeds the quotas. Hooks add tokens, a context estimate and
 the session title read from the transcripts (`scripts/transcript_usage.py`).
+Desktop quotas: `notify.py` starts `scripts/quotas.py` in the background at most once a minute. It reads the OAuth token of
+`~/.claude/.credentials.json` (never printed), tries `api/oauth/usage`, else a 1-token Haiku call whose rate-limit headers
+give the quotas (a few tokens per call). Off: `CLAUDE_GADGET_QUOTAS=0` or `"quotas": false` in `agent-gadget.json`.
 
 ## Pitfalls
 
