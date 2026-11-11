@@ -22,6 +22,8 @@ import notify  # noqa: E402
 import statusline  # noqa: E402
 
 EVERY_S = 60
+STATUSLINE_FRESH_S = 120
+USAGE_BACKOFF_S = 900
 USAGE_DEAD_S = 3600                 # after a refusal, skip the usage endpoint for an hour
 H5_WINDOW_S = 5 * 3600
 H5_SLACK_S = 600                    # a window older than this with 0 % is implausible for a user who works
@@ -139,23 +141,44 @@ def _messages_headers(token):
         return parse_headers(e.headers)
 
 
-def fetch(token, folder, now):
-    dead = os.path.join(folder, "quotas.usage_dead")
+def _recent(path, now, window):
     try:
-        skip = now - os.path.getmtime(dead) < USAGE_DEAD_S
+        return now - os.path.getmtime(path) < window
     except OSError:
-        skip = False
-    if not skip:
+        return False
+
+
+def _touch(path):
+    try:
+        open(path, "w").close()
+    except OSError:
+        pass
+
+
+def statusline_fresh(folder, now):
+    """A terminal status line reports exact quotas (*.usage files); the probe must not overwrite them."""
+    try:
+        return any(now - os.path.getmtime(os.path.join(folder, n)) < STATUSLINE_FRESH_S
+                   for n in os.listdir(folder) if n.endswith(".usage"))
+    except OSError:
+        return False
+
+
+def fetch(token, folder, now):
+    if statusline_fresh(folder, now):
+        return {}, "statusline"
+    dead = os.path.join(folder, "quotas.usage_dead")        # refused (401/403/404): skip for an hour
+    backoff = os.path.join(folder, "quotas.usage_backoff")  # 429: polling every minute keeps it limited, wait 15 min
+    if not _recent(dead, now, USAGE_DEAD_S) and not _recent(backoff, now, USAGE_BACKOFF_S):
         try:
             lim = _usage_endpoint(token)
             if lim:
                 return lim, "usage_api"
         except urllib.error.HTTPError as e:
-            if e.code in USAGE_REFUSED:          # 429 is temporary: retry next minute
-                try:
-                    open(dead, "w").close()
-                except OSError:
-                    pass
+            if e.code in USAGE_REFUSED:
+                _touch(dead)
+            elif e.code == 429:
+                _touch(backoff)
         except Exception:
             pass
     try:
