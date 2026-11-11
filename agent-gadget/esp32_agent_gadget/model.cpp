@@ -20,6 +20,8 @@ static uint32_t doneTtlMs = DONE_TTL_MS;
 static uint32_t staleTtlMs = STALE_TTL_MS;
 static struct { bool active; char session[ID_LEN]; char agent[ID_LEN]; uint32_t until; } manual;
 
+String (*modelViewJsonExtra)(uint32_t now) = nullptr;
+
 static void copyStr(char* dst, size_t n, const char* src) { strncpy(dst, src, n - 1); dst[n - 1] = 0; }
 static bool startsWith(const char* s, const char* prefix) { return strncmp(s, prefix, strlen(prefix)) == 0; }
 static bool earlier(uint32_t a, uint32_t b) { return (int32_t)(a - b) < 0; }   // wrap-safe
@@ -519,7 +521,8 @@ String modelToJson(uint32_t now) {
   String vs, va;
   if (v.session >= 0) { const Session* s = modelSession(v.session); vs = s->id; va = modelAgent(*s, v.agent)->id; }
   j += "],\"more_sessions\":" + String(modelMoreSessions) + ",\"view\":{\"session\":\"" + jsonEscape(vs.c_str()) + "\",\"agent\":\"" +
-       jsonEscape(va.c_str()) + "\",\"mode\":\"" + (v.manual ? "manual" : "auto") + "\"}" + quotasJson(now) + ",\"agents\":[";
+       jsonEscape(va.c_str()) + "\",\"mode\":\"" + (v.manual ? "manual" : "auto") + "\"" +
+       (modelViewJsonExtra ? modelViewJsonExtra(now) : String("")) + "}" + quotasJson(now) + ",\"agents\":[";
   static FlatRow rows[MAX_SESSIONS * (1 + MAX_SUBS)];       // static: too big for the loop task's stack
   int count = modelFlat(rows, MAX_SESSIONS * (1 + MAX_SUBS));
   for (int i = 0; i < count; i++) {

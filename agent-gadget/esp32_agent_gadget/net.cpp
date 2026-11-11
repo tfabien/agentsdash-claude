@@ -2,6 +2,7 @@
 #include <limits.h>
 #include "model.h"
 #include "display.h"
+#include "ui_state.h"
 #include "layout.h"
 #include "touch.h"
 #include <WiFi.h>
@@ -176,7 +177,7 @@ static void handleSelect() {           // POST /select {"session","agent","hold_
 }
 
 #ifdef GADGET_DEBUG
-static void handleDebugConfig() {      // POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms"}
+static void handleDebugConfig() {      // POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms","standby_ms","detail_ms"}
   cors();
   String body = server.arg("plain");
   bool flag;
@@ -184,6 +185,9 @@ static void handleDebugConfig() {      // POST /debug/config {"isolate","done_tt
   if (jsonBool(body, "isolate", flag)) isolateMode = flag;
   bool haveDone = jsonLong(body, "done_ttl_ms", done), haveStale = jsonLong(body, "stale_ttl_ms", stale);
   if (haveDone || haveStale) modelConfigure(haveDone ? (uint32_t)done : DONE_TTL_MS, haveStale ? (uint32_t)stale : STALE_TTL_MS);
+  static long standby = STANDBY_MS, detail = DETAIL_MS;                 // screen timings, kept across calls
+  bool haveStandby = jsonLong(body, "standby_ms", standby), haveDetail = jsonLong(body, "detail_ms", detail);
+  if (haveStandby || haveDetail) uiStateConfigure((uint32_t)standby, (uint32_t)detail);
   server.send(200, "application/json", String("{\"isolate\":") + (isolateMode ? "true" : "false") + "}");
 }
 
@@ -438,6 +442,7 @@ void netClearWifiConfig() {
 
 // ---------- Public ----------
 void netBegin() {
+  modelViewJsonExtra = uiStateJson;
   prefs.begin("gadget", false);
   pinMode(FORGET_WIFI_PIN, INPUT_PULLUP);
 

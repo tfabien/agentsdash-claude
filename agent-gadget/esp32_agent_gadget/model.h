@@ -146,5 +146,6 @@ int modelDefaultSlot(const Session& s);                   // the agent that need
 bool modelSelect(const char* session, const char* agent, uint32_t now, uint32_t holdMs);
 
 String modelToJson(uint32_t now);
+extern String (*modelViewJsonExtra)(uint32_t now);    // screen keys added to the "view" object (set by the core at boot)
 String modelFormatAge(uint32_t seconds);                  // "12s", "1m04", "2h05m"
 int modelFlat(FlatRow* out, int max);

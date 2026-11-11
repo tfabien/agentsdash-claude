@@ -2,28 +2,44 @@
 #include <Arduino.h>
 #include "layout.h"
 #include "model.h"
+#include "ui_state.h"
 
 void uiTap(int x, int y, uint32_t holdMs) {
   uint32_t now = millis();
+  if (uiStandby(now)) { uiWake(now); return; }        // a tap on the standby clock only wakes the screen
   View v = modelView(now);
   const Session* cur = v.session >= 0 ? modelSession(v.session) : nullptr;
-  int others = modelSessionCount() - (cur ? 1 : 0);
+  int o[MAX_SESSIONS];
+  int others = uiOtherSessions(v.session, o);
   Hit h = hitTest(x, y, others, cur ? modelSubCount(*cur) : 0);
-  if (h.kind == Hit::Label) {                 // labels list the other sessions in model order (scrolling: ui_state)
-    int seen = 0;
-    for (int t = 0; t < modelSessionCount(); t++) {
-      if (t == v.session) continue;
-      if (seen++ == h.index) {
-        const Session* s = modelSession(t);
+  switch (h.kind) {
+    case Hit::Label: {
+      int idx = uiLabelOffset(others) + h.index;
+      if (idx < others) {
+        const Session* s = modelSession(o[idx]);
         modelSelect(s->id, modelAgent(*s, modelDefaultSlot(*s))->id, now, holdMs);
-        break;
+        uiHideDetail();
       }
+      break;
     }
-  } else if (h.kind == Hit::Row && cur) {
-    const Agent* a = modelAgent(*cur, h.index + 1);
-    if (a) modelSelect(cur->id, a->id, now, holdMs);
-  } else if (h.kind == Hit::LeadPanel && cur) {
-    modelSelect(cur->id, cur->lead.id, now, holdMs);
+    case Hit::ArrowLeft:  uiScrollLabels(-1, others); break;
+    case Hit::ArrowRight: uiScrollLabels(1, others); break;
+    case Hit::Row: {
+      if (!cur) break;
+      uint8_t team[TEAM_ROWS];
+      int more;
+      int n = uiTeamOrder(*cur, team, more);
+      if (h.index < n) {
+        modelSelect(cur->id, modelAgent(*cur, team[h.index])->id, now, holdMs);
+        uiShowDetail(*cur, team[h.index], now);
+      }
+      break;
+    }
+    case Hit::LeadPanel:
+      if (cur) modelSelect(cur->id, cur->lead.id, now, holdMs);
+      uiHideDetail();
+      break;
+    default: break;
   }
 }
 
