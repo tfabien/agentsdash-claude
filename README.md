@@ -6,11 +6,12 @@ Agent standup on a screen: a small gadget next to the keyboard that makes the da
 2. **Follow my agents**: see every session, its sub-agents and what each one is doing, like a stand-up meeting of the agents.
 3. **Know what needs my attention**: when an agent asks a question or waits for a permission, the screen turns orange and the buzzer beeps, so I can work on something else without watching the terminal.
 
-It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 over Wi-Fi (see [Hardware](#hardware)).
+It runs two ways, fed by the same Claude Code plugin and showing the same screen:
 
-> The images below are renders, not photos. `agent-gadget/tools/render_screens.py` redraws the screen from the real
-> pictures of the screen project and the geometry of the firmware (`display_hmi.cpp`, `layout.cpp`), with Segoe UI standing in for the screen fonts.
-> Photos of the real device are still to be added (see the TODO).
+- **In your browser, with nothing to buy**: a small Node.js server (the *agent hub*, `agent-hub/`) draws the screen as a web page (`http://127.0.0.1:8765/`). It starts by itself with your first Claude Code session.
+- **On a gadget**: the touchscreen of an Artillery X3 3D printer, driven by an ESP32 over Wi-Fi (see [Hardware](#hardware)). The hub can forward everything to it, so the page and the gadget always agree.
+
+> The images below are screenshots of the web page, not photos of the device: `node agent-hub/tools/screenshots.mjs` renders each scene (`agent-hub/web/scenes.js`) in a headless Edge or Chrome. The page uses the layout, colors and wording of the firmware (`display_hmi.cpp`, `layout.cpp`), drawn as vectors. Photos of the real device are still to be added (see the TODO).
 
 ![Main view](docs/images/screen-main.png)
 
@@ -58,7 +59,7 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 ### Quotas (bottom bar of every view)
 
 - 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset).
-- Fed by the status line (terminal) or by the agent hub, which polls the quotas for the desktop app.
+- Fed by the status line (terminal) or by the agent hub, which polls the quotas for the desktop app (`agent-hub/quotas.mjs`).
 
 ### Standby clock
 
@@ -105,11 +106,13 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 |---|---|
 | Screen `TJC4827X243_011C` (TJC X2 series) | 4.3", 480x272, capacitive touch, buzzer. Taken from the printer, its original firmware was replaced by `screen-hmi/agent-gadget.tft`. |
 | ESP32 DevKit (30 pins) | Joins your Wi-Fi, serves an HTTP API, keeps the state of all agents, draws on the screen through a UART (9600 baud at power-up, then 115200). |
-| Claude Code plugin `claude-plugin/agent-gadget/` | Hooks send every session and sub-agent event to the ESP32 (`POST /event`). |
+| Claude Code plugin `claude-plugin/agent-gadget/` | Node.js hooks send every session and sub-agent event to the hub (`POST /event`), which shows them in the browser and relays them to the ESP32. |
+| Agent hub `agent-hub/` | Node.js server on your PC: keeps the state, serves the page, polls the plan quotas, forwards to the gadget over Wi-Fi (USB serial planned). |
 
 ```
-Claude Code (hooks) --HTTP POST /event--> ESP32 --UART--> TJC screen (touch, buzzer)
-status line / quotas.py --POST /usage-->
+Claude Code (hooks) --POST /event--> agent hub --SSE--> browser page
+status line / quota poller --POST /usage-->  |
+                                            +--HTTP relay--> ESP32 --UART--> TJC screen (touch, buzzer)
 ```
 
 ![Wiring](docs/images/wiring.svg)
@@ -123,7 +126,7 @@ Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> scre
 - **Tap a step of the plan bar to preview it.** A tap on a segment of the plan bar would show that step (title, state) for a few seconds, then go back to the current step: a way to read the upcoming steps. Needs the full step list on the gadget (today the plan fields carry only `done`, `total`, the current and the next step), so the plan tracker must send titles of all steps, and a hit zone per segment must be added to `layout.cpp`.
 - **Answer a question by tapping the screen?** Today the screen shows the question and its numbered options, and the answer is typed in Claude Code. A tap on an option would have to travel back to the session: the hooks only send events to the gadget, and no hook can inject an answer into a running `AskUserQuestion`. Open question: a `PermissionRequest` hook can allow or deny (a tap on Allow/Deny is feasible by making the hook wait for the gadget), but a free choice among options needs another channel.
 - **Multi-hardware, with a screen that is easy to buy.** The Artillery X3 screen was used for the proof of concept because it was at hand, and it is not sold on its own. Goal: a display abstraction in the firmware (`display.h` already separates the UI from the screen backend) and support for at least one common, cheap board with a screen (for example an ESP32 with a built-in TFT or an ESP32-S3 touch display), documented with a shopping list.
-- **Usage and quotas stay problematic.** The desktop app does not run status lines, so quotas come from `quotas.py` (OAuth token, `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers). The usage endpoint returns 429, the backoff is 15 minutes, and the numbers can be stale. The context estimate from transcripts assumes a 1M window.
+- **Usage and quotas stay problematic.** The desktop app does not run status lines, so quotas come from `agent-hub/quotas.mjs` (OAuth token, `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers). The usage endpoint returns 429, the backoff is 15 minutes, and the numbers can be stale. The context estimate from transcripts assumes a 1M window.
 - **The session on the screen does not follow the session selected in the app.** Today the gadget picks its session itself (needs-you first) or by touch. Goal: show the session that has focus in Claude Code or the desktop app.
 - Plugin of prompts that make standup-bot easier to use: force `AskUserQuestion` for every question to the user, force the creation and regular update of a plan (the screen only shows plans built from task-list tool calls, so a session that skips them shows no progress), and similar rules. Could ship as a skill or a `SessionStart` hook that injects the instructions.
 - **The plan on the screen is often out of date.** `plan_tracker.py` rebuilds the plan only from task-list tool calls (`TaskCreate`/`TaskUpdate`, `TodoWrite`, `update_plan`). A step finished without a matching update, or a session that never creates a plan, leaves the bar stale. Fix ideas: the prompts plugin below, plus a staleness hint on the screen.

@@ -412,10 +412,10 @@ export function renderScreen(screen, state, ui) {
     const lw = screen.measure(label, S16) + 4;
     screen.text(x, y, lw, S16, COLOR.LIGHT, COLOR.BAR, label);
     x += lw;
-    screen.fill(x, y + 7, 44, 6, COLOR.CHIP);
-    const filled = Math.trunc((44 * Math.min(pct, 100)) / 100);
+    screen.fill(x, y + 7, 36, 6, COLOR.CHIP);
+    const filled = Math.trunc((36 * Math.min(pct, 100)) / 100);
     if (filled > 0) screen.fill(x, y + 7, filled, 6, col);
-    x += 48;
+    x += 40;
     const emptyS = u[`${key}_empty_s`];
     let t = `${pct}%`;
     if (level === 'over' && emptyS > 0 && pct < 100) t += ` empty ${fmtDuration(Math.max(0, emptyS - ui.elapsedS))}`;
