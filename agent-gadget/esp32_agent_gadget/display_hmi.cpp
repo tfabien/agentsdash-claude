@@ -171,7 +171,7 @@ static void drawTopContent(const View& v) {   // the caller targets and clears t
 static uint32_t leadSignature(const View& v, uint32_t now) {
   const Session* s = selectedSession(v);
   if (!s) return mix(mixStr(2166136261u, deviceInfo.ip.c_str()), deviceInfo.apMode);
-  uint32_t h = mixStr(2166136261u, s->id);
+  uint32_t h = mix(mixStr(2166136261u, s->id), modelSubCount(*s) == 0);   // full width without sub-agents
   h = mix(mix(mix(h, s->lead.rev), modelEffectiveState(*s, s->lead)), s->usageRev);
   int slot = uiDetailSlot(*s, now);
   if (slot) {                                     // detail view: the tapped agent's revision drives the redraw
@@ -182,8 +182,8 @@ static uint32_t leadSignature(const View& v, uint32_t now) {
   return mix(h, modelSessionCtx(*s, now));        // ages tick in place (drawLeadAge), no full redraw
 }
 
-static Rect leadStateLine() {
-  Rect p = layoutLeadPanel();
+static Rect leadStateLine(int nSubs = 1) {
+  Rect p = layoutLeadPanel(nSubs);
   int tx = p.x + 6 + 42;
   return {(int16_t)tx, (int16_t)(p.y + 26), (int16_t)(p.x + p.w - 4 - tx), LINE_S16};
 }
@@ -195,7 +195,7 @@ static void drawLeadAge(const View& v, uint32_t now) {   // rewrites the state l
   int slot = uiDetailSlot(*s, now);
   const Agent& a = *modelAgent(*s, slot);
   AgentState st = modelEffectiveState(*s, a);
-  Rect r = leadStateLine();
+  Rect r = leadStateLine(modelSubCount(*s));
   line(r.x, r.y, r.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(a, now));
 }
 
@@ -265,11 +265,27 @@ static void drawDetail(const Session& s, int slot, uint32_t now) {
   line(x, p.y + p.h - 22, w, FONT_S16, C_FAINT, C_PANEL, "tap here to go back");
 }
 
+// Context fill: bar (green < 60 %, orange 60..79, red >= 80) and its percentage on the right.
+static void drawCtxBar(int x, int y, int w, int pct) {
+  uint16_t col = pct >= 80 ? C_ERROR : pct >= 60 ? C_NEEDS : C_WORKING;
+  int tw = displayTextPx("100%", FONT_S16) + 2, bw = w - tw - 4;
+  hmiFill(x, y + 4, bw, 10, C_CHIP);
+  int filled = bw * (pct > 100 ? 100 : pct) / 100;
+  if (filled > 0) hmiFill(x, y + 4, filled, 10, col);
+  line(x + bw + 4, y, tw, FONT_S16, col, C_PANEL, String(pct) + "%");
+}
+
 static void drawLeadPanel(const View& v, uint32_t now) {
   hmiTarget(HMI_STRIP, true);
-  Rect p = layoutLeadPanel();
-  erase(p);
   const Session* s = selectedSession(v);
+  int nSubs = s ? modelSubCount(*s) : 1;
+  Rect p = layoutLeadPanel(nSubs);
+  if (nSubs == 0) {                               // full width: both panels and the gap between them become one
+    erase(p);
+    hmiFill(156, 36, 20, 204, C_PANEL);
+  } else {
+    erase({12, 36, 158, 204});                    // lead panel and the gap; the team erase restores 170..472
+  }
   if (!s) { leadPanelMode = "empty"; drawLeadEmpty(); return; }
   int slot = uiDetailSlot(*s, now);
   if (slot) { leadPanelMode = "detail"; drawDetail(*s, slot, now); return; }
@@ -280,10 +296,10 @@ static void drawLeadPanel(const View& v, uint32_t now) {
   hmiPic(x, p.y + 6, PIC_SPRITE_BIG + roleIndex("lead"));
   int tx = x + 42, tw = p.x + p.w - 4 - tx;
   line(tx, p.y + 4, tw, FONT_S20, C_TEXT, C_PANEL, s->project);
-  Rect sl = leadStateLine();
+  Rect sl = leadStateLine(nSubs);
   line(sl.x, sl.y, sl.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(a, now));
   uint8_t ctx = modelSessionCtx(*s, now);
-  if (ctx != CTX_UNKNOWN) line(tx, p.y + 44, tw, FONT_S16, ctx >= 80 ? C_NEEDS : C_LIGHT, C_PANEL, "ctx " + String(ctx) + "%");
+  if (ctx != CTX_UNKNOWN) drawCtxBar(tx, p.y + 44, tw, ctx);
   String l[2];
   int n = wrapPx(a.cmd, w, FONT_S16, l, 2);
   for (int i = 0; i < n; i++) line(x, p.y + 68 + i * 18, w, FONT_S16, C_LIGHT, C_PANEL, l[i]);
@@ -342,6 +358,7 @@ static int countWorking(const Session& s) {
 static uint32_t teamSignature(const View& v) {
   const Session* s = selectedSession(v);
   if (!s) return 1;
+  if (modelSubCount(*s) == 0) return 2;            // the lead panel owns the width
   uint8_t team[TEAM_ROWS];
   int more = 0, n = uiTeamOrder(*s, team, more);
   uint32_t h = mix(mix(mixStr(2166136261u, s->id), modelSubCount(*s)), more);
@@ -352,6 +369,7 @@ static uint32_t teamSignature(const View& v) {
 static void drawTeam(const View& v, bool full, bool ageTick, uint32_t now) {
   const Session* s = selectedSession(v);
   hmiTarget(HMI_TREE, full);
+  if (s && modelSubCount(*s) == 0) return;         // full-width lead panel: nothing to draw here
   Rect rows[TEAM_ROWS];
   uint8_t team[TEAM_ROWS];
   int more = 0, n = s ? uiTeamOrder(*s, team, more) : 0;
@@ -369,7 +387,6 @@ static void drawTeam(const View& v, bool full, bool ageTick, uint32_t now) {
   }
   String head;                                     // header line: rewritten in place when its text changes
   if (!s) head = "NO SESSION";
-  else if (nSubs == 0) head = "NO SUB-AGENTS";
   else head = "TEAM - " + String(nSubs) + (nSubs == 1 ? " SUB-AGENT - " : " SUB-AGENTS - ") + String(countWorking(*s)) + " WORKING";
   uint32_t hs = mixStr(2166136261u, head.c_str());
   if (hs != headSig) {
@@ -482,7 +499,7 @@ static void animate(const View& v, uint32_t now) {
   animSteps++;
   const Session* s = selectedSession(v);
   if (!s) return;
-  Rect p = layoutLeadPanel();
+  Rect p = layoutLeadPanel(modelSubCount(*s));
   int slot = uiDetailSlot(*s, now);
   const Agent& lead = *modelAgent(*s, slot);
   hmiTarget(HMI_STRIP, false);

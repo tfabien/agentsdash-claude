@@ -23,6 +23,9 @@ import statusline  # noqa: E402
 
 EVERY_S = 60
 USAGE_DEAD_S = 3600                 # after a refusal, skip the usage endpoint for an hour
+H5_WINDOW_S = 5 * 3600
+H5_SLACK_S = 600                    # a window older than this with 0 % is implausible for a user who works
+USAGE_REFUSED = (401, 403, 404)      # the endpoint will not serve this token; skip it for USAGE_DEAD_S
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 CREDENTIALS = os.path.join(os.path.expanduser("~"), ".claude", ".credentials.json")
@@ -104,6 +107,15 @@ def parse_headers(headers):
     return out
 
 
+def drop_implausible_h5(limits, now):
+    """The Haiku probe headers can report 5h 0.0 while the window is running (seen with 4h18 left and hours of use).
+    A running window older than H5_SLACK_S with 0 % is shown as unknown instead of a misleading 0 %."""
+    h5 = limits.get("five_hour")
+    if h5 and h5["used_percentage"] <= 0 and h5["resets_at"] - now < H5_WINDOW_S - H5_SLACK_S:
+        limits = {k: v for k, v in limits.items() if k != "five_hour"}
+    return limits
+
+
 def body_from_limits(limits, now, samples):
     return statusline.usage_body({"session_id": "", "rate_limits": limits}, now, samples)
 
@@ -138,15 +150,16 @@ def fetch(token, folder, now):
             lim = _usage_endpoint(token)
             if lim:
                 return lim, "usage_api"
-        except urllib.error.HTTPError:
-            try:
-                open(dead, "w").close()
-            except OSError:
-                pass
+        except urllib.error.HTTPError as e:
+            if e.code in USAGE_REFUSED:          # 429 is temporary: retry next minute
+                try:
+                    open(dead, "w").close()
+                except OSError:
+                    pass
         except Exception:
             pass
     try:
-        return _messages_headers(token), "messages"
+        return drop_implausible_h5(_messages_headers(token), now), "messages"
     except Exception:
         return {}, "error"
 

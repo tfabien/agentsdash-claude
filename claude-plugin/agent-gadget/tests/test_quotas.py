@@ -36,6 +36,47 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(q.parse_headers({"anthropic-ratelimit-unified-5h-utilization": "x"}), {})
 
 
+class H5PlausibleTest(unittest.TestCase):
+    def lim(self, pct, left):
+        return {"five_hour": {"used_percentage": pct, "resets_at": NOW + left},
+                "seven_day": {"used_percentage": 62.0, "resets_at": NOW + 300000}}
+
+    def test_zero_with_running_window_is_dropped(self):
+        out = q.drop_implausible_h5(self.lim(0.0, 15456), NOW)
+        self.assertNotIn("five_hour", out)
+        self.assertIn("seven_day", out)
+
+    def test_zero_with_fresh_window_is_kept(self):
+        self.assertIn("five_hour", q.drop_implausible_h5(self.lim(0.0, 5 * 3600 - 60), NOW))
+
+    def test_nonzero_is_kept(self):
+        self.assertIn("five_hour", q.drop_implausible_h5(self.lim(12.0, 15456), NOW))
+
+    def test_no_h5_is_untouched(self):
+        self.assertEqual(q.drop_implausible_h5({}, NOW), {})
+
+
+class UsageDeadTest(unittest.TestCase):
+    def run_fetch(self, code):
+        import urllib.error
+        folder = tempfile.mkdtemp()
+        orig_u, orig_m = q._usage_endpoint, q._messages_headers
+        def boom(token):
+            raise urllib.error.HTTPError("u", code, "x", {}, None)
+        q._usage_endpoint, q._messages_headers = boom, lambda token: {}
+        try:
+            q.fetch("t", folder, NOW)
+        finally:
+            q._usage_endpoint, q._messages_headers = orig_u, orig_m
+        return os.path.exists(os.path.join(folder, "quotas.usage_dead"))
+
+    def test_429_is_not_dead(self):
+        self.assertFalse(self.run_fetch(429))
+
+    def test_401_is_dead(self):
+        self.assertTrue(self.run_fetch(401))
+
+
 class TokenTest(unittest.TestCase):
     def creds(self, oauth):
         path = os.path.join(tempfile.mkdtemp(), ".credentials.json")

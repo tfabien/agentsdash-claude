@@ -13,7 +13,7 @@ struct Hit {
 Rect layoutTopBar();
 Rect layoutSelectedTab();
 Rect layoutFrame();
-Rect layoutLeadPanel();
+Rect layoutLeadPanel(int nSubs = 1);   // nSubs == 0: the panel takes the width of both panels
 Rect layoutTeamPanel();
 Rect layoutTeamHeader();
 Rect layoutBottomBar();

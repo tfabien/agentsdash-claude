@@ -10,7 +10,7 @@ static bool contains(const Rect& r, int x, int y) { return x >= r.x && x < r.x +
 Rect layoutTopBar()      { return {0, 0, SCR_W, 30}; }
 Rect layoutSelectedTab() { return {6, 2, 160, 28}; }
 Rect layoutFrame()       { return {6, 30, 468, 216}; }
-Rect layoutLeadPanel()   { return {12, 36, 150, 204}; }
+Rect layoutLeadPanel(int nSubs) { return nSubs == 0 ? Rect{12, 36, 460, 204} : Rect{12, 36, 150, 204}; }
 Rect layoutTeamPanel()   { return {170, 36, 302, 204}; }
 Rect layoutTeamHeader()  { return {176, 38, 290, 18}; }
 Rect layoutBottomBar()   { return {0, 250, SCR_W, 22}; }
@@ -59,7 +59,7 @@ Hit hitTest(int x, int y, int others, int nSubs) {
     if (contains(t, x, y)) return {Hit::SelectedTab, -1};
     return {Hit::None, -1};
   }
-  if (contains(layoutLeadPanel(), x, y)) return {Hit::LeadPanel, -1};
+  if (contains(layoutLeadPanel(nSubs), x, y)) return {Hit::LeadPanel, -1};
   Rect rows[7];
   int n = layoutRows(nSubs, rows);
   for (int i = 0; i < n; i++)
