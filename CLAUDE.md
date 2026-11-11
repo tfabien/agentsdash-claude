@@ -84,6 +84,9 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 - PlatformIO: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe` (espressif32 installed). Env `esp32dev_noscreen` builds without a screen (serial backend).
 - Opening COM3 resets the ESP32: wait ~2.5 s before sending. USB-side baud is fixed at 115200.
 - Wi-Fi modem sleep is off (`WiFi.setSleep(false)`): with it, HTTP requests stalled up to 5.6 s.
+- Screen UI (2026-11-11): title bar with the selected session, one state dot per session and a caret; **a tap opens a session menu** (rows, closes after 8 s).
+  A pending `AskUserQuestion` takes the lead panel full width. Running plan steps pulse (own 100 ms timer). Bottom bar: quotas, **speaker icon = buzzer mode**
+  (`all` / `ask` = needs_you only / `off`, kept in flash, `beep <ms>` command), clock.
 - Drawing goes through a non-blocking queue (title bar > command strip > tree); `GET /debug/stats` (test builds) shows it.
 
 ## Claude plugin (v0.2)

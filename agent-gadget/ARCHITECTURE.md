@@ -35,7 +35,7 @@ Context of a known session (wins over the event estimate for 120 s) and the acco
 (`*_rate10` = %/h x 10, `*_proj` = projected % at reset, `*_empty_s` = seconds to 100 % or -1). An unknown session
 creates nothing. 400 without `v`.
 
-`GET /state`: `{"sessions":[{"id","project","title","ctx_pct","ctx_k","ctx_src","tok","plan":{"done","total","cur","next"}|null,"dot","count","more","agents":[{"tok","id","parent","role","state","cmd","detail","prev","prev_age","age"}]}],"more_sessions":N,"view":{"session","agent","mode":"auto|manual","detail","standby","label_offset","arrow_left_asks","arrow_right_asks","team","team_more"},"time":"HH:MM"|null,"usage":{"age_s","h5_*","d7_*"},"agents":[...flat v0.1 list...]}`
+`GET /state`: `{"sessions":[{"id","project","title","ctx_pct","ctx_k","ctx_src","tok","plan":{"done","total","cur","next","state"}|null,"ask":{"question","options"}|null,"dot","count","more","agents":[{"tok","id","parent","role","state","cmd","detail","prev","prev_age","age"}]}],"more_sessions":N,"view":{"session","agent","mode":"auto|manual","detail","standby","label_offset","arrow_left_asks","arrow_right_asks","team","team_more"},"time":"HH:MM"|null,"usage":{"age_s","h5_*","d7_*"},"agents":[...flat v0.1 list...]}`
 (`usage` absent before the first status line report; `ctx_pct` null when unknown).
 States: `needs_you`, `error`, `your_turn`, `working`, `waiting_subs` (derived, leads only), `done`.
 
@@ -62,8 +62,9 @@ core never says what to redraw.
 | File | Role |
 |---|---|
 | `ui_theme.h` | Pins, baud rates, layout constants, fonts, colors, sprite sizes. First place to tweak the look. |
-| `layout.h/.cpp` | Pure geometry (spec 2026-11-11): selected tab, session labels and arrows, frame, lead panel, team header and rows (42 px for 1-4 sub-agents, 22 px for 5-7, 6 + "+N more" past 7), bottom bar, clock, badge, `hitTest()`. |
-| `ui_state.h/.cpp` | Screen-only state: tapped agent detail (10 s), label scroll, standby (5 min idle), team row order. |
+| `layout.h/.cpp` | Pure geometry (spec 2026-11-11): title bar (name, session dots, caret), session menu rows, frame, lead panel, team header and rows (42 px for 1-4 sub-agents, 22 px for 5-7, 6 + "+N more" past 7), bottom bar, clock, sound button, `hitTest()`. |
+| `ui_state.h/.cpp` | Screen-only state: tapped agent detail (10 s), session menu (closes after 8 s), standby (5 min idle), team row order. |
+| `sound.h/.cpp` | Buzzer mode kept in flash: `all` (2 beeps on needs_you, 1 on your_turn), `ask` (needs_you only), `off`. A tap on the speaker icon (bottom bar) cycles it; the screen is driven by `beep <ms>`. |
 | `clock.h/.cpp` | NTP time, Europe/Paris. |
 | `font_metrics.h` | Generated pixel widths of fonts 2 and 3 (`tools/make_font_metrics.py`), used by `displayFit`. |
 | `display_hmi.cpp` | The UI on picture 16: top bar, lead panel (lead, context, plan, or the tapped agent detail), team rows, bottom bar (quotas, clock), standby clock (pictures 51..62), discreet animation (robot blink, pulsing needs-you bar). Durations are rewritten in place (no flicker). Implements `display.h`. |
