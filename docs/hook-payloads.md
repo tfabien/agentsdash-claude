@@ -43,7 +43,7 @@ Observed order for one lead turn with two sub-agents: `SessionStart`, `UserPromp
   "approved" hook: a long command run after an approval keeps the agent orange until it finishes (known limit).
 - A lead with at least one sub-agent not done is "waiting on sub-agents" **even after a `Stop`**.
 - Prompts starting with `<task-notification>` are reports, not user prompts; `SubagentHandback` is not shown as a command.
-- `Notification` `idle_prompt` and `Stop` both mean "your turn" (for a lead with no running sub-agent).
+- `Stop` means "your turn" (for a lead with no running sub-agent). `Notification` `idle_prompt` is **not sent** by the plugin since 0.4: it repeats while a session is idle and brought back sessions the hub had dropped or the user had hidden.
 
 ## Captured 2026-11-08 (interactive session, `--permission-mode default`)
 

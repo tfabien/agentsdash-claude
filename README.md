@@ -51,7 +51,7 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 
 - A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the page beeps.
 - Permission prompts turn the session orange too.
-- Click the speaker icon (bottom bar) to switch the beeps between `all`, `ask` (needs you only) and `off`.
+- Click the speaker icon (bottom bar) to switch the beeps between `all`, `ask` (needs you only, the default) and `off`. The choice is kept by the hub, so every open page follows it.
 
 ### Sub-agents: see and follow them
 
@@ -71,13 +71,13 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 ![Menu](docs/images/screen-menu.png)
 
 - Click a sub-agent row: the left panel shows its full command, tokens and previous command. Click the panel to go back.
-- Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state.
+- Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state. The **trash icon** at the end of a row hides that session (finished demos, old sessions); it comes back by itself when it works again or asks you something, not when it only reports that it is idle.
 - The page shows one session at a time, chosen like this: the session that needs you first, else one that is working (so its sub-agents show), else the one that last reached "your turn". Click a dot or a row of the list to look at another session for 30 s.
 
 ### Quotas
 
 - Bottom bar: 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset). The hub polls them for the desktop app; a terminal status line can feed them too.
-- The page has no clock and no standby view: your computer already shows the time. The ESP32 gadget keeps its standby clock.
+- A small clock sits at the right of the bottom bar. The page has no standby view (the big clock after 5 idle minutes): that stays on the ESP32 gadget.
 
 ## How it works
 

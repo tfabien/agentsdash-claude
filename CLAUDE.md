@@ -28,6 +28,7 @@ The plugin installed at user level is `standup-bot@standup-bot`; with a local ma
 so a broken `notify.mjs` breaks every session's hooks.
 Host (where events go): env `CLAUDE_GADGET_HOST`, or `~/.claude/agent-gadget.json` `{"host": "...", "relay": {...}}`, default `127.0.0.1:8765` (the hub: the first hook starts it detached when the host is this machine).
 A device IP still works as host (events go straight to the device, no hub). The config and variable names (`agent-gadget.json`, `CLAUDE_GADGET_*`) are from the first version (see the README TODO).
+`idle_prompt` notifications are not sent (they bring back dropped or hidden sessions). The hub keeps `POST /dismiss` (hidden sessions return with a working, error or needs-you event) and `POST /settings` (beeps, shared by all pages).
 `CLAUDE_GADGET_DUMP=<file>` appends raw payloads, `CLAUDE_GADGET_DRY_RUN=1` prints the event instead of sending it, `CLAUDE_GADGET_MASK=1` hides commands.
 With `defaultMode: auto` no permission prompt appears, so no orange.
 The hub binds `127.0.0.1`, answers only requests whose Host is the hub and rejects foreign Origins (no CORS). Relay: `http` (device over Wi-Fi) or `serial` (USB lines, needs `npm install serialport` in `plugin/hub/`).

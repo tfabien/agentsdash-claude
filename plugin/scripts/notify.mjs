@@ -175,7 +175,8 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
       setMarker(marker);
       return event('needs_you', p.message || 'Needs your attention');
     }
-    if (kind === 'idle_prompt') return event('your_turn', 'Waiting for you');
+    // idle_prompt ("waiting for you", about 60 s after a turn) is not sent: Stop already said your turn, and the notification
+    // would bring back a session the hub dropped after 10 quiet minutes, or that the user hid.
     return null;
   }
   if (hook === 'Stop') { clearMarker(marker); return event('your_turn', 'Done, waiting for you'); }

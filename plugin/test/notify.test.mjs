@@ -162,7 +162,7 @@ test('notification_types', () => {
     assert.equal(build(payload(LEAD, 'Notification', { notification_type: kind, message: 'Claude needs your permission' })).state, 'needs_you', kind);
   }
   const { build } = builder();
-  assert.equal(build(payload(LEAD, 'Notification', { notification_type: 'idle_prompt', message: 'w' })).state, 'your_turn');
+  assert.equal(build(payload(LEAD, 'Notification', { notification_type: 'idle_prompt', message: 'w' })), null, 'idle_prompt is not sent');
   assert.equal(build(payload(LEAD, 'Notification', { notification_type: 'auth_success', message: 'ok' })), null);
 });
 
