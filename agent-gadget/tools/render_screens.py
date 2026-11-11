@@ -323,6 +323,25 @@ def scene_plan():
     return sc
 
 
+def scene_subs(n):
+    sess = [dict(SESS[0], subs=n)] + SESS[1:]
+    lead = dict(LEAD, cmd=f"Waiting on {n} sub-agents")
+    sc = Screen()
+    top_bar(sc, sess, 0)
+    lead_panel(sc, lead, False)
+    team_panel(sc, MORE[:n] if n != 3 else [SUBS[0], SUBS[1], SUBS[3]])
+    bottom(sc, H5, D7, "14:32")
+    return sc
+
+
+def scene_subs3():
+    return scene_subs(3)
+
+
+def scene_subs7():
+    return scene_subs(7)
+
+
 def scene_compact():
     sc = Screen()
     top_bar(sc, SESS, 0)
@@ -375,7 +394,7 @@ def scene_standby():
     return standby("14:32", "Wednesday 11 November", "3 sessions idle, last activity 4m ago", H5, D7)
 
 
-SCENES = {"main": scene_main, "plan": scene_plan, "compact": scene_compact, "detail": scene_detail, "question": scene_question,
+SCENES = {"main": scene_main, "plan": scene_plan, "subs3": scene_subs3, "subs7": scene_subs7, "compact": scene_compact, "detail": scene_detail, "question": scene_question,
           "menu": scene_menu, "setup": scene_setup, "standby": scene_standby}
 
 
