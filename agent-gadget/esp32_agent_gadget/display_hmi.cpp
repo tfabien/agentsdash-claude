@@ -112,8 +112,9 @@ static void erase(const Rect& r) { hmiPicCrop(r.x, r.y, r.w, r.h, PIC_BACKGROUND
 static const Session* selectedSession(const View& v) { return v.session >= 0 ? modelSession(v.session) : nullptr; }
 
 // A pending question takes the whole width (team rows hidden) and replaces the detail of a tapped sub-agent.
-static int panelSubs(const Session& s) { return modelAsking(s) ? 0 : modelSubCount(s); }
-static int shownSlot(const Session& s, uint32_t now) { return modelAsking(s) ? 0 : uiDetailSlot(s, now); }
+static bool menuShown() { return uiMenuOpen(millis()); }
+static int panelSubs(const Session& s) { return modelAsking(s) || menuShown() ? 0 : modelSubCount(s); }
+static int shownSlot(const Session& s, uint32_t now) { return modelAsking(s) || menuShown() ? 0 : uiDetailSlot(s, now); }
 
 // ---------- top bar ----------
 static uint32_t topSignature(const View& v) {
@@ -144,31 +145,23 @@ static void sessionText(const Session& s, int x, int y, int w, int h, int font, 
 static void drawTopContent(const View& v) {   // the caller targets and clears the top bar
   const Session* cur = selectedSession(v);
   Rect tab = layoutSelectedTab();
-  if (cur) sessionText(*cur, tab.x + 4, tab.y + 2, tab.w - 8, tab.h - 4, FONT_S20, C_TEXT, C_FRAME, C_CHIP);
-  int o[MAX_SESSIONS];
-  int others = uiOtherSessions(v.session, o);
-  Rect labels[2];
-  bool arrows;
-  int n = layoutLabels(others, labels, arrows);
-  int off = uiLabelOffset(others);
-  for (int i = 0; i < n && off + i < others; i++) {
-    Rect r = labels[i];
-    hmiPic(r.x, r.y, arrows ? PIC_LABEL_NARROW : PIC_LABEL);
-    sessionText(*modelSession(o[off + i]), r.x + 4, r.y + 2, r.w - 8, r.h - 4, FONT_S16, C_LIGHT, C_BAR, C_BAR);
+  int ns = modelSessionCount();
+  int dotsW = ns > 1 ? ns * 18 : 0, caretW = ns > 1 ? 24 : 0;
+  if (cur) {
+    hmiFill(tab.x, tab.y, tab.w, tab.h, C_FRAME);          // the tab spans the whole bar: the title gets the full width
+    sessionText(*cur, tab.x + 4, tab.y + 2, tab.w - 8 - dotsW - caretW, tab.h - 4, FONT_S20, C_TEXT, C_FRAME, C_CHIP);
   }
-  if (arrows) {
-    for (int side = 0; side < 2; side++) {
-      bool right = side == 1;
-      bool any = right ? off + 2 < others : off > 0;
-      Rect a = layoutArrow(right);
-      hmiPic(a.x, a.y, (right ? PIC_ARROW_R : PIC_ARROW_L) + (uiArrowAsks(right, v.session) ? 2 : any ? 0 : 1));
+  if (ns > 1) {                                    // one dot per session (state color), the selected one ringed, and the menu caret
+    int x0 = tab.x + tab.w - caretW - dotsW;
+    for (int t = 0; t < ns; t++) {
+      int cx = x0 + 9 + t * 18;
+      if (t == v.session) hmiCircle(cx, 16, 7, C_LIGHT);
+      hmiCircle(cx, 16, t == v.session ? 5 : 4, stateColor(modelSessionDot(*modelSession(t))));
     }
-  }
-  int asks = modelCount(ST_NEEDS_YOU);
-  if (asks > 0) {
-    Rect b = layoutBadge();
-    hmiFill(b.x, b.y + 2, b.w, b.h - 4, C_NEEDS);
-    hmiText(b.x, b.y + 2, b.w, b.h - 4, FONT_S16, C_SCREEN, C_NEEDS, 1, String(asks) + "!");
+    int cx = tab.x + tab.w - 18, cy = tab.y + 11;
+    hmiFill(cx, cy, 10, 2, C_LIGHT);               // caret v: tap opens the session list
+    hmiFill(cx + 2, cy + 2, 6, 2, C_LIGHT);
+    hmiFill(cx + 4, cy + 4, 2, 2, C_LIGHT);
   }
 }
 
@@ -176,6 +169,14 @@ static void drawTopContent(const View& v) {   // the caller targets and clears t
 static uint32_t leadSignature(const View& v, uint32_t now) {
   const Session* s = selectedSession(v);
   if (!s) return mix(mixStr(2166136261u, deviceInfo.ip.c_str()), deviceInfo.apMode);
+  if (menuShown()) {                              // the menu lists every session: redraw when one changes
+    uint32_t m = mix(2166136261u, 0x3E70u + v.session);
+    for (int t = 0; t < modelSessionCount(); t++) {
+      const Session* o = modelSession(t);
+      m = mix(mix(mixStr(mixStr(m, o->id), o->title[0] ? o->title : o->project), modelSessionDot(*o)), modelSubCount(*o));
+    }
+    return m;
+  }
   uint32_t h = mix(mixStr(2166136261u, s->id), panelSubs(*s) == 0);   // full width without sub-agents or with a question
   h = mixStr(mixStr(h, s->ask), s->askOpts);
   h = mix(mix(mix(h, s->lead.rev), modelEffectiveState(*s, s->lead)), s->usageRev);
@@ -197,7 +198,7 @@ static Rect leadStateLine(int nSubs = 1) {
 
 static void drawLeadAge(const View& v, uint32_t now) {   // rewrites the state line over itself: no erase, no flicker
   const Session* s = selectedSession(v);
-  if (!s) return;
+  if (!s || menuShown()) return;
   hmiTarget(HMI_STRIP, false);
   int slot = shownSlot(*s, now);
   const Agent& a = *modelAgent(*s, slot);
@@ -236,8 +237,10 @@ static uint16_t lerp565(uint16_t a, uint16_t b, int t, int n) {   // t/n of the 
 }
 
 static bool planParallel(const Session& s) { return s.planState[0] && s.planTotal <= 16 && (int)strlen(s.planState) == s.planTotal; }
+static bool planRunning(const Session& s, int i) { return planParallel(s) ? s.planState[i] == 'r' : (i == s.planDone && s.planCur[0]); }
+static bool planPulses(const Session& s) { return s.planTotal > 0 && s.planTotal <= 16 && (planParallel(s) || s.planCur[0]); }
 
-// Segment i of the plan bar. Per-task states drive the colors when steps run in parallel; running ones pulse.
+// Segment i of the plan bar. Running steps pulse (one, or several in parallel with per-task states).
 static void drawPlanSeg(const Session& s, int i, int x, int by, int w, int level) {   // level 0..PULSE_STEPS
   int seg = (w - 2 * (s.planTotal - 1)) / s.planTotal;
   uint16_t c;
@@ -245,7 +248,7 @@ static void drawPlanSeg(const Session& s, int i, int x, int by, int w, int level
     char st = s.planState[i];
     c = st == 'd' ? C_WORKING : st == 'r' ? lerp565(C_ACCENT_DIM, C_ACCENT, level, PULSE_STEPS) : C_CHIP;
   } else {
-    c = i < s.planDone ? C_WORKING : (i == s.planDone && s.planCur[0]) ? C_ACCENT : C_CHIP;
+    c = i < s.planDone ? C_WORKING : (i == s.planDone && s.planCur[0]) ? lerp565(C_ACCENT_DIM, C_ACCENT, level, PULSE_STEPS) : C_CHIP;
   }
   hmiFill(x + i * (seg + 2), by, seg, 6, c);
 }
@@ -322,6 +325,18 @@ static void drawQuestion(const Session& s, int x, int y, int w, const Rect& p) {
   }
 }
 
+// Session menu: one 36 px row per session (state dot, name, agent count); the selected one is framed.
+static void drawMenu(const View& v) {
+  for (int t = 0; t < modelSessionCount(); t++) {
+    Rect r = layoutMenuRow(t);
+    bool cur = t == v.session;
+    uint16_t bg = cur ? C_FRAME : C_ROW;
+    hmiFill(r.x, r.y, r.w, r.h, bg);
+    if (cur) hmiRect(r.x, r.y, r.w, r.h, C_LIGHT);
+    sessionText(*modelSession(t), r.x + 8, r.y + 4, r.w - 16, r.h - 8, FONT_S20, C_TEXT, bg, C_CHIP);
+  }
+}
+
 static void drawLeadPanel(const View& v, uint32_t now) {
   hmiTarget(HMI_STRIP, true);
   const Session* s = selectedSession(v);
@@ -334,6 +349,7 @@ static void drawLeadPanel(const View& v, uint32_t now) {
     erase({12, 36, 158, 204});                    // lead panel and the gap; the team erase restores 170..472
   }
   if (!s) { leadPanelMode = "empty"; drawLeadEmpty(); return; }
+  if (menuShown()) { leadPanelMode = "menu"; drawMenu(v); return; }
   int slot = shownSlot(*s, now);
   if (slot) { leadPanelMode = "detail"; drawDetail(*s, slot, now); return; }
   leadPanelMode = "lead";
@@ -585,7 +601,7 @@ static void animate(const View& v, uint32_t now) {
   animTick++;
   animSteps++;
   const Session* s = selectedSession(v);
-  if (!s) return;
+  if (!s || menuShown()) return;                  // the menu covers the lead sprite and the rows
   Rect p = layoutLeadPanel(panelSubs(*s));
   int slot = shownSlot(*s, now);
   const Agent& lead = *modelAgent(*s, slot);
@@ -618,12 +634,12 @@ static void pulsePlan(const View& v, uint32_t now) {
   lastPulse = now;
   pulsePhase++;
   const Session* s = selectedSession(v);
-  if (!s || strcmp(leadPanelMode, "lead") || !planParallel(*s)) return;
+  if (!s || strcmp(leadPanelMode, "lead") || !planPulses(*s)) return;
   Rect lp = layoutLeadPanel(panelSubs(*s));
   hmiTarget(HMI_STRIP, false);
   int ph = pulsePhase % (2 * PULSE_STEPS);
   for (int i = 0; i < s->planTotal; i++)
-    if (s->planState[i] == 'r') drawPlanSeg(*s, i, lp.x + 6, lp.y + 130, lp.w - 12, ph < PULSE_STEPS ? ph : 2 * PULSE_STEPS - ph);
+    if (planRunning(*s, i)) drawPlanSeg(*s, i, lp.x + 6, lp.y + 130, lp.w - 12, ph < PULSE_STEPS ? ph : 2 * PULSE_STEPS - ph);
 }
 
 // ---------- standby ----------

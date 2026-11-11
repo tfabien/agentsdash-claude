@@ -29,6 +29,22 @@ int uiDetailSlot(const Session& s, uint32_t now) {
   return 0;
 }
 
+// ---------- session menu ----------
+static bool menuOpen = false;
+static uint32_t menuUntil = 0;
+
+void uiMenuToggle(uint32_t now) {
+  menuOpen = !menuOpen && modelSessionCount() > 1;
+  menuUntil = now + MENU_MS;
+}
+
+void uiMenuClose() { menuOpen = false; }
+
+bool uiMenuOpen(uint32_t now) {
+  if (menuOpen && ((int32_t)(now - menuUntil) >= 0 || modelSessionCount() < 2)) menuOpen = false;
+  return menuOpen;
+}
+
 // ---------- session labels ----------
 int uiOtherSessions(int8_t selected, int out[MAX_SESSIONS]) {
   int n = 0;

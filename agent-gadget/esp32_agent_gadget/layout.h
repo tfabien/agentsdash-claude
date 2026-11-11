@@ -19,6 +19,8 @@ Rect layoutTeamHeader();
 Rect layoutBottomBar();
 Rect layoutClock();
 Rect layoutBadge();
+Rect layoutMenuRow(int i);             // row i of the session menu (full width of the lead panel area)
+int  layoutMenuHit(int x, int y, int n);   // menu row under a tap, -1 when none
 Rect layoutMuteButton();                // bottom bar, left of the clock: toggles the buzzer
 int  layoutLabels(int others, Rect out[2], bool& arrows);   // visible session labels (0..2); arrows when others > 2
 Rect layoutArrow(bool right);

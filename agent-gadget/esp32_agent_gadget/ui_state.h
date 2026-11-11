@@ -6,6 +6,7 @@
 
 #define STANDBY_MS 300000UL         // 5 min with no active agent: full-screen clock
 #define DETAIL_MS  10000UL          // the tapped agent's detail stays 10 s in the lead panel
+#define MENU_MS    8000UL           // the session menu closes by itself after 8 s without a tap
 #define TEAM_ROWS  7                // rows of the team panel (the 7th is "+N more" past 7 sub-agents)
 
 void uiStateConfigure(uint32_t standbyMs, uint32_t detailMs);
@@ -15,7 +16,12 @@ void uiShowDetail(const Session& s, int slot, uint32_t now);
 void uiHideDetail();
 int  uiDetailSlot(const Session& s, uint32_t now);         // slot shown in the lead panel: 0 = lead (no detail)
 
-// Session labels: the sessions other than the selected one, model order, two visible from the offset.
+// Session menu (dropdown): opened by a tap on the selected tab, lists every session; it takes the lead panel area.
+void uiMenuToggle(uint32_t now);
+void uiMenuClose();
+bool uiMenuOpen(uint32_t now);                             // false once MENU_MS passed
+
+// Session labels (no longer drawn: the menu replaces them): the sessions other than the selected one, model order, two visible from the offset.
 int  uiOtherSessions(int8_t selected, int out[MAX_SESSIONS]);
 int  uiLabelOffset(int others);                            // clamped to others - 2 (0 when 2 or fewer)
 void uiScrollLabels(int delta, int others);

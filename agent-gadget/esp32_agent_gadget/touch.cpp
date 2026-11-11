@@ -12,6 +12,16 @@ void uiTap(int x, int y, uint32_t holdMs) {
   const Session* cur = v.session >= 0 ? modelSession(v.session) : nullptr;
   int o[MAX_SESSIONS];
   int others = uiOtherSessions(v.session, o);
+  if (uiMenuOpen(now)) {                              // the menu is open: a row selects, any other tap closes it
+    int row = layoutMenuHit(x, y, modelSessionCount());
+    if (row >= 0) {
+      const Session* s = modelSession(row);
+      modelSelect(s->id, modelAgent(*s, modelDefaultSlot(*s))->id, now, holdMs);
+      uiHideDetail();
+    }
+    uiMenuClose();
+    return;
+  }
   Hit h = hitTest(x, y, others, cur && !modelAsking(*cur) ? modelSubCount(*cur) : 0);   // a question takes the whole width
   switch (h.kind) {
     case Hit::Label: {
@@ -40,6 +50,7 @@ void uiTap(int x, int y, uint32_t holdMs) {
       if (cur) modelSelect(cur->id, cur->lead.id, now, holdMs);
       uiHideDetail();
       break;
+    case Hit::SelectedTab: uiMenuToggle(now); break;
     case Hit::Mute: soundCycle(); break;
     default: break;
   }
