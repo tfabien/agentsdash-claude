@@ -15,7 +15,8 @@ const TITLE_LEN = 47;
 const DESKTOP_TOOL = 'mcp__ccd_turn__update_plan';     // the desktop app's task list
 const DESKTOP_WRAP_UP = 'mcp__ccd_turn__wrap_up';       // the desktop app closes the task list of a turn with it
 const LOCK_WAIT_MS = 2000;      // give up waiting for the lock after this (the event goes out without a plan update)
-const LOCK_STALE_MS = 10000;    // a lock older than this was left by a killed process
+const LOCK_STALE_MS = 10000;
+const PLAN_MAX_AGE_MS = 6 * 3600 * 1000;    // a list untouched for this long belongs to a finished piece of work    // a lock older than this was left by a killed process
 
 const clean = (text) => asciiClean(text, TITLE_LEN);
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -32,6 +33,15 @@ function load(file) {
   if (Array.isArray(data)) data = { tasks: data, had: data.length > 0 };       // older format: the list alone
   const tasks = (Array.isArray(data?.tasks) ? data.tasks : []).filter((t) => t && typeof t === 'object' && 'id' in t && 'status' in t);
   return [tasks, Boolean(data?.had) || tasks.length > 0];
+}
+
+/** The plan of a session for other scripts: {tasks, had, ageMs}; ageMs is null when no state file exists. */
+export function readPlan(dir, sessionId, now = Date.now()) {
+  const file = statePath(dir, sessionId);
+  const [tasks, had] = load(file);
+  let ageMs = null;
+  try { ageMs = now - fs.statSync(file).mtimeMs; } catch { /* no plan file */ }
+  return { tasks, had, ageMs };
 }
 
 function save(file, tasks, had) {
@@ -110,16 +120,32 @@ export function fields(tasks, had) {
     plan_done: tasks.filter((t) => t.status === 'completed').length, plan_total: tasks.length,
     plan_cur: running.map((t) => t.title).join(' + '), plan_next: pending.length ? pending[0].title : '',
   };
+  out.plan_items = tasks.slice(0, 30).map((t) => `${{ completed: 'd', in_progress: 'r' }[t.status] ?? 'p'}:${t.title}`);     // for the page: tap a step to read it
   if (running.length > 1) {         // parallel steps: the screen pulses each running segment ("d", "r", "p" per task)
     out.plan_state = tasks.slice(0, 16).map((t) => ({ completed: 'd', in_progress: 'r' }[t.status] ?? 'p')).join('');
   }
   return out;
 }
 
+/** Forget the list when it is out of date: a new session, a finished list when the next prompt arrives, or one untouched for hours. */
+function dropStale(file, hook) {
+  let stale = hook === 'SessionStart';
+  if (!stale) {
+    try {
+      if (Date.now() - fs.statSync(file).mtimeMs > PLAN_MAX_AGE_MS) stale = true;
+      else if (hook === 'UserPromptSubmit') { const [tasks] = load(file); stale = tasks.length > 0 && tasks.every((t) => t.status === 'completed'); }
+    } catch { return; }
+  }
+  if (stale) { try { fs.unlinkSync(file); } catch { /* nothing to drop */ } }
+}
+
 export function update(dir, payload) {
   if (payload.agent_id) return null;                              // sub-agents' own task lists are not the session plan
   const file = statePath(dir, payload.session_id);
   const name = String(payload.tool_name || '');
+  const hadFile = fs.existsSync(file);
+  dropStale(file, payload.hook_event_name);
+  if (hadFile && !fs.existsSync(file)) return { plan_done: 0, plan_total: 0, plan_cur: '', plan_next: '', plan_items: [] };     // tell the hub to clear it
   if (payload.hook_event_name !== 'PostToolUse' || !name) return fields(...load(file));
   fs.mkdirSync(dir, { recursive: true });
   return withLock(file, () => {

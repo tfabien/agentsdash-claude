@@ -34,6 +34,15 @@ Payloads are read as UTF-8 (Windows defaults stdin to cp1252); text is cut to AS
 `AskUserQuestion` (lead only) sends `needs_you` with `question` (<= 120 characters) and `options` (up to 4 labels joined by `|`); the screen shows them full width until the answer (`PostToolUse`).
 A create after a fully done list starts a new list. Sub-agents' own task lists are ignored.
 
+### Prompts
+
+The screen can only show questions that go through `AskUserQuestion` and plans built from task-list tool calls.
+`scripts/session_prompts.mjs` (hooks `SessionStart` and `UserPromptSubmit`) asks Claude to do both. It adds text to every
+session. It is on by default; turn it off with `CLAUDE_GADGET_PROMPTS=0` or `{"prompts": false}` in `~/.claude/agent-gadget.json`
+(the variable wins over the file). `SessionStart` adds three rules (ask through `AskUserQuestion`, create a task list
+for multi-step work, keep it current). `UserPromptSubmit` adds a reminder when the task list has unfinished steps and has not
+changed for 10 minutes. Sub-agents get nothing. Open a new session after changing the setting.
+
 ## Status line (context and plan quotas)
 
 `scripts/statusline.mjs` is a Claude Code status line. It prints `ctx 42% | 5h 48% 1h20 | 7d 61% 2d03h` and posts the

@@ -344,7 +344,7 @@ test('hooks_json_registers_every_event_with_node', () => {
   for (const [name, groups] of Object.entries(hooks)) {
     const cmd = groups[0].hooks[0].command;
     assert.ok(cmd.includes('node "${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs"'), name);
-    assert.ok(!/python/.test(cmd), name);
+    for (const g of groups) assert.ok(!/python/.test(g.hooks[0].command), name);
   }
 });
 

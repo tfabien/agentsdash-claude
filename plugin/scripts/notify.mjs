@@ -23,7 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { asciiClean, configWindow, hubHost, pluginConfig, stateDir } from './common.mjs';
-import { postEvent } from './hub_client.mjs';
+import { postEvent, restartStaleHub } from './hub_client.mjs';
 import { update as updatePlan } from './plan_tracker.mjs';
 import { contextWindow, loadCache, saveCache, scan } from './transcript_usage.mjs';
 
@@ -206,6 +206,7 @@ export function addUsage(ev, p, dir, mask = false, windowDefault = 1000000) {
     cache[file] = entry;
     saveCache(dir, session4, cache);
     const out = { ...ev, tok: entry.tokens };
+    if (entry.model) out.model = asciiClean(entry.model, 40);
     if (!isSub) {
       out.stok = Object.values(cache).reduce((sum, e) => sum + (e && typeof e === 'object' ? e.tokens || 0 : 0), 0);
       if (entry.last_ctx > 0) {
@@ -248,6 +249,7 @@ async function main() {
   if (!ev) return;
   ev = addPlan(addUsage(ev, p, dir, Boolean(env.CLAUDE_GADGET_MASK), configWindow(pluginConfig(env))), plan);
   if (env.CLAUDE_GADGET_DRY_RUN) { process.stderr.write(`${JSON.stringify(ev)}\n`); return; }
+  if (ev.evt === 'SessionStart') await restartStaleHub({ host: hubHost(env) });       // a plugin update leaves an old hub running
   await postEvent(ev, { host: hubHost(env), timeoutMs: 1500 });
 }
 

@@ -9,7 +9,7 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 ## Layout of the repo
 
 - `plugin/` - the Claude Code plugin `standup-bot` (what users install; the marketplace file is `.claude-plugin/marketplace.json`, source `./plugin`).
-  - `hooks/hooks.json`, `scripts/` - hooks -> `notify.mjs` -> `POST /event` v2; `statusline.mjs`, `transcript_usage.mjs`, `plan_tracker.mjs`, `hub_client.mjs`, `common.mjs`. Node >= 18, stdlib only.
+  - `hooks/hooks.json`, `scripts/` - hooks -> `notify.mjs` -> `POST /event` v2; `statusline.mjs`, `transcript_usage.mjs`, `plan_tracker.mjs`, `session_prompts.mjs` (rules and stale-plan reminder, on by default), `hub_client.mjs`, `common.mjs`. Node >= 18, stdlib only.
   - `hub/` - the hub: `hub.mjs` (HTTP + SSE), `model.mjs` (port of `devices/artillery-x3-esp32/firmware/model.cpp`), `web/` (the page: `screen.js` decides, `vector_screen.js` draws, `app.js` wires, `scenes.js` fixed scenes),
     `quotas.mjs`, `relay_http.mjs`, `relay_serial.mjs`, `tui.mjs`, `tools/screenshots.mjs`, `test/`.
   - `test/` - tests of the hooks. Everything the plugin needs at run time is inside `plugin/` (a marketplace install copies only that folder).
