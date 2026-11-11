@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createModel } from './model.mjs';
 import { loadConfig } from './config.mjs';
 import { createQuotaPoller, quotasEnabled } from './quotas.mjs';
+import { createHttpRelay } from './relay_http.mjs';
 import { stateDir } from '../claude-plugin/agent-gadget/scripts/common.mjs';
 
 const WEB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'web');
@@ -72,6 +73,7 @@ export function startHub(opts = {}) {
     switch (route) {
       case 'GET /health': return json(res, { ok: true });
       case 'GET /state': return json(res, stateJson());
+      case 'GET /relay': return json(res, relay ? { mode: 'http', host: config.relay.host, ...relay.status() } : { mode: 'none' });
       case 'GET /events': {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'Access-Control-Allow-Origin': '*' });
         res.write(`data: ${JSON.stringify(stateJson())}\n\n`);
@@ -116,6 +118,13 @@ export function startHub(opts = {}) {
   });
   const timer = setInterval(() => { model.prune(now()); if (clients.size) publish(); }, TICK_MS);
   timer.unref();
+
+  // Relay to a gadget over Wi-Fi: every accepted event and usage report is forwarded as received.
+  const relay = config.relay?.mode === 'http' && config.relay.host ? createHttpRelay({ host: config.relay.host }) : null;
+  if (relay) {
+    eventTaps.push((body) => relay.send('/event', body));
+    usageTaps.push((body) => relay.send('/usage', body));
+  }
 
   // Plan quotas for the desktop app (no status line): polled while a session exists, applied like a POST /usage.
   const quotaOpts = opts.quota ?? {};

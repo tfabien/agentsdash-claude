@@ -32,6 +32,14 @@ The hub binds to `127.0.0.1` only and has no authentication.
 | `quotas` | `true` | Poll the 5-hour and weekly plan quotas (env `CLAUDE_GADGET_QUOTAS=0` turns it off). |
 | `context_window` | `1000000` | Context window used for the context estimate (tokens). |
 
+## Relay to a gadget (Wi-Fi)
+
+With `"relay": {"mode": "http", "host": "192.168.1.100"}` every event and usage report the hub accepts is forwarded
+unchanged to the gadget (`POST /event`, `POST /usage`). `GET /relay` shows the state (`ok`, `lastError`, `queued`).
+If the gadget is down, the hub keeps working and retries after 3 seconds (only the latest event per agent is kept).
+The gadget aborts a screen upload (`/tft`) on any other request: create the file `agent-gadget-tft.lock` in the temp
+folder before uploading and delete it afterwards, and the relay sends nothing meanwhile.
+
 ## HTTP API
 
 `POST /event`, `POST /usage`, `GET /state`, `POST /select`, `POST /reset` as on the gadget
