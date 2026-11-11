@@ -418,6 +418,11 @@ void displayProgress(int percent) {
   hmiText(10, 190, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, String(percent) + " %");
 }
 
+void displayRaw(const String& cmd) {
+  if (!messageMode) { messageMode = true; dropQueues(); }
+  hmiSendNow(cmd);
+}
+
 void displayInvalidate() {
   messageMode = false;
   fullRedraw = true;

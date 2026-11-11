@@ -21,6 +21,11 @@ void displayProgress(int percent) {
   Serial.printf("[display] %d %%\n", percent);
 }
 
+void displayRaw(const String& cmd) {
+  Serial.print("[display] raw: ");
+  Serial.println(cmd);
+}
+
 void displayInvalidate() {
   messageMode = false;
   lastModelRev = ~0u;

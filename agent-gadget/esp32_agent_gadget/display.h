@@ -24,6 +24,8 @@ void displayMessage(const String& title, const String& l1 = "", const String& l2
                     const String& l3 = "", Tone tone = Tone::Info);
 void displayProgress(int percent);          // progress (0-100) under a message
 void displayInvalidate();                   // back to the agent list, fully redrawn
+// Raw screen command (debug builds, /debug/hmi): sent at once; drawing pauses until displayInvalidate().
+void displayRaw(const String& cmd);
 void displayRender();                       // call often: only draws what changed
 // Screen firmware (.tft) download, driven by the core's /tft upload handler. Drawing and touch stop meanwhile.
 bool displayTftBegin(uint32_t size, String& err);

@@ -233,6 +233,17 @@ static void handleDebugTft() {         // GET /debug/tft: state of the last scre
   server.send(200, "application/json", displayTftStatus());
 }
 
+static void handleDebugHmi() {         // POST /debug/hmi {"cmd": "..."} or {"release": true}: raw screen commands
+  cors();
+  String body = server.arg("plain");
+  bool release = false;
+  if (jsonBool(body, "release", release) && release) { displayInvalidate(); server.send(200, "application/json", "{\"ok\":true}"); return; }
+  static char cmd[256];
+  if (!jsonGet(body, "cmd", cmd, sizeof cmd)) { server.send(400, "text/plain", "cmd required"); return; }
+  displayRaw(cmd);
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
 static void handleDebugHit() {         // GET /debug/hit?x&y&tabs&subs
   Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("tabs", 0), intArg("subs", 0));
   const char* kind = h.kind == Hit::Tab ? "tab" : h.kind == Hit::Agent ? "agent" : "none";
@@ -457,6 +468,7 @@ void netBegin() {
   server.on("/debug/config", HTTP_POST, handleDebugConfig);
 server.on("/debug/layout", HTTP_GET, handleDebugLayout);
 server.on("/debug/hit", HTTP_GET, handleDebugHit);
+server.on("/debug/hmi", HTTP_POST, handleDebugHmi);
 server.on("/debug/tap", HTTP_POST, handleDebugTap);
 server.on("/debug/stats", HTTP_GET, handleDebugStats);
 server.on("/debug/tft", HTTP_GET, handleDebugTft);
