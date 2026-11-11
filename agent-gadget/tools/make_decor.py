@@ -113,19 +113,71 @@ def arrow(right, kind):
     return make
 
 
-def sprite(role, size, bg):
-    """The role look of make_sprites.py, black background replaced by the panel or row color."""
-    import make_sprites
-    grid = [[bg if px == make_sprites.BLACK else px for px in r] for r in make_sprites.look(role)]
+ROLE_COLORS = {"lead": (212, 167, 44), "general": (110, 123, 242), "explore": (47, 181, 165), "plan": (163, 113, 247),
+               "review": (219, 97, 162), "test": (176, 125, 79), "code": (76, 142, 218), "generic": (139, 148, 158)}
+VISOR = (13, 17, 23)
+EYE = (230, 237, 243)
+
+
+def _dim(c, k):
+    return tuple(int(v * k) for v in c)
+
+
+def sprite(role, size, bg, blink=False):
+    """Small flat robot (mockup option B): role-color head, dark visor with two eyes, role accessory on top,
+    darker torso with a role mark. Drawn in a 24x28 unit space, scaled to `size`; `blink` closes the eyes."""
     w, h = size
-    k = 3 if w == 36 else 2 if w == 24 else 1
-    pix = make_sprites.scale(grid, k)
-    img = Image.new("RGB", (w, h), bg)
-    ox, oy = (w - len(pix[0])) // 2, (h - len(pix)) // 2
-    for y, r in enumerate(pix):
-        for x, c in enumerate(r):
-            img.putpixel((ox + x, oy + y), c)
-    return img
+    k = w / 24 * SS
+    img = Image.new("RGB", (w * SS, h * SS), bg)
+    d = ImageDraw.Draw(img)
+    c = ROLE_COLORS[role]
+
+    def P(x, y):
+        return (x * k, y * k)
+
+    def box(x0, y0, x1, y1, r, **kw):
+        d.rounded_rectangle([x0 * k, y0 * k, x1 * k - 1, y1 * k - 1], radius=r * k, **kw)
+
+    def ln(points, width, fill):
+        d.line([P(*p) for p in points], fill=fill, width=max(1, int(width * k)), joint="curve")
+
+    hats = {
+        "lead": lambda: d.polygon([P(7, 5), P(8, 1.5), P(10.2, 3.6), P(12, .8), P(13.8, 3.6), P(16, 1.5), P(17, 5)], fill=(242, 204, 96)),
+        "general": lambda: (ln([(12, 5), (12, 2)], 1.4, c), d.ellipse([*P(10.7, .5), *P(13.3, 3.1)], fill=c)),
+        "explore": lambda: (ln([(12, 5), (12, 2.6)], 1.4, c), d.ellipse([*P(10.2, .2), *P(13.8, 3.8)], fill=(255, 246, 194))),
+        "plan": lambda: d.polygon([P(5.5, 4.2), P(12, 1.5), P(18.5, 4.2), P(12, 6.4)], fill=(43, 47, 69)),
+        "test": lambda: box(6, 2.4, 18, 5.4, 1.5, fill=EYE),
+        "code": lambda: (d.arc([*P(5, 2.5), *P(19, 15.5)], 180, 360, fill=(48, 54, 61), width=int(1.8 * k)),
+                         box(3.4, 8, 6, 12.4, 1, fill=(48, 54, 61)), box(18, 8, 20.6, 12.4, 1, fill=(48, 54, 61))),
+    }
+    box(5, 5, 19, 17, 4, fill=c)                                        # head
+    if role in hats:
+        hats[role]()
+    box(7, 8, 17, 13.5, 2.6, fill=VISOR)                                # visor
+    for x in (8.8, 13):                                                 # eyes
+        if blink:
+            box(x, 10.5, x + 2.2, 11.4, .4, fill=EYE)
+        else:
+            box(x, 9.6, x + 2.2, 12, 1, fill=EYE)
+    if role == "review":                                                # glasses
+        for x in (7.6, 12.4):
+            box(x, 9, x + 4, 12.6, 1.6, outline=(255, 255, 255), width=max(1, int(.9 * k)))
+    box(7, 18.5, 17, 26, 3, fill=_dim(c, .7))                           # torso
+    white = (255, 255, 255)
+    marks = {                                                           # role mark on the chest, centered on (12, 22.2)
+        "lead": lambda: d.polygon([P(9.6, 23.8), P(10, 21), P(11, 22.2), P(12, 20.4), P(13, 22.2), P(14, 21), P(14.4, 23.8)], fill=white),
+        "general": lambda: d.ellipse([*P(10.6, 20.8), *P(13.4, 23.6)], outline=white, width=max(1, int(.8 * k))),
+        "explore": lambda: (d.ellipse([*P(10, 20.2), *P(13, 23.2)], outline=white, width=max(1, int(.8 * k))),
+                            ln([(12.6, 22.8), (14.2, 24.4)], .9, white)),
+        "plan": lambda: [ln([(10.2, y), (13.8, y)], .7, white) for y in (20.9, 22.2, 23.5)],
+        "review": lambda: (d.ellipse([*P(9.6, 21), *P(14.4, 23.4)], outline=white, width=max(1, int(.7 * k))),
+                           d.ellipse([*P(11.3, 21.5), *P(12.7, 22.9)], fill=white)),
+        "test": lambda: d.polygon([P(11.2, 20.4), P(12.8, 20.4), P(12.8, 21.6), P(14.4, 24), P(9.6, 24), P(11.2, 21.6)], fill=white),
+        "code": lambda: (ln([(11, 20.8), (9.8, 22.2), (11, 23.6)], .8, white), ln([(13, 20.8), (14.2, 22.2), (13, 23.6)], .8, white)),
+        "generic": lambda: [d.ellipse([*P(x - .6, 21.6), *P(x + .6, 22.8)], fill=white) for x in (10.2, 12, 13.8)],
+    }
+    marks[role]()
+    return _reduce(img)
 
 
 def standby():
@@ -157,6 +209,9 @@ for _i, _role in enumerate(ROLES):
     PICTURES[27 + _i] = (f"{27 + _i}_{_role}_big.png", lambda r=_role: sprite(r, (36, 42), PANEL))
     PICTURES[35 + _i] = (f"{35 + _i}_{_role}_small.png", lambda r=_role: sprite(r, (24, 28), ROW))
     PICTURES[43 + _i] = (f"{43 + _i}_{_role}_tiny.png", lambda r=_role: sprite(r, (16, 18), ROW))
+    PICTURES[63 + _i] = (f"{63 + _i}_{_role}_big_blink.png", lambda r=_role: sprite(r, (36, 42), PANEL, True))
+    PICTURES[71 + _i] = (f"{71 + _i}_{_role}_small_blink.png", lambda r=_role: sprite(r, (24, 28), ROW, True))
+    PICTURES[79 + _i] = (f"{79 + _i}_{_role}_tiny_blink.png", lambda r=_role: sprite(r, (16, 18), ROW, True))
 for _d in range(10):
     PICTURES[52 + _d] = (f"{52 + _d}_digit_{_d}.png", lambda c=str(_d): glyph(c, (56, 96)))
 

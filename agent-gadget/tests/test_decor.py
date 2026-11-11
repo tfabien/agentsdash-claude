@@ -28,6 +28,10 @@ def expected():
     for d in range(10):
         out[52 + d] = (f"{52 + d}_digit_{d}.png", 56, 96)
     out[62] = ("62_colon.png", 24, 96)
+    for i, role in enumerate(ROLES):                     # closed-eye frames of the robots (blinking)
+        out[63 + i] = (f"{63 + i}_{role}_big_blink.png", 36, 42)
+        out[71 + i] = (f"{71 + i}_{role}_small_blink.png", 24, 28)
+        out[79 + i] = (f"{79 + i}_{role}_tiny_blink.png", 16, 18)
     return out
 
 
@@ -43,7 +47,7 @@ class DecorTest(unittest.TestCase):
             self.assertEqual((width, height), (w, h), name)
 
     def test_ids_are_contiguous_from_16(self):
-        self.assertEqual(sorted(expected()), list(range(16, 63)))
+        self.assertEqual(sorted(expected()), list(range(16, 87)))
 
     def test_background_zone_colors(self):
         _, _, px = load(16)
@@ -62,9 +66,22 @@ class DecorTest(unittest.TestCase):
             self.assertEqual(px[h // 2][w // 2], ROW)
 
     def test_sprite_corners_match_their_background(self):
-        for pid in range(27, 51):
+        for pid in list(range(27, 51)) + list(range(63, 87)):
             w, h, px = load(pid)
-            self.assertEqual(px[0][0], PANEL if pid < 35 else ROW, pid)
+            self.assertEqual(px[0][0], PANEL if pid < 35 or 63 <= pid < 71 else ROW, pid)
+
+    def test_robots_differ_by_role_and_blink_frames_differ(self):
+        for base in (27, 35, 43):
+            looks = [load(base + i)[2] for i in range(8)]
+            for a in range(8):
+                for b in range(a + 1, 8):
+                    self.assertNotEqual(looks[a], looks[b], (base + a, base + b))
+            for i in range(8):
+                self.assertNotEqual(load(base + i)[2], load(base + 36 + i)[2], base + i)   # 27 -> 63, 35 -> 71, 43 -> 79
+
+    def test_robot_body_uses_the_role_color(self):
+        w, h, px = load(27)                                # lead, big: body color sampled left of the visor
+        self.assertEqual(px[int(h * 0.30)][int(w * 0.27)], (212, 167, 44))
 
     def test_digits_differ_pairwise(self):
         digits = [load(52 + d)[2] for d in range(10)]
