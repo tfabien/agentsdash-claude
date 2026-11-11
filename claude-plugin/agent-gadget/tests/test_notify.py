@@ -30,6 +30,19 @@ def run_script(data, extra_env=None, remove_env=()):
                           capture_output=True, text=True, env=env, timeout=10)
 
 
+class PlanFieldsTest(unittest.TestCase):
+    def test_lead_event_carries_plan_fields(self):
+        sid = f"plan{os.getpid()}{int(time.time())}"
+        base = {"session_id": sid, "cwd": "C:/work/demo"}
+        run_script(payload(base, "PostToolUse", tool_name="TaskCreate", tool_input={"subject": "Write the tests"},
+                           tool_response={"task": {"id": "1", "subject": "Write the tests"}}),
+                   {"CLAUDE_GADGET_QUOTAS": "0"})
+        out = run_script(payload(base, "PreToolUse", tool_name="Edit", tool_input={"file_path": "a.py"}),
+                         {"CLAUDE_GADGET_QUOTAS": "0"})
+        ev = json.loads(out.stderr.strip().splitlines()[-1])
+        self.assertEqual((ev["plan_done"], ev["plan_total"], ev["plan_cur"], ev["plan_next"]), (0, 1, "", "Write the tests"))
+
+
 class DumpTest(unittest.TestCase):
     def test_dump_only_when_env_set(self):
         with tempfile.TemporaryDirectory() as folder:

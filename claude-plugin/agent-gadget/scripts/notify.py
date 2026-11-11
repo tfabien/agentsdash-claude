@@ -267,6 +267,21 @@ def add_usage(ev, payload, state_dir, mask=False, window_default=1000000):
         return ev
 
 
+def track_plan(payload, state_dir):
+    """Plan progress (plan_tracker.py) after this payload; None on any error, the event still goes out."""
+    try:
+        import plan_tracker
+        return plan_tracker.update(state_dir, payload)
+    except Exception:
+        return None
+
+
+def add_plan(ev, plan):
+    if plan and ev.get("agent") == "lead":
+        ev.update(plan)
+    return ev
+
+
 DEFAULT_PROTOCOL = 2        # 1 = old flat {agent,state,task} for a gadget flashed before the v2 firmware
 V1_STATES = {"working": "working", "needs_you": "waiting", "your_turn": "done", "done": "done", "error": "error"}
 
@@ -301,6 +316,7 @@ def main():
     if not os.environ.get("CLAUDE_GADGET_DRY_RUN"):
         import quotas                    # plan quotas for the desktop app (no status line), at most once a minute
         quotas.spawn_if_due()
+    plan = track_plan(payload, os.path.join(tempfile.gettempdir(), "agent-gadget-plugin"))   # every payload, even without an event
     ev = build_event(payload)
     if not ev:
         return
@@ -309,6 +325,7 @@ def main():
     else:
         ev = add_usage(ev, payload, os.path.join(tempfile.gettempdir(), "agent-gadget-plugin"),
                        bool(os.environ.get("CLAUDE_GADGET_MASK")), config_window(config()))
+        ev = add_plan(ev, plan)
     if os.environ.get("CLAUDE_GADGET_DRY_RUN"):
         sys.stderr.write(json.dumps(ev) + "\n")
         return
