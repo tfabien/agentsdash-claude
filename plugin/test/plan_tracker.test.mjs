@@ -5,7 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { update, statePath, fields } from '../scripts/plan_tracker.mjs';
+import { update as rawUpdate, statePath, fields as rawFields } from '../scripts/plan_tracker.mjs';
+const noItems = (o) => { if (o) delete o.plan_items; return o; };          // the step list is checked by the model tests
+const update = (d, p) => noItems(rawUpdate(d, p));
+const fields = (t, h) => noItems(rawFields(t, h));
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', `tasklist_${name}.json`), 'utf8'));

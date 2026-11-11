@@ -1,5 +1,6 @@
 // POST to the hub, starting it when it is not running. Never throws, never prints.
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +18,13 @@ function request(host, route, method, body, timeoutMs) {
     const req = http.request({
       hostname: u.hostname.replace(/^\[|\]$/g, ''), port: u.port || 80, path: u.pathname, method, agent: false, timeout: Math.max(50, timeoutMs),
       headers: body === undefined ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-    }, (res) => { res.resume(); res.on('end', () => resolve({ status: res.statusCode })); res.on('error', () => resolve({ error: 'response' })); });
+    }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { if (text.length < 4096) text += c; });
+      res.on('end', () => resolve({ status: res.statusCode, text }));
+      res.on('error', () => resolve({ error: 'response' }));
+    });
     req.on('timeout', () => { req.destroy(); resolve({ error: 'timeout' }); });
     req.on('error', (e) => resolve({ error: e.code || 'error' }));
     req.end(body);
@@ -44,6 +51,44 @@ function spawnHub(script) {
     child.on('error', () => {});
     child.unref();
   } catch { /* the event is dropped */ }
+}
+
+const real = (f) => { try { return fs.realpathSync(f); } catch { return f; } };
+
+/** Newest change time of the files a hub runs on (hub/*.mjs and scripts/common.mjs). */
+function newestHubFile() {
+  let newest = 0;
+  for (const dir of [path.dirname(DEFAULT_HUB_SCRIPT), HERE]) {
+    try { for (const n of fs.readdirSync(dir)) if (n.endsWith('.mjs')) newest = Math.max(newest, fs.statSync(path.join(dir, n)).mtimeMs); } catch { /* skip */ }
+  }
+  return newest;
+}
+
+function localVersion() {
+  try { return JSON.parse(fs.readFileSync(path.resolve(HERE, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version ?? ''; } catch { return ''; }
+}
+
+/**
+ * A hub left over from an older plugin version (other version or script, or started before its files changed) is asked to leave;
+ * the next post starts a fresh one. Only for a hub on this machine. Never throws.
+ * @returns {Promise<boolean>} true when an old hub was told to stop.
+ */
+export async function restartStaleHub({ host, hubScript } = {}) {
+  try {
+    if (!isLoopback(host)) return false;
+    const r = await request(host, '/health', 'GET', undefined, 300);
+    if (r.status !== 200) return false;
+    const info = JSON.parse(r.text);
+    const script = hubScript || process.env.CLAUDE_GADGET_HUB_SCRIPT || DEFAULT_HUB_SCRIPT;
+    const stale = (info.version ?? '') !== localVersion() || real(info.script ?? '') !== real(script) || (info.startedAt ?? 0) < newestHubFile();
+    if (!stale) return false;
+    await request(host, '/shutdown', 'POST', '{}', 300);
+    for (const until = Date.now() + 700; Date.now() < until;) {            // wait for the port to be free
+      if ((await request(host, '/health', 'GET', undefined, 100)).error) return true;
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    return true;
+  } catch { return false; }
 }
 
 /**
