@@ -21,6 +21,15 @@ The checkbox under the page beeps when a session starts to need you.
 
 The hub binds to `127.0.0.1` only and has no authentication.
 
+## Terminal view
+
+```bash
+node agent-hub/tui.mjs [--host 127.0.0.1:8765]
+```
+
+The same information in the terminal, with colors: one block per session (most urgent first), its plan, context, question
+and sub-agents, then the quotas. It follows `GET /events` and reconnects when the hub restarts. Ctrl+C quits.
+
 ## Configuration
 
 `~/.claude/agent-gadget.json` (all keys optional) and environment variables:
@@ -28,7 +37,7 @@ The hub binds to `127.0.0.1` only and has no authentication.
 | Key | Default | Meaning |
 |---|---|---|
 | `host` | `127.0.0.1:8765` | Where the plugin sends events and where the hub listens (env `CLAUDE_GADGET_HOST`). |
-| `relay` | `{"mode":"none"}` | `{"mode":"http","host":"<gadget ip>"}` forwards events to a gadget over Wi-Fi. |
+| `relay` | `{"mode":"none"}` | `{"mode":"http","host":"<gadget ip>"}` forwards events to a gadget over Wi-Fi; `{"mode":"serial","port":"COM3"}` over USB. |
 | `quotas` | `true` | Poll the 5-hour and weekly plan quotas (env `CLAUDE_GADGET_QUOTAS=0` turns it off). |
 | `context_window` | `1000000` | Context window used for the context estimate (tokens). |
 
@@ -67,6 +76,8 @@ change and every second), `GET /health` and `GET /` (the page).
 
 - `hub.mjs` HTTP server and wiring, `config.mjs` configuration.
 - `model.mjs` state rules, a port of `model.cpp` (5 sessions, 12 sub-agents each, "needs you" first, TTLs, selection).
+- `relay_http.mjs`, `relay_serial.mjs` forward events to a gadget (Wi-Fi, USB).
+- `tui.mjs` terminal view.
 - `quotas.mjs` plan quota poller (OAuth token from `~/.claude/.credentials.json`, never printed).
 - `web/` the page (`render.js` is a pure function from the state to HTML, shared with the tests).
 
