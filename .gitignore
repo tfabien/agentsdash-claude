@@ -7,3 +7,6 @@ EdtHmiStudio-*.exe
 .superpowers/
 __pycache__/
 *.pyc
+
+# Node dependencies (optional serialport of the hub)
+node_modules/

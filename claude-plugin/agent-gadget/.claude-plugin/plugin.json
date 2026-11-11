@@ -1,6 +1,0 @@
-{
-  "name": "agent-gadget",
-  "version": "0.3.0",
-  "description": "Shows what Claude Code is doing in a browser (agent hub) and on an ESP32 + HMI screen gadget. Needs Node.js >= 18.",
-  "author": { "name": "agent-gadget" }
-}

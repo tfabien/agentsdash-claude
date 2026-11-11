@@ -57,7 +57,7 @@ Observed order for one lead turn with two sub-agents: `SessionStart`, `UserPromp
 ## Task list tools (read from local transcripts, 2026-11-11)
 
 The hook's `tool_input` is the tool call's input and `tool_response` its result (`toolUseResult` in the transcript).
-Fixtures: `claude-plugin/agent-gadget/tests/fixtures/tasklist_*.json`.
+Fixtures: `plugin/test/fixtures/tasklist_*.json`.
 
 | Tool | `tool_input` | `tool_response` | Meaning |
 |---|---|---|---|

@@ -1,6 +1,0 @@
-body { margin: 0; background: #0b0b0d; color: #b0b0b0; font: 14px "Segoe UI", system-ui, sans-serif; display: grid; justify-items: center; gap: 10px; padding: 16px; }
-canvas { width: min(960px, 100%); aspect-ratio: 480 / 272; background: #000; border-radius: 6px; cursor: pointer; }
-canvas.offline { opacity: .4; }
-#relay { margin: 0; font-size: .9em; }
-#relay.ok { color: #5cdc6e; }
-#relay.down { color: #f0883e; font-weight: 600; }

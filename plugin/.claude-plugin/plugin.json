@@ -1,0 +1,6 @@
+{
+  "name": "standup-bot",
+  "version": "0.4.0",
+  "description": "Agent standup in your browser: every Claude Code session, sub-agent, plan and question on one screen, with optional ESP32 devices. Needs Node.js >= 18.",
+  "author": { "name": "standup-bot" }
+}

@@ -1,21 +1,41 @@
 # standup-bot
 
-Agent standup on a screen: a small gadget next to the keyboard that makes the daily work with Claude Code easier. It has three goals:
+Agent standup on a screen, for Claude Code. One page shows every session, every sub-agent and what each one is doing, how far
+each plan has come, and which agent waits for you. It makes the daily work with Claude Code easier. It has three goals:
 
 1. **Follow my plans**: see at a glance how far each session is in its plan, and which step runs now.
 2. **Follow my agents**: see every session, its sub-agents and what each one is doing, like a stand-up meeting of the agents.
-3. **Know what needs my attention**: when an agent asks a question or waits for a permission, the screen turns orange and the buzzer beeps, so I can work on something else without watching the terminal.
-
-It runs two ways, fed by the same Claude Code plugin and showing the same screen:
-
-- **In your browser, with nothing to buy**: a small Node.js server (the *agent hub*, `agent-hub/`) draws the screen as a web page (`http://127.0.0.1:8765/`). It starts by itself with your first Claude Code session.
-- **On a gadget**: the touchscreen of an Artillery X3 3D printer, driven by an ESP32 over Wi-Fi (see [Hardware](#hardware)). The hub can forward everything to it, so the page and the gadget always agree.
-
-> The images below are screenshots of the web page, not photos of the device: `node agent-hub/tools/screenshots.mjs` renders each scene (`agent-hub/web/scenes.js`) in a headless Edge or Chrome. The page uses the layout, colors and wording of the firmware (`display_hmi.cpp`, `layout.cpp`), drawn as vectors. Photos of the real device are still to be added (see the TODO).
+3. **Know what needs my attention**: when an agent asks a question or waits for a permission, the screen turns orange and beeps, so I can work on something else without watching the terminal.
 
 ![Main view](docs/images/screen-main.png)
 
-## Features
+It is a Claude Code plugin plus a small Node.js server that draws the screen **in your browser**. Nothing to buy, nothing to flash.
+An external screen (an ESP32 gadget, a USB display) is a bonus, see [Devices](#devices-optional).
+
+## Install
+
+Paste this to Claude Code, in any session:
+
+```text
+Install standup-bot by following https://raw.githubusercontent.com/tfabien/standup-bot/main/INSTALL.md
+```
+
+Claude checks Node.js, installs the plugin and tells you what to open. Then **start a new Claude Code session** (hooks load when a
+session starts) and open **<http://127.0.0.1:8765/>**.
+
+By hand, it is two commands and Node.js 18 or later:
+
+```bash
+claude plugin marketplace add tfabien/standup-bot
+claude plugin install standup-bot@standup-bot --scope user
+```
+
+Details, update, uninstall and troubleshooting: [INSTALL.md](INSTALL.md).
+
+## What you see
+
+The page is the screen of the gadget, drawn as vectors at the resolution of your display, with the same layout, colors and wording.
+The screenshots below are taken from the page itself (`node plugin/hub/tools/screenshots.mjs`).
 
 ### Plan: see and follow the progress
 
@@ -29,9 +49,9 @@ It runs two ways, fed by the same Claude Code plugin and showing the same screen
 
 ![Question](docs/images/screen-question.png)
 
-- A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the buzzer beeps.
+- A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the page beeps.
 - Permission prompts turn the session orange too.
-- Tap the speaker icon (bottom bar) to switch the buzzer between `all`, `ask` (needs you only) and `off`, kept in flash.
+- Click the speaker icon (bottom bar) to switch the beeps between `all`, `ask` (needs you only) and `off`.
 
 ### Sub-agents: see and follow them
 
@@ -39,107 +59,80 @@ It runs two ways, fed by the same Claude Code plugin and showing the same screen
 
 ![7 sub-agents](docs/images/screen-subs7.png)
 
-- One row per sub-agent: role sprite (lead, general, explore, plan, review, test, code, generic), name, current action, age.
+- One row per sub-agent: role robot (lead, general, explore, plan, review, test, code, generic), name, current action, age.
 - 1 to 4 sub-agents get large rows, 5 to 7 compact rows, 8 or more show 6 rows and "+N more".
 - Six states with their color: working (green), needs you (orange), error (red), your turn (grey-blue), waiting on sub-agents (blue), done (faint).
 - Robots blink while working, and the state bar of an agent that needs you pulses orange.
 
-### Touch: agent detail
+### Click: agent detail and session list
 
 ![Detail](docs/images/screen-detail.png)
 
-- Tap a sub-agent row: the left panel shows its full command, tokens and previous command. Tap the panel to go back.
-
-### Touch: session menu
-
 ![Menu](docs/images/screen-menu.png)
 
-- Tap the title bar: one row per session, auto-closes after 8 s. The dots in the title bar show every session state.
+- Click a sub-agent row: the left panel shows its full command, tokens and previous command. Click the panel to go back.
+- Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state.
 
-### Quotas (bottom bar of every view)
+### Quotas and standby
 
-- 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset).
-- Fed by the status line (terminal) or by the agent hub, which polls the quotas for the desktop app (`agent-hub/quotas.mjs`).
-
-### Standby clock
+- Bottom bar: 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset). The hub polls them for the desktop app; a terminal status line can feed them too.
+- After 5 minutes without an active agent, the page shows a big clock, the date and a summary of the idle sessions.
 
 ![Standby](docs/images/screen-standby.png)
 
-- NTP clock (Europe/Paris), date and a summary of idle sessions when no agent is active.
+## How it works
 
-### Setup
-
-![Setup](docs/images/screen-setup.png)
-
-- Without any agent the screen shows where events go. Wi-Fi needs no code: open network `AgentGadget-XXXX` with a captive portal, then `http://<ip>/config`.
-- Updates by USB, Wi-Fi OTA (`pio run -e esp32dev_ota -t upload`) or browser (`/update` for the firmware, `/tft` for the screen project, about 1 minute).
-
-## Quick start
-
-**Without the hardware** (Node.js >= 18): install the plugin `claude-plugin/agent-gadget/`; the first hook starts the agent hub, then open `http://127.0.0.1:8765/`. Details: `agent-hub/README.md`.
-
-**With the gadget:**
-
-1. Flash the ESP32: `pio run -t upload` in `agent-gadget/esp32_agent_gadget/` (PlatformIO).
-2. Flash the screen: open `http://<ip>/tft` and upload `screen-hmi/agent-gadget.tft`, or follow the editor steps in `screen-hmi/guide/`.
-3. Join the `AgentGadget-XXXX` network, enter your Wi-Fi at `http://192.168.4.1/config`.
-4. Install the plugin `claude-plugin/agent-gadget/` and set the host: env `CLAUDE_GADGET_HOST` or `~/.claude/agent-gadget.json` `{"host": "<ip>"}` to send straight to the gadget, or keep the hub as host and relay to it (`agent-hub/README.md`).
-5. Change `OTA_PASSWORD` in `net.h` (default `agent-gadget`).
-6. Try it without real sessions: `python agent-gadget/scenario.py --host <ip>`.
-
-## HTTP API
-
-`POST /event` (v2: session, sub-agent, state, command, plan), `POST /usage` (context, quotas), `GET /state`, `POST /select`, `POST /reset`,
-`GET /update`, `GET /tft`. Details: `agent-gadget/ARCHITECTURE.md`. Do not send other requests while `/tft` uploads: the upload aborted twice.
-
-## Repository map
-
-- `agent-gadget/` ESP32 firmware (core: `model`, `net`; screen: `display_hmi`, `layout`, `touch`), helper scripts, tests.
-- `agent-hub/` Node.js hub: state, browser page, quotas, relay to the gadget (no hardware needed).
-- `claude-plugin/agent-gadget/` Claude Code plugin v0.3 (Node.js: hooks, status line).
-- `screen-hmi/` screen project (`agent-gadget.HMI`), compiled `agent-gadget.tft`, fonts (`*.zi`) and `guide/` annotated editor screenshots.
-- `docs/` specs, plans, captured hook payloads and touch findings.
-
-## Hardware
-
-| Part | Role |
-|---|---|
-| Screen `TJC4827X243_011C` (TJC X2 series) | 4.3", 480x272, capacitive touch, buzzer. Taken from the printer, its original firmware was replaced by `screen-hmi/agent-gadget.tft`. |
-| ESP32 DevKit (30 pins) | Joins your Wi-Fi, serves an HTTP API, keeps the state of all agents, draws on the screen through a UART (9600 baud at power-up, then 115200). |
-| Claude Code plugin `claude-plugin/agent-gadget/` | Node.js hooks send every session and sub-agent event to the hub (`POST /event`), which shows them in the browser and relays them to the ESP32. |
-| Agent hub `agent-hub/` | Node.js server on your PC: keeps the state, serves the page, polls the plan quotas, forwards to the gadget over Wi-Fi (USB serial planned). |
-
-```
-Claude Code (hooks) --POST /event--> agent hub --SSE--> browser page
+```text
+Claude Code hooks --POST /event--> hub (Node.js) --SSE--> browser page
 status line / quota poller --POST /usage-->  |
-                                            +--HTTP relay--> ESP32 --UART--> TJC screen (touch, buzzer)
+                                             +--relay--> devices (optional): ESP32 gadget over Wi-Fi or USB
 ```
 
-![Wiring](docs/images/wiring.svg)
+- The **plugin** (`plugin/`) has the hooks. Each hook turns a Claude Code event into a small JSON event (`POST /event`) and never slows Claude down.
+- The **hub** (`plugin/hub/`) starts with your first session, keeps the state of all sessions, polls the plan quotas and serves the page. It listens on `127.0.0.1` only.
+- A **device** (`devices/`) gets the same events from the hub and shows the same screen on real hardware.
 
-Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> screen `VCC`.
+Privacy: prompts, commands and file paths are shown on the page, on your computer only. Set `CLAUDE_GADGET_MASK=1` to send only tool names.
+
+## Devices (optional)
+
+The browser is the main way to use standup-bot. A device is a bonus: a physical screen next to the keyboard that shows the same
+thing, with its own buzzer. The hub forwards every event to it (`relay` in `~/.claude/agent-gadget.json`), so page and device always agree.
+
+| Device | State | Link |
+|---|---|---|
+| ESP32 + the touchscreen of an Artillery X3 3D printer (TJC 4.3", 480x272) | works, Wi-Fi relay tested, USB relay written | [devices/artillery-x3-esp32/](devices/artillery-x3-esp32/README.md) |
+
+More devices are welcome: [devices/README.md](devices/README.md) says what a device receives and how to add one.
+
+## Repository
+
+```text
+plugin/                    the Claude Code plugin (what users install)
+  hooks/ scripts/          hooks, status line, transcript and plan readers (Node.js)
+  hub/                     the hub: server, model, web page, quota poller, relays, terminal view
+  test/                    tests of the hooks (node --test)
+devices/                   optional external screens
+  artillery-x3-esp32/      ESP32 firmware, screen project, hardware notes, tests
+.claude-plugin/            marketplace file (standup-bot)
+docs/                      specs, plans, captured hook payloads, README images
+INSTALL.md                 install instructions, written for Claude Code to follow
+```
+
+Tests (no hardware): `node --test plugin/hub/test/*.test.mjs plugin/test/*.test.mjs`. Docs: [plugin/README.md](plugin/README.md) (hooks, options), [plugin/hub/README.md](plugin/hub/README.md) (hub, configuration, API, relays).
 
 ## TODO (known and not fixed)
 
-- **Test the USB mode of the hub on the hardware (minor feature).** `relay: {"mode":"serial","port":"COM3"}`, `agent-hub/relay_serial.mjs` and the firmware line reader (`esp32_agent_gadget.ino`, `netSerialLine` in `net.cpp`) are written and unit-tested with a fake port, and the firmware is flashed, but nothing was tried over a real cable. To do: `npm install serialport` in `agent-hub/`, then `GADGET_PORT=COM3 python -m unittest agent-gadget.tests.test_serial_in`, then a real session in serial mode (COM3 owner, release before `pio upload`).
-- **Show the model used by each session and agent.** Display the model name (for example Opus, Sonnet, Haiku) in the lead panel and in the agent detail view. To check: which hook payloads carry the model (`SessionStart` and the transcript do for the session, sub-agent payloads may not), then add a short `model` field to `/event` and to the model state.
-- **Tap a step of the plan bar to preview it.** A tap on a segment of the plan bar would show that step (title, state) for a few seconds, then go back to the current step: a way to read the upcoming steps. Needs the full step list on the gadget (today the plan fields carry only `done`, `total`, the current and the next step), so the plan tracker must send titles of all steps, and a hit zone per segment must be added to `layout.cpp`.
-- **Answer a question by tapping the screen?** Today the screen shows the question and its numbered options, and the answer is typed in Claude Code. A tap on an option would have to travel back to the session: the hooks only send events to the gadget, and no hook can inject an answer into a running `AskUserQuestion`. Open question: a `PermissionRequest` hook can allow or deny (a tap on Allow/Deny is feasible by making the hook wait for the gadget), but a free choice among options needs another channel.
-- **Multi-hardware, with a screen that is easy to buy.** The Artillery X3 screen was used for the proof of concept because it was at hand, and it is not sold on its own. Goal: a display abstraction in the firmware (`display.h` already separates the UI from the screen backend) and support for at least one common, cheap board with a screen (for example an ESP32 with a built-in TFT or an ESP32-S3 touch display), documented with a shopping list.
-- **Usage and quotas stay problematic.** The desktop app does not run status lines, so quotas come from `agent-hub/quotas.mjs` (OAuth token, `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers). The usage endpoint returns 429, the backoff is 15 minutes, and the numbers can be stale. The context estimate from transcripts assumes a 1M window.
-- **The session on the screen does not follow the session selected in the app.** Today the gadget picks its session itself (needs-you first) or by touch. Goal: show the session that has focus in Claude Code or the desktop app.
-- Plugin of prompts that make standup-bot easier to use: force `AskUserQuestion` for every question to the user, force the creation and regular update of a plan (the screen only shows plans built from task-list tool calls, so a session that skips them shows no progress), and similar rules. Could ship as a skill or a `SessionStart` hook that injects the instructions.
-- **The plan on the screen is often out of date.** `plan_tracker.py` rebuilds the plan only from task-list tool calls (`TaskCreate`/`TaskUpdate`, `TodoWrite`, `update_plan`). A step finished without a matching update, or a session that never creates a plan, leaves the bar stale. Fix ideas: the prompts plugin below, plus a staleness hint on the screen.
-- Clock settings: choose the timezone (hard-coded to Europe/Paris today) and the date and time format (24 h or 12 h, date order), from the `/config` page and kept in flash.
-- Serial mode for places without Wi-Fi: a small local bridge server, installed by the plugin, receives the hooks' `POST /event` and `POST /usage` on localhost and turns them into serial commands to the ESP32 over USB (the firmware already has a serial backend, `DISPLAY_SERIAL`, and the `/event` JSON is the wire format). Needs one COM port owner at a time, and a mode switch in `~/.claude/agent-gadget.json`.
-- Show the context fill as a circle with the percentage in the middle, in place of the horizontal bar.
-- Show the tokens consumed by the session and by each agent (the data exists: `tok`, `stok`; the row and panel show them only in the detail view).
-- Real photos of the device in this README (renders only for now).
-- `usage-display` minor items left open: quota line redrawn every 2 s (possible flicker), shared `.tmp` files between parallel hooks, a transcript more than 4 MB behind loses its middle tokens, `statusline.py` writes its marker before the POST (a cancelled POST is not retried for 60 s), at 100 % context the fill hides the selected tab color, `*.tok.json` and `*.usage` files are never purged, one corrupt history sample empties the status line.
-- Check `xstr` text without background (`sta=3`) and the readability of the three context colors on the real panel (`C_FILL_*` in `ui_theme.h`).
-- Merge the `usage-display` branch work with `agent-gadget-ui` if still pending (conflicts expected in `net.cpp`, `ARCHITECTURE.md`, `CLAUDE.md`).
-- `agent-gadget/*.py` helper scripts still have French docstrings: translate when touched.
-- Screen text is ASCII only: no accents until a font with them is added to the project.
-- The original Artillery firmware was overwritten and cannot be restored from this repo.
-- Default `OTA_PASSWORD` must be changed.
-- Idea: Home Assistant panel and stream deck uses of the same screen.
+- **Rename the configuration.** The file is still `~/.claude/agent-gadget.json` and the variables `CLAUDE_GADGET_*`, from the first version. Accept `standup-bot.json` and `STANDUP_BOT_*` and keep the old names as fallback.
+- **Restart the hub after a plugin update.** A hub started by the old version keeps running; the hook could compare versions and replace it.
+- **Show the model used by each session and agent** (Opus, Sonnet, Haiku) in the lead panel and the agent detail. To check: which hook payloads carry the model, then add a short `model` field to `/event`.
+- **Tap a step of the plan bar to preview it.** Needs the titles of all steps (today the plan fields carry only `done`, `total`, the current and the next step).
+- **Answer a question from the screen?** The hooks only send events: no hook can inject an answer into a running `AskUserQuestion`. A `PermissionRequest` hook can allow or deny, so Allow/Deny buttons are feasible by making the hook wait for the hub; a free choice among options needs another channel.
+- **The page does not follow the session that has the focus in Claude Code.** Today it picks the session itself (needs-you first) or by click.
+- **Prompts plugin**: force `AskUserQuestion` for every question and the creation and regular update of a plan (the screen only shows plans built from task-list tool calls). Could ship as a skill or a `SessionStart` hook.
+- **The plan is often out of date.** `plugin/scripts/plan_tracker.mjs` rebuilds the plan only from task-list tool calls; a session that never creates a plan shows no progress. Idea: the prompts plugin above plus a staleness hint.
+- **Usage and quotas stay problematic.** The usage endpoint returns 429 (backoff 15 minutes), numbers can be stale, and the context estimate from transcripts assumes a 1M window.
+- Show the context fill as a circle with the percentage in the middle; show the tokens of each agent in its row.
+- Minor items of the hub review, postponed: `"constructor"` accepted as a state, 400 ms per hook when the hub cannot start (no backoff), the plan file lock can wait 2 s, the hub ignores `CLAUDE_GADGET_CONFIG`, the hub does not replay its state to a device that rebooted.
+
+The TODO of the ESP32 gadget (USB relay test on hardware, clock settings, other boards) is in [devices/artillery-x3-esp32/README.md](devices/artillery-x3-esp32/README.md#todo).

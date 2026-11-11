@@ -1,12 +1,13 @@
 {
-  "name": "agent-gadget-local",
-  "owner": { "name": "agent-gadget" },
+  "name": "standup-bot",
+  "owner": { "name": "standup-bot" },
+  "metadata": { "description": "standup-bot: an agent standup screen for Claude Code, in your browser." },
   "plugins": [
     {
-      "name": "agent-gadget",
-      "source": "./claude-plugin/agent-gadget",
-      "description": "Shows what Claude Code sessions and subagents are doing on an ESP32 + HMI screen gadget.",
-      "version": "0.3.0"
+      "name": "standup-bot",
+      "source": "./plugin",
+      "description": "Agent standup in your browser: every Claude Code session, sub-agent, plan and question on one screen (optional ESP32 devices).",
+      "version": "0.4.0"
     }
   ]
 }
