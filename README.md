@@ -1,8 +1,12 @@
 # standup-bot
 
-Agent standup on a screen: a gadget that shows what your Claude Code agents are doing, on the touchscreen of an Artillery X3 3D printer driven by an ESP32.
-Each Claude Code session, its sub-agents, its plan and your plan quotas appear live on a 4.3" screen next to your keyboard,
-like a stand-up meeting of your agents. When an agent needs you (permission, question), the screen turns orange and the buzzer beeps.
+Agent standup on a screen: a small gadget next to the keyboard that makes the daily work with Claude Code easier. It has three goals:
+
+1. **Follow my plans**: see at a glance how far each session is in its plan, and which step runs now.
+2. **Follow my agents**: see every session, its sub-agents and what each one is doing, like a stand-up meeting of the agents.
+3. **Know what needs my attention**: when an agent asks a question or waits for a permission, the screen turns orange and the buzzer beeps, so I can work on something else without watching the terminal.
+
+It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 over Wi-Fi (see [Hardware](#hardware)).
 
 > The images below are renders, not photos. `agent-gadget/tools/render_screens.py` redraws the screen from the real
 > pictures of the screen project and the geometry of the firmware (`display_hmi.cpp`, `layout.cpp`), with Segoe UI standing in for the screen fonts.
@@ -10,24 +14,11 @@ like a stand-up meeting of your agents. When an agent needs you (permission, que
 
 ![Main view](docs/images/screen-main.png)
 
-## What it is
-
-| Part | Role |
-|---|---|
-| Screen `TJC4827X243_011C` (TJC X2 series) | 4.3", 480x272, capacitive touch, buzzer. Taken from the printer, its original firmware was replaced by `screen-hmi/agent-gadget.tft`. |
-| ESP32 DevKit (30 pins) | Joins your Wi-Fi, serves an HTTP API, keeps the state of all agents, draws on the screen through a UART (9600 baud at power-up, then 115200). |
-| Claude Code plugin `claude-plugin/agent-gadget/` | Hooks send every session and sub-agent event to the ESP32 (`POST /event`). |
-
-```
-Claude Code (hooks) --HTTP POST /event--> ESP32 --UART--> TJC screen (touch, buzzer)
-status line / quotas.py --POST /usage-->
-```
-
 ## Features
 
 ### Plan: see and follow the progress
 
-![Main view](docs/images/screen-main.png)
+![Plan](docs/images/screen-plan.png)
 
 - Plan progress built from the task list of the session (`TaskCreate`/`TaskUpdate`, `TodoWrite`, the desktop `update_plan`): segmented bar, current step and next step. Steps running in parallel each pulse.
 - Context fill bar next to the plan (green under 60 %, orange 60 to 79 %, red from 80 %).
@@ -89,10 +80,6 @@ status line / quotas.py --POST /usage-->
 5. Change `OTA_PASSWORD` in `net.h` (default `agent-gadget`).
 6. Try it without real sessions: `python agent-gadget/scenario.py --host <ip>`.
 
-![Wiring](docs/images/wiring.svg)
-
-Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> screen `VCC`.
-
 ## HTTP API
 
 `POST /event` (v2: session, sub-agent, state, command, plan), `POST /usage` (context, quotas), `GET /state`, `POST /select`, `POST /reset`,
@@ -104,6 +91,23 @@ Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> scre
 - `claude-plugin/agent-gadget/` Claude Code plugin v0.2 (hooks, status line, quotas).
 - `screen-hmi/` screen project (`agent-gadget.HMI`), compiled `agent-gadget.tft`, fonts (`*.zi`) and `guide/` annotated editor screenshots.
 - `docs/` specs, plans, captured hook payloads and touch findings.
+
+## Hardware
+
+| Part | Role |
+|---|---|
+| Screen `TJC4827X243_011C` (TJC X2 series) | 4.3", 480x272, capacitive touch, buzzer. Taken from the printer, its original firmware was replaced by `screen-hmi/agent-gadget.tft`. |
+| ESP32 DevKit (30 pins) | Joins your Wi-Fi, serves an HTTP API, keeps the state of all agents, draws on the screen through a UART (9600 baud at power-up, then 115200). |
+| Claude Code plugin `claude-plugin/agent-gadget/` | Hooks send every session and sub-agent event to the ESP32 (`POST /event`). |
+
+```
+Claude Code (hooks) --HTTP POST /event--> ESP32 --UART--> TJC screen (touch, buzzer)
+status line / quotas.py --POST /usage-->
+```
+
+![Wiring](docs/images/wiring.svg)
+
+Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> screen `VCC`.
 
 ## TODO (known and not fixed)
 

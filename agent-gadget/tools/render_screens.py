@@ -313,6 +313,16 @@ def scene_main():
     return sc
 
 
+def scene_plan():
+    sc = Screen()
+    top_bar(sc, SESS, 2)
+    s = dict(LEAD, name="dotfiles", age="6m", ctx=41, cmd="Edit scripts/notify.py",
+             plan=(5, 9), plan_cur="Handle the permission hook", plan_next="Add the plan tracker tests")
+    lead_panel(sc, s, True)
+    bottom(sc, H5, D7, "14:32")
+    return sc
+
+
 def scene_compact():
     sc = Screen()
     top_bar(sc, SESS, 0)
@@ -365,7 +375,7 @@ def scene_standby():
     return standby("14:32", "Wednesday 11 November", "3 sessions idle, last activity 4m ago", H5, D7)
 
 
-SCENES = {"main": scene_main, "compact": scene_compact, "detail": scene_detail, "question": scene_question,
+SCENES = {"main": scene_main, "plan": scene_plan, "compact": scene_compact, "detail": scene_detail, "question": scene_question,
           "menu": scene_menu, "setup": scene_setup, "standby": scene_standby}
 
 
