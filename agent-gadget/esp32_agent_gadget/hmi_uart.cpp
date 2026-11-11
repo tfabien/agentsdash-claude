@@ -23,7 +23,11 @@ void hmiBegin(uint32_t b, int rxPin, int txPin) {
 
 uint32_t hmiBaud() { return baud; }
 
+static uint32_t txBytes = 0;
+uint32_t hmiTxBytes() { return txBytes; }
+
 static void writeCommand(const String& cmd) {
+  txBytes += cmd.length() + 3;
   Serial2.print(cmd);
   Serial2.write(0xFF); Serial2.write(0xFF); Serial2.write(0xFF);
 }
@@ -93,6 +97,7 @@ void hmiPump() {
       uint8_t n = queueBuf[r][queueHead[r]];
       if (Serial2.availableForWrite() < n) return;   // UART busy: lower regions wait too (priority order)
       Serial2.write(queueBuf[r] + queueHead[r] + 1, n);
+      txBytes += n;
       queueHead[r] += 1 + n;
     }
     queueLen[r] = queueHead[r] = 0;

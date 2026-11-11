@@ -20,6 +20,14 @@ static uint32_t topSig = 0, leadSig = 0, teamSig = 0, bottomSig = 0;
 static uint32_t rowSig[TEAM_ROWS];
 static uint32_t headSig = 0, lastAgeTick = 0;
 static bool bottomDrawn = false;
+static bool standbyShown = false;
+static char standbyHHMM[6] = "";
+static int outlinedRow = -1;                      // team row framed because its agent is shown in the lead panel
+static uint32_t animSteps = 0, lastAnim = 0, animTick = 0;
+static const char* leadPanelMode = "empty";
+
+#define ANIM_MS 300UL                             // animation tick (blink lasts one tick)
+#define BLINK_OFFSET 36                           // closed-eye frame id = sprite id + 36 (27 -> 63, 35 -> 71, 43 -> 79)
 
 // ---------- helpers ----------
 static uint16_t stateColor(AgentState s) {
@@ -165,6 +173,12 @@ static uint32_t leadSignature(const View& v, uint32_t now) {
   if (!s) return mix(mixStr(2166136261u, deviceInfo.ip.c_str()), deviceInfo.apMode);
   uint32_t h = mixStr(2166136261u, s->id);
   h = mix(mix(mix(h, s->lead.rev), modelEffectiveState(*s, s->lead)), s->usageRev);
+  int slot = uiDetailSlot(*s, now);
+  if (slot) {                                     // detail view: the tapped agent's revision drives the redraw
+    const Agent* a = modelAgent(*s, slot);
+    h = mix(mix(mix(h, 0xD37A11u), a->rev), (uint32_t)(uintptr_t)a);
+    h = mix(h, modelEffectiveState(*s, *a));
+  }
   return mix(h, modelSessionCtx(*s, now));        // ages tick in place (drawLeadAge), no full redraw
 }
 
@@ -178,9 +192,11 @@ static void drawLeadAge(const View& v, uint32_t now) {   // rewrites the state l
   const Session* s = selectedSession(v);
   if (!s) return;
   hmiTarget(HMI_STRIP, false);
-  AgentState st = modelEffectiveState(*s, s->lead);
+  int slot = uiDetailSlot(*s, now);
+  const Agent& a = *modelAgent(*s, slot);
+  AgentState st = modelEffectiveState(*s, a);
   Rect r = leadStateLine();
-  line(r.x, r.y, r.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(s->lead, now));
+  line(r.x, r.y, r.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(a, now));
 }
 
 static void drawLeadEmpty() {
@@ -223,12 +239,41 @@ static void drawPlan(const Session& s, int x, int y, int w, const Rect& p) {
   if (s.planNext[0]) line(x, p.y + p.h - 22, w, FONT_S16, C_FAINT, C_PANEL, String("next: ") + s.planNext);
 }
 
+// Detail of a tapped sub-agent: role, state, tokens, full command (cmd + detail), previous command, hint.
+static void drawDetail(const Session& s, int slot, uint32_t now) {
+  Rect p = layoutLeadPanel();
+  const Agent& a = *modelAgent(s, slot);
+  AgentState st = modelEffectiveState(s, a);
+  int x = p.x + 6, w = p.w - 12;
+  hmiPic(x, p.y + 6, PIC_SPRITE_BIG + roleIndex(a.role));
+  int tx = x + 42, tw = p.x + p.w - 4 - tx;
+  line(tx, p.y + 4, tw, FONT_S20, C_TEXT, C_PANEL, a.role);
+  Rect sl = leadStateLine();
+  line(sl.x, sl.y, sl.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(a, now));
+  if (a.tok) line(tx, p.y + 44, tw, FONT_S16, C_LIGHT, C_PANEL, modelFormatTokens(a.tok) + " tokens");
+  line(x, p.y + 66, w, FONT_S16, C_ACCENT, C_PANEL, "COMMAND");
+  String full(a.cmd);
+  if (a.detail[0] && !strstr(a.cmd, a.detail)) full += String(" ") + a.detail;
+  String l[3];
+  int n = wrapPx(full.c_str(), w, FONT_S16, l, 3);
+  for (int i = 0; i < n; i++) line(x, p.y + 84 + i * 18, w, FONT_S16, st == ST_NEEDS_YOU ? C_NEEDS : C_TEXT, C_PANEL, l[i]);
+  if (a.prevCmd[0]) {
+    line(x, p.y + 142, w, FONT_S16, C_ACCENT, C_PANEL, "BEFORE");
+    line(x, p.y + 160, w, FONT_S16, C_LIGHT, C_PANEL,
+         String(a.prevCmd) + " (" + modelFormatAge((now - a.prevAt) / 1000) + " ago)");
+  }
+  line(x, p.y + p.h - 22, w, FONT_S16, C_FAINT, C_PANEL, "tap here to go back");
+}
+
 static void drawLeadPanel(const View& v, uint32_t now) {
   hmiTarget(HMI_STRIP, true);
   Rect p = layoutLeadPanel();
   erase(p);
   const Session* s = selectedSession(v);
-  if (!s) { drawLeadEmpty(); return; }
+  if (!s) { leadPanelMode = "empty"; drawLeadEmpty(); return; }
+  int slot = uiDetailSlot(*s, now);
+  if (slot) { leadPanelMode = "detail"; drawDetail(*s, slot, now); return; }
+  leadPanelMode = "lead";
   const Agent& a = s->lead;
   AgentState st = modelEffectiveState(*s, a);
   int x = p.x + 6, w = p.w - 12;
@@ -338,6 +383,21 @@ static void drawTeam(const View& v, bool full, bool ageTick, uint32_t now) {
     if (k != rowSig[i]) { drawRow(*s, team[i], rows[i], compact, now); rowSig[i] = k; }
     else if (ageTick) drawRowAge(*s, team[i], rows[i], compact, now);
   }
+  int slot = s ? uiDetailSlot(*s, now) : 0, want = -1;
+  for (int i = 0; i < n && slot; i++)
+    if (team[i] == slot) want = i;
+  if (full) outlinedRow = -1;
+  if (want != outlinedRow) {                      // 1 px frame in the 2 px gap around the row
+    if (outlinedRow >= 0 && outlinedRow < nRows) {
+      Rect r = rows[outlinedRow];
+      hmiRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, C_PANEL);
+    }
+    if (want >= 0) {
+      Rect r = rows[want];
+      hmiRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, C_LIGHT);
+    }
+    outlinedRow = want;
+  }
 }
 
 // ---------- bottom bar ----------
@@ -394,7 +454,107 @@ static void drawBottom(uint32_t now) {
   if (modelQuotas.d7.known) drawQuota(202, layoutClock().x - 4, b.y + 2, "Week", modelQuotas.d7, quotasStale(now), now);
   char hhmm[6];
   Rect c = layoutClock();
-  if (clockHHMM(hhmm)) hmiText(c.x, c.y, c.w, c.h, FONT_S20, C_TEXT, C_BAR, 2, hhmm);
+  if (!standbyShown && clockHHMM(hhmm)) hmiText(c.x, c.y, c.w, c.h, FONT_S20, C_TEXT, C_BAR, 2, hhmm);
+}
+
+// ---------- animation ----------
+// Discreet on purpose (user feedback: bobbing hurt readability): a working robot closes its eyes for one 300 ms tick
+// every 15 ticks, robots staggered; a row that needs the user pulses its orange state bar (1.2 s bright, 1.2 s dim).
+// Only sprite-sized commands: no zone is redrawn.
+#define C_NEEDS_DIM 0x7A22                        // 120,68,16: dim half of the needs-you pulse
+
+static void animSprite(int x, int y, int pic, AgentState st, int seed) {
+  if (st != ST_WORKING) return;
+  int phase = (animTick + seed * 4) % 15;
+  if (phase == 0) hmiPic(x, y, pic + BLINK_OFFSET);
+  else if (phase == 1) hmiPic(x, y, pic);
+}
+
+static void animBar(const Rect& r, AgentState st) {
+  if (st != ST_NEEDS_YOU || animTick % 4) return;
+  hmiFill(r.x + 2, r.y + 3, 3, r.h - 6, (animTick / 4) % 2 ? C_NEEDS_DIM : C_NEEDS);
+}
+
+static void animate(const View& v, uint32_t now) {
+  if (now - lastAnim < ANIM_MS) return;
+  lastAnim = now;
+  animTick++;
+  animSteps++;
+  const Session* s = selectedSession(v);
+  if (!s) return;
+  Rect p = layoutLeadPanel();
+  int slot = uiDetailSlot(*s, now);
+  const Agent& lead = *modelAgent(*s, slot);
+  hmiTarget(HMI_STRIP, false);
+  animSprite(p.x + 6, p.y + 6, PIC_SPRITE_BIG + roleIndex(slot ? lead.role : "lead"), modelEffectiveState(*s, lead), 0);
+  Rect rows[TEAM_ROWS];
+  uint8_t team[TEAM_ROWS];
+  int more = 0, n = uiTeamOrder(*s, team, more);
+  int nSubs = modelSubCount(*s);
+  layoutRows(nSubs, rows);
+  bool compact = nSubs > 4;
+  hmiTarget(HMI_TREE, false);
+  for (int i = 0; i < n; i++) {
+    const Agent& a = *modelAgent(*s, team[i]);
+    Rect r = rows[i];
+    AgentState st = modelEffectiveState(*s, a);
+    if (compact) animSprite(r.x + 9, r.y + 2, PIC_SPRITE_TINY + roleIndex(a.role), st, i + 1);
+    else animSprite(r.x + 9, r.y + 7, PIC_SPRITE_SMALL + roleIndex(a.role), st, i + 1);
+    animBar(r, st);
+  }
+}
+
+// ---------- standby ----------
+static void drawStandbyClock(const char* hhmm) {
+  int x = (SCR_W - (4 * 56 + 24)) / 2, y = 44;
+  for (int i = 0; i < 5; i++) {
+    if (i == 2) { hmiPic(x, y, PIC_COLON); x += 24; continue; }
+    hmiPic(x, y, PIC_DIGIT + (hhmm[i] - '0'));
+    x += 56;
+  }
+}
+
+static String standbySummary(uint32_t now) {
+  int n = modelSessionCount();
+  if (n == 0) return deviceInfo.ip.length() ? "No session - events go to " + deviceInfo.ip : String("No session");
+  uint32_t last = 0;
+  for (int t = 0; t < n; t++) {
+    const Session* s = modelSession(t);
+    for (int i = 0; i <= modelSubCount(*s); i++) {
+      uint32_t seen = modelAgent(*s, i)->lastSeen;
+      if (!last || (int32_t)(seen - last) > 0) last = seen;
+    }
+  }
+  return String(n) + (n == 1 ? " session idle" : " sessions idle") + ", last activity " + modelFormatAge((now - last) / 1000) + " ago";
+}
+
+static void drawStandby(uint32_t now) {           // full screen: big clock, date, summary, quotas
+  hmiTarget(HMI_TITLE, true);
+  hmiPic(0, 0, PIC_STANDBY);
+  char hhmm[6], date[40];
+  if (clockHHMM(hhmm) && clockDate(date, sizeof date)) {
+    drawStandbyClock(hhmm);
+    strcpy(standbyHHMM, hhmm);
+    hmiText(0, 156, SCR_W, LINE_S20, FONT_S20, C_LIGHT, C_SCREEN, 1, date);
+  } else {                                        // time unknown: no fake clock, the waiting text and the IP
+    standbyHHMM[0] = 0;
+    hmiText(0, 80, SCR_W, LINE_S20, FONT_S20, C_TEXT, C_SCREEN, 1, "Waiting for agents");
+  }
+  hmiText(0, 190, SCR_W, LINE_S16, FONT_S16, C_FAINT, C_SCREEN, 1, displayFit(standbySummary(now).c_str(), 460, FONT_S16));
+  bottomDrawn = true;                             // the standby picture already has the bottom bar
+  drawBottom(now);
+}
+
+static void refreshStandby(uint32_t now) {
+  char hhmm[6];
+  if (clockHHMM(hhmm) && strcmp(hhmm, standbyHHMM) != 0) {
+    if (!standbyHHMM[0]) { drawStandby(now); return; }
+    hmiTarget(HMI_TITLE, false);                 // new minute: digits and summary rewritten in place
+    drawStandbyClock(hhmm);
+    strcpy(standbyHHMM, hhmm);
+    hmiText(0, 190, SCR_W, LINE_S16, FONT_S16, C_FAINT, C_SCREEN, 1, displayFit(standbySummary(now).c_str(), 460, FONT_S16));
+    drawBottom(now);
+  }
 }
 
 // ---------- messages ----------
@@ -472,7 +632,9 @@ String displayStats() {
   uint32_t q = hmiQueuedBytes();
   return String("{\"screen\":true,\"link\":\"") + hmiLinkResult() + "\",\"baud\":" + hmiBaud() + ",\"queued_bytes\":" + q + ",\"est_ms\":" +
          (uint32_t)((uint64_t)q * 10000 / hmiBaud()) + ",\"titlebar_ms\":" + hmiTitleMs() + ",\"title_count\":" + hmiTitleCount() +
-         ",\"overflows\":" + hmiOverflowCount() + ",\"erases\":" + hmiEraseCount() + "}";
+         ",\"overflows\":" + hmiOverflowCount() + ",\"erases\":" + hmiEraseCount() + ",\"tx_bytes\":" + hmiTxBytes() +
+         ",\"anim_steps\":" + animSteps + ",\"mode\":\"" + (messageMode ? "message" : standbyShown ? "standby" : "main") +
+         "\",\"lead_panel\":\"" + leadPanelMode + "\"}";
 }
 
 void displayProgress(int percent) {
@@ -511,6 +673,19 @@ void displayRender() {
 }
 
 static void renderZones(const View& v, uint32_t now) {
+  if (uiStandby(now)) {
+    if (!standbyShown) { standbyShown = true; drawStandby(now); }
+    else refreshStandby(now);
+    return;
+  }
+  if (standbyShown) {                             // back from standby: everything again
+    standbyShown = false;
+    dropQueues();
+    hmiTarget(HMI_TITLE, true);
+    hmiPic(0, 0, PIC_BACKGROUND);
+    topSig = leadSig = teamSig = bottomSig = 0;
+    bottomDrawn = false;
+  }
   bool keepBackground = topSig == 0;             // after a full redraw the background command is still queued
   uint32_t t = topSignature(v);
   if (t != topSig) {
@@ -529,6 +704,7 @@ static void renderZones(const View& v, uint32_t now) {
   uint32_t k = teamSignature(v);
   drawTeam(v, k != teamSig, ageTick, now);
   teamSig = k;
+  animate(v, now);
 }
 
 #endif  // DISPLAY_SERIAL

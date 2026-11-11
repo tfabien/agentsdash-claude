@@ -23,7 +23,8 @@ uint32_t hmiTitleMs();                                 // last measured time fro
 uint32_t hmiTitleCount();
 uint32_t hmiOverflowCount();
 void hmiNoteErase();                                   // count a background picture drawn over a zone
-uint32_t hmiEraseCount();                              // zone erases and row pictures sent (flicker check, /debug/stats)                           // commands dropped because a region queue was full (since boot)                              // number of measured title bar redraws
+uint32_t hmiEraseCount();
+uint32_t hmiTxBytes();                                 // bytes written to the screen since boot (UART budget)                              // zone erases and row pictures sent (flicker check, /debug/stats)                           // commands dropped because a region queue was full (since boot)                              // number of measured title bar redraws
 void hmiDrain();                                       // discard bytes received from the screen
 int  hmiRead();                                        // next byte from the screen, -1 when none
 void hmiClear(uint16_t color);                         // cls
