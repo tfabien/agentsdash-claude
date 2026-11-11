@@ -43,6 +43,13 @@ class StandbyTest(unittest.TestCase):
         self.assertFalse(after["standby"])
         self.assertEqual((after["session"], after["mode"]), (before["session"], before["mode"]))
 
+    def test_no_standby_during_wifi_setup(self):
+        """The setup steps (join AgentGadget-XXXX, open 192.168.4.1) must stay on screen: no standby in AP mode."""
+        self.g.configure(standby_ms=2000, fake_ap=True)
+        self.addCleanup(self.g.configure, fake_ap=False)
+        time.sleep(3)
+        self.assertFalse(self.view()["standby"])
+
     def test_team_order_drops_done_first(self):
         self.post("aaaa", "lead", "working", "Agent x")
         for k in range(10):

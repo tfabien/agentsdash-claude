@@ -21,7 +21,7 @@ int  uiLabelOffset(int others);                            // clamped to others 
 void uiScrollLabels(int delta, int others);
 bool uiArrowAsks(bool right, int8_t selected);             // a session hidden on that side needs the user
 
-// Standby: no agent working, waiting on sub-agents, needing the user or in error for standbyMs.
+// Standby: no agent working, waiting on sub-agents, needing the user or in error for standbyMs; never in Wi-Fi setup.
 bool uiStandby(uint32_t now);
 void uiWake(uint32_t now);
 

@@ -182,7 +182,7 @@ static void handleSelect() {           // POST /select {"session","agent","hold_
 }
 
 #ifdef GADGET_DEBUG
-static void handleDebugConfig() {      // POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms","standby_ms","detail_ms","clock_off"}
+static void handleDebugConfig() {      // POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms","standby_ms","detail_ms","clock_off","fake_ap"}
   cors();
   String body = server.arg("plain");
   bool flag;
@@ -195,6 +195,8 @@ static void handleDebugConfig() {      // POST /debug/config {"isolate","done_tt
   if (haveStandby || haveDetail) uiStateConfigure((uint32_t)standby, (uint32_t)detail);
   bool clockOff;
   if (jsonBool(body, "clock_off", clockOff)) clockForceOff(clockOff);
+  bool fakeAp;                                                          // tests: behave as in Wi-Fi setup (screen only)
+  if (jsonBool(body, "fake_ap", fakeAp)) { deviceInfo.apMode = fakeAp; displayInvalidate(); }
   server.send(200, "application/json", String("{\"isolate\":") + (isolateMode ? "true" : "false") + "}");
 }
 

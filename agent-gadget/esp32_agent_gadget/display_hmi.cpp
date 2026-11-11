@@ -236,7 +236,7 @@ static void drawPlan(const Session& s, int x, int y, int w, const Rect& p) {
   const char* cur = s.planCur[0] ? s.planCur : (s.planDone == s.planTotal ? "Plan done" : "");
   int k = wrapPx(cur, w, FONT_S20, t, 2);
   for (int i = 0; i < k; i++) line(x, by + 10 + i * 22, w, FONT_S20, C_TEXT, C_PANEL, t[i]);
-  if (s.planNext[0]) line(x, p.y + p.h - 22, w, FONT_S16, C_FAINT, C_PANEL, String("next: ") + s.planNext);
+  if (s.planNext[0]) line(x, p.y + p.h - 20, w, FONT_S16, C_FAINT, C_PANEL, String("next: ") + s.planNext);   // below a 2-line task
 }
 
 // Detail of a tapped sub-agent: role, state, tokens, full command (cmd + detail), previous command, hint.
@@ -525,7 +525,8 @@ static String standbySummary(uint32_t now) {
       if (!last || (int32_t)(seen - last) > 0) last = seen;
     }
   }
-  return String(n) + (n == 1 ? " session idle" : " sessions idle") + ", last activity " + modelFormatAge((now - last) / 1000) + " ago";
+  String r = String(n) + (n == 1 ? " session idle" : " sessions idle") + ", last activity " + modelFormatAge((now - last) / 1000) + " ago";
+  return clockValid() || !deviceInfo.ip.length() ? r : r + " - " + deviceInfo.ip;   // no clock: show where events go
 }
 
 static void drawStandby(uint32_t now) {           // full screen: big clock, date, summary, quotas
@@ -674,7 +675,7 @@ void displayRender() {
 
 static void renderZones(const View& v, uint32_t now) {
   if (uiStandby(now)) {
-    if (!standbyShown) { standbyShown = true; drawStandby(now); }
+    if (!standbyShown) { standbyShown = true; dropQueues(); drawStandby(now); }   // queued zone commands would draw over it
     else refreshStandby(now);
     return;
   }

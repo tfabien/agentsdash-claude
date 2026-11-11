@@ -1,4 +1,5 @@
 #include "ui_state.h"
+#include "display.h"
 
 static uint32_t standbyMs = STANDBY_MS, detailMs = DETAIL_MS;
 static char detailSession[ID_LEN], detailAgent[ID_LEN];
@@ -68,6 +69,7 @@ static void later(uint32_t& t, uint32_t v) { if ((int32_t)(v - t) > 0) t = v; }
 
 // Idle since the last agent event (or the last wake-up tap): usage posts and quota updates do not count.
 bool uiStandby(uint32_t now) {
+  if (deviceInfo.apMode) return false;              // Wi-Fi setup: the setup steps stay on screen
   if (anyActive()) { lastActive = now; return false; }
   for (int t = 0; t < modelSessionCount(); t++) {
     const Session* s = modelSession(t);
