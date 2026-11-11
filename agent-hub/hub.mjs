@@ -7,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createModel } from './model.mjs';
 import { loadConfig } from './config.mjs';
+import { createQuotaPoller, quotasEnabled } from './quotas.mjs';
+import { stateDir } from '../claude-plugin/agent-gadget/scripts/common.mjs';
 
 const WEB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'web');
 const MAX_BODY = 64 * 1024;
@@ -115,16 +117,29 @@ export function startHub(opts = {}) {
   const timer = setInterval(() => { model.prune(now()); if (clients.size) publish(); }, TICK_MS);
   timer.unref();
 
+  // Plan quotas for the desktop app (no status line): polled while a session exists, applied like a POST /usage.
+  const quotaOpts = opts.quota ?? {};
+  const quotas = createQuotaPoller({
+    enabled: quotasEnabled(quotaOpts.env ?? process.env, config),
+    hasSessions: () => model.toState(now()).sessions.length > 0,
+    apply: (body) => { model.applyUsage(body, now()); for (const fn of usageTaps) { try { fn(body); } catch { /* tap errors stay local */ } } publish(); },
+    stateDir: quotaOpts.stateDir ?? stateDir(),
+    env: quotaOpts.env,
+    fetchImpl: quotaOpts.fetchImpl,
+  });
+  if (quotaOpts.autostart !== false) quotas.start();
+
   return new Promise((resolve, reject) => {
-    server.once('error', (e) => { clearInterval(timer); reject(e); });
+    server.once('error', (e) => { clearInterval(timer); quotas.stop(); reject(e); });
     server.listen(wantedPort, host, () => {
       resolve({
-        port: server.address().port, host, model,
+        port: server.address().port, host, model, quotas,
         onEvent: (fn) => eventTaps.push(fn),
         onUsage: (fn) => usageTaps.push(fn),
         onChange: (fn) => changeTaps.push(fn),
         close: () => new Promise((done) => {
           clearInterval(timer);
+          quotas.stop();
           for (const res of clients) res.end();
           clients.clear();
           server.close(() => done());

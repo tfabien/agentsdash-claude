@@ -117,6 +117,25 @@ test('second_hub_on_same_port_fails', async () => {
   } finally { await first.close(); }
 });
 
+test('quota_poll_result_reaches_state_and_taps', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, headers: new Headers(), json: async () => ({ five_hour: { utilization: 33, resets_at: new Date(Date.now() + 3 * 3600 * 1000).toISOString() } }) });
+  const hub = await startHub({
+    port: 0, config: { relay: { mode: 'none' }, quotas: true },
+    quota: { fetchImpl, env: { CLAUDE_CODE_OAUTH_TOKEN: 'x' }, stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 'hubq-')), autostart: false },
+  });
+  try {
+    const seen = [];
+    hub.onUsage((b) => seen.push(b));
+    await hub.quotas.pollOnce(Date.now() / 1000);                 // no session yet: nothing happens
+    assert.equal((await (await get(hub, '/state')).json()).usage, undefined);
+    await post(hub, '/event', EV);
+    await hub.quotas.pollOnce(Date.now() / 1000);
+    const st = await (await get(hub, '/state')).json();
+    assert.equal(st.usage.h5_pct, 33);
+    assert.equal(seen.length, 1);
+  } finally { await hub.close(); }
+});
+
 test('hub_binds_loopback_only', () => withHub(async (hub) => {
   assert.equal(hub.host, '127.0.0.1');
 }));
