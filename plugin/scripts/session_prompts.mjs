@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
- * Optional prompts for the standup screen (SessionStart and UserPromptSubmit hooks). Off by default: it runs only with
- * env CLAUDE_GADGET_PROMPTS=1 or {"prompts": true} in ~/.claude/agent-gadget.json, because it adds text to every session.
+ * Prompts for the standup screen (SessionStart and UserPromptSubmit hooks). On by default; turn off with
+ * env CLAUDE_GADGET_PROMPTS=0 or {"prompts": false} in ~/.claude/agent-gadget.json.
  *
  * SessionStart: tells Claude to ask every question through AskUserQuestion and to keep a task list, which is the only
  * thing the screen can show (questions and plan progress). UserPromptSubmit: when the session's task list has unfinished
@@ -25,7 +25,7 @@ export const RULES = [
 export const promptsEnabled = (env = process.env, cfg = pluginConfig(env)) => {
   const v = env.CLAUDE_GADGET_PROMPTS;
   if (v !== undefined && v !== '') return v !== '0' && v.toLowerCase() !== 'false';
-  return cfg.prompts === true;
+  return cfg.prompts !== false;
 };
 
 /** The text to add to the session for this hook payload, or null. */

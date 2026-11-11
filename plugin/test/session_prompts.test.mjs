@@ -21,16 +21,15 @@ function writePlan(dir, tasks, ageMs) {
   fs.utimesSync(file, t, t);
 }
 
-test('off by default: no text for any hook', () => {
-  assert.equal(contextFor(start, { env: {}, cfg: {}, dir: tmp() }), null);
-  assert.equal(contextFor(prompt, { env: {}, cfg: {}, dir: tmp() }), null);
-});
-
-test('enabled by env or config, env 0 wins over config', () => {
-  assert.equal(promptsEnabled({ CLAUDE_GADGET_PROMPTS: '1' }, {}), true);
-  assert.equal(promptsEnabled({}, { prompts: true }), true);
-  assert.equal(promptsEnabled({ CLAUDE_GADGET_PROMPTS: '0' }, { prompts: true }), false);
-  assert.equal(promptsEnabled({}, { prompts: 'yes' }), false);
+test('on by default, off with env 0 or prompts false in the config', () => {
+  assert.equal(contextFor(start, { env: {}, cfg: {}, dir: tmp() }), RULES);
+  assert.equal(promptsEnabled({}, {}), true);
+  assert.equal(promptsEnabled({}, { prompts: false }), false);
+  assert.equal(promptsEnabled({ CLAUDE_GADGET_PROMPTS: '0' }, {}), false);
+  assert.equal(promptsEnabled({ CLAUDE_GADGET_PROMPTS: 'false' }, {}), false);
+  assert.equal(promptsEnabled({ CLAUDE_GADGET_PROMPTS: '1' }, { prompts: false }), true, 'env wins over the file');
+  assert.equal(contextFor(start, { env: { CLAUDE_GADGET_PROMPTS: '0' }, cfg: {}, dir: tmp() }), null);
+  assert.equal(contextFor(prompt, { env: { CLAUDE_GADGET_PROMPTS: '0' }, cfg: {}, dir: tmp() }), null);
 });
 
 test('SessionStart gives the rules, sub-agents get nothing', () => {
@@ -58,7 +57,7 @@ test('script prints hook JSON when enabled, nothing when off or on bad input', (
   const out = JSON.parse(ok.stdout);
   assert.equal(out.hookSpecificOutput.hookEventName, 'SessionStart');
   assert.equal(out.hookSpecificOutput.additionalContext, RULES);
-  assert.equal(run(JSON.stringify(start), { CLAUDE_GADGET_PROMPTS: '' }).stdout, '');
+  assert.equal(run(JSON.stringify(start), { CLAUDE_GADGET_PROMPTS: '0' }).stdout, '');
   const bad = run('not json', on);
   assert.equal(bad.status, 0);
   assert.equal(bad.stdout, '');
