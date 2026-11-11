@@ -1,7 +1,8 @@
-// The page: the gadget screen on a canvas, redrawn from the hub's state (SSE). Taps work like the touchscreen:
-// the title bar opens the session list, a team row shows that agent's detail for 10 s, the speaker cycles the sound.
+// The page: the gadget screen drawn as vectors at the resolution of the display, redrawn from the hub's state (SSE).
+// Taps work like the touchscreen: the title bar opens the session list, a team row shows that agent's detail for 10 s,
+// the speaker button cycles the beeps.
 import { renderScreen, hitTest, teamOrder, SCR_W, SCR_H } from './screen.js';
-import { createCanvasScreen, loadPictures } from './canvas_screen.js';
+import { createVectorScreen } from './vector_screen.js';
 import { relayLabel } from './format.js';
 
 const MENU_MS = 8000;       // the session list closes by itself after 8 s
@@ -10,16 +11,15 @@ const FRAME_MS = 100;       // redraw rate: the plan pulse runs on 100 ms phases
 
 const canvas = document.getElementById('screen');
 const relayEl = document.getElementById('relay');
-canvas.width = SCR_W;
-canvas.height = SCR_H;
+const screen = createVectorScreen(canvas);
 
+let scale = 1;
 let state = { sessions: [], view: {}, agents: [] };
 let receivedAt = performance.now();
 let menuUntil = 0;
 let detail = null;                                   // {session, agent, until}
 let sound = ['all', 'ask', 'off'].includes(localStorage.getItem('gadget-sound')) ? localStorage.getItem('gadget-sound') : 'all';
 let counts = null;                                   // {needs, turn} of the previous state, for the beeps
-let screen = null;
 
 const agentsOf = (st) => st.sessions.flatMap((s) => s.agents);
 
@@ -73,8 +73,18 @@ function uiNow() {
 }
 
 function draw() {
-  if (!screen) return;
+  screen.begin(scale);
   renderScreen(screen, state, uiNow());
+}
+
+/** The backing store follows the size on screen and the pixel ratio: every shape and letter is drawn sharp. */
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  canvas.width = width;
+  canvas.height = Math.round((width * SCR_H) / SCR_W);
+  scale = width / SCR_W;
+  draw();
 }
 
 canvas.addEventListener('click', (e) => {
@@ -105,9 +115,7 @@ function connect() {
   es.onopen = () => { canvas.classList.remove('offline'); };
 }
 
-loadPictures().then((images) => {
-  screen = createCanvasScreen(canvas, images);
-  draw();
-  setInterval(draw, FRAME_MS);
-  connect();
-});
+new ResizeObserver(resize).observe(canvas);
+resize();
+setInterval(draw, FRAME_MS);
+connect();

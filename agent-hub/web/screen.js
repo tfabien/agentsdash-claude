@@ -25,7 +25,7 @@ const STALE_S = 15 * 60;                                // quotas not refreshed 
 const PULSE_STEPS = 12;
 
 const STATE_COLOR = { needs_you: COLOR.NEEDS, error: COLOR.ERROR, your_turn: COLOR.YOURTURN, working: COLOR.WORKING, waiting_subs: COLOR.WAITING, done: COLOR.FAINT };
-const STATE_LABEL = { needs_you: 'needs you', error: 'error', your_turn: 'your turn', working: 'working', waiting_subs: 'waiting on subs', done: 'done' };
+const STATE_LABEL = { needs_you: 'needs you', error: 'error', your_turn: 'your turn', working: 'working', waiting_subs: 'waiting', done: 'done' };
 const stateColor = (s) => STATE_COLOR[s] ?? COLOR.FAINT;
 
 /** Role (agent_type) to sprite index; unknown roles get the generic look. */
@@ -398,8 +398,8 @@ export function renderScreen(screen, state, ui) {
     const u = state.usage;
     const stale = !u || u.age_s + ui.elapsedS > STALE_S;
     if (u) {
-      if (u.h5_pct !== undefined) quota(6, 196, 252, '5h', 'h5', u, stale);
-      if (u.d7_pct !== undefined) quota(202, MUTE.x - 4, 252, 'Week', 'd7', u, stale);
+      if (u.h5_pct !== undefined) quota(6, 176, 252, '5h', 'h5', u, stale);
+      if (u.d7_pct !== undefined) quota(180, MUTE.x - 4, 252, 'Week', 'd7', u, stale);
     }
     soundIcon(ui.sound);
     if (!inStandby && state.time) screen.text(416, 250, 60, S20, COLOR.TEXT, COLOR.BAR, state.time, 2);
@@ -418,7 +418,7 @@ export function renderScreen(screen, state, ui) {
     x += 48;
     const emptyS = u[`${key}_empty_s`];
     let t = `${pct}%`;
-    if (level === 'over' && emptyS > 0 && pct < 100) t += ` empty in ${fmtDuration(Math.max(0, emptyS - ui.elapsedS))}`;
+    if (level === 'over' && emptyS > 0 && pct < 100) t += ` empty ${fmtDuration(Math.max(0, emptyS - ui.elapsedS))}`;
     else t += ` reset ${fmtDuration(Math.max(0, u[`${key}_reset_s`] - ui.elapsedS))}`;
     screen.text(x, y, slotEnd - x, S16, stale ? COLOR.FAINT : COLOR.TEXT, COLOR.BAR, fit(t, slotEnd - x, S16));
   }

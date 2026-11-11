@@ -45,7 +45,7 @@ test('main_view_draws_the_decor_top_bar_lead_team_and_bottom_bar', () => {
   assert.ok(texts(r).includes('artillery-x3'));
   assert.ok(texts(r).includes('5'), 'agent count chip: lead + 4');
   assert.deepEqual(pics(r).filter((p) => p.id === 27).map((p) => [p.x, p.y]), [[18, 42]], 'big lead sprite');
-  assert.ok(texts(r).some((t) => t.startsWith('waiting on subs')));
+  assert.ok(texts(r).some((t) => t.startsWith('waiting ')));
   assert.ok(texts(r).includes('34%'));
   assert.ok(texts(r).includes('PLAN 3/8'));
   assert.ok(texts(r).includes('Write the failing tests'));
@@ -163,7 +163,7 @@ test('standby_after_five_idle_minutes_shows_the_big_clock_date_and_summary', () 
   assert.ok(pics(recent).every((p) => p.id !== 51), 'idle for less than 5 minutes');
 });
 
-test('quota_pace_colors_empty_in_and_stale', () => {
+test('quota_pace_colors_empty_and_stale', () => {
   const base = { age_s: 5, h5_pct: 48, h5_reset_s: 4800, d7_pct: 61, d7_reset_s: 187000 };
   const col = (usage, label) => { const r = draw(state([session()], { usage })); return r.ops.filter((o) => o.op === 'fill' && o.y === 259 && o.w > 0 && o.w <= 44 && o.c !== COLOR.CHIP); };
   assert.equal(paceLevel({ pct: 48, proj: 70 }), 'ok');
@@ -172,7 +172,7 @@ test('quota_pace_colors_empty_in_and_stale', () => {
   assert.equal(paceLevel({ pct: 100, proj: 10 }), 'over');
   assert.equal(paceLevel({ pct: 48, proj: undefined }), 'unknown');
   const over = draw(state([session()], { usage: { ...base, h5_proj: 150, h5_rate10: 90, h5_empty_s: 1800 } }));
-  assert.ok(texts(over).includes('48% empty in 30m'));
+  assert.ok(texts(over).includes('48% empty 30m'));
   assert.ok(over.ops.some((o) => o.op === 'fill' && o.y === 259 && o.c === COLOR.ERROR));
   const stale = draw(state([session()], { usage: { ...base, age_s: 1000, h5_proj: 70 } }));
   assert.ok(stale.ops.some((o) => o.op === 'fill' && o.y === 259 && o.c === COLOR.FAINT));
