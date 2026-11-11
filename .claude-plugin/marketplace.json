@@ -7,7 +7,7 @@
       "name": "standup-bot",
       "source": "./plugin",
       "description": "Agent standup in your browser: every Claude Code session, sub-agent, plan and question on one screen (optional ESP32 devices).",
-      "version": "0.4.0"
+      "version": "0.4.1"
     }
   ]
 }

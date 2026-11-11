@@ -13,6 +13,7 @@ import { asciiClean } from './common.mjs';
 
 const TITLE_LEN = 47;
 const DESKTOP_TOOL = 'mcp__ccd_turn__update_plan';     // the desktop app's task list
+const DESKTOP_WRAP_UP = 'mcp__ccd_turn__wrap_up';       // the desktop app closes the task list of a turn with it
 const LOCK_WAIT_MS = 2000;      // give up waiting for the lock after this (the event goes out without a plan update)
 const LOCK_STALE_MS = 10000;    // a lock older than this was left by a killed process
 
@@ -83,6 +84,7 @@ function applyTool(tasks, name, ti, resp) {
     return out;
   }
   if (name === 'TodoWrite') return fromItems(ti.todos);
+  if (name === DESKTOP_WRAP_UP) return tasks.map((t) => ({ ...t, status: 'completed' }));     // the turn is over: every step is done
   if (name === DESKTOP_TOOL) {
     if ('items' in ti) tasks = fromItems(ti.items);
     tasks = tasks.map((t) => ({ ...t }));

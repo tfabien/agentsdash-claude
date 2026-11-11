@@ -161,7 +161,11 @@ async function main() {
   await postToHub('/usage', body, { host: hubHost(), timeoutMs: 1000 });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// realpath: Node reports import.meta.url as the real path, argv[1] may go through a symlink (e.g. a linked ~/.claude)
+const isMain = (() => {
+  try { return !!process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href; } catch { return false; }
+})();
+if (isMain) {
   setTimeout(() => process.exit(0), 3000).unref();
   process.on('uncaughtException', () => process.exit(0));
   try { await main(); } catch { /* never fails */ }

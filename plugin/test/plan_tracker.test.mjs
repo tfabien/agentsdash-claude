@@ -47,6 +47,20 @@ test('desktop_deltas', () => {
   assert.deepEqual(update(dir, fixture('desktop_done_start')), { plan_done: 2, plan_total: 3, plan_cur: 'Commit', plan_next: '' });
 });
 
+test('desktop_wrap_up_completes_the_whole_plan', () => {
+  const dir = tmp();
+  update(dir, fixture('desktop_items'));
+  update(dir, fixture('desktop_advance'));
+  const wrap = { ...fixture('desktop_advance'), tool_name: 'mcp__ccd_turn__wrap_up', tool_input: { recap: 'All done.' } };
+  assert.deepEqual(update(dir, wrap), { plan_done: 3, plan_total: 3, plan_cur: '', plan_next: '' });
+  assert.equal(update(dir, edit()).plan_done, 3, 'the finished plan is stored');
+});
+
+test('wrap_up_without_a_plan_creates_none', () => {
+  const wrap = { ...fixture('desktop_advance'), tool_name: 'mcp__ccd_turn__wrap_up', tool_input: { recap: 'x' } };
+  assert.equal(update(tmp(), wrap), null);
+});
+
 test('all_done_keeps_total', () => {
   const out = runAll(tmp(), [create('A', '1'), create('B', '2'), upd('1', 'completed'), upd('2', 'completed')]);
   assert.deepEqual(out, { plan_done: 2, plan_total: 2, plan_cur: '', plan_next: '' });

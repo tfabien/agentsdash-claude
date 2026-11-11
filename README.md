@@ -73,12 +73,10 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 - Click a sub-agent row: the left panel shows its full command, tokens and previous command. Click the panel to go back.
 - Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state.
 
-### Quotas and standby
+### Quotas
 
 - Bottom bar: 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset). The hub polls them for the desktop app; a terminal status line can feed them too.
-- After 5 minutes without an active agent, the page shows a big clock, the date and a summary of the idle sessions.
-
-![Standby](docs/images/screen-standby.png)
+- The page has no clock and no standby view: your computer already shows the time. The ESP32 gadget keeps its standby clock.
 
 ## How it works
 
