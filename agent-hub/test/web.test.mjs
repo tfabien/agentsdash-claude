@@ -69,6 +69,16 @@ test('render_shows_quotas_in_bottom_bar', () => {
   assert.match(html, /1h30m/);
 });
 
+test('render_shows_relay_status', () => {
+  const s = [session()];
+  assert.doesNotMatch(renderState(state(s)), /relay/);
+  assert.match(renderState(state(s, { relay: { mode: 'serial', ok: false, connected: false, released: false, lastError: 'cannot open COM3' } })), /USB not connected/);
+  assert.match(renderState(state(s, { relay: { mode: 'serial', ok: false, connected: false, released: true, lastError: '' } })), /USB released/);
+  assert.match(renderState(state(s, { relay: { mode: 'serial', ok: true, connected: true, released: false, lastError: '' } })), /USB connected/);
+  assert.match(renderState(state(s, { relay: { mode: 'http', ok: false, lastError: 'timeout' } })), /gadget unreachable/);
+  assert.match(renderState(state(s, { relay: { mode: 'http', ok: true, lastError: '' } })), /gadget connected/);
+});
+
 test('format_helpers_match_firmware', () => {
   assert.equal(formatTokens(999), '999');
   assert.equal(formatTokens(12345), '12k');

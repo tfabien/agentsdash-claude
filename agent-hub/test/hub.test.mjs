@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { startHub } from '../hub.mjs';
@@ -135,6 +136,34 @@ test('quota_poll_result_reaches_state_and_taps', async () => {
     assert.equal(seen.length, 1);
   } finally { await hub.close(); }
 });
+
+test('no_cors_headers_so_other_web_pages_cannot_read_the_state', () => withHub(async (hub) => {
+  for (const p of ['/state', '/health', '/relay', '/']) {
+    assert.equal((await get(hub, p)).headers.get('access-control-allow-origin'), null, p);
+  }
+  const res = await fetch(`http://127.0.0.1:${hub.port}/events`);
+  assert.equal(res.headers.get('access-control-allow-origin'), null);
+  await res.body.cancel();
+}));
+
+test('cross_origin_post_is_rejected_and_same_origin_or_no_origin_is_accepted', () => withHub(async (hub) => {
+  const withOrigin = (origin) => fetch(`http://127.0.0.1:${hub.port}/event`, { method: 'POST', headers: { Origin: origin }, body: JSON.stringify(EV) });
+  assert.equal((await withOrigin('http://evil.example')).status, 403);
+  assert.equal((await withOrigin('null')).status, 403);
+  assert.equal((await (await get(hub, '/state')).json()).sessions.length, 0, 'the rejected event changed nothing');
+  assert.equal((await withOrigin(`http://127.0.0.1:${hub.port}`)).status, 200);
+  assert.equal((await withOrigin(`http://localhost:${hub.port}`)).status, 200);
+  assert.equal((await post(hub, '/event', EV)).status, 200);          // the plugin sends no Origin
+}));
+
+test('foreign_host_header_is_rejected_against_dns_rebinding', () => withHub(async (hub) => {
+  const status = await new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port: hub.port, path: '/state', headers: { Host: 'evil.example' } }, (res) => { res.resume(); resolve(res.statusCode); });
+    req.on('error', reject);
+    req.end();
+  });
+  assert.equal(status, 403);
+}));
 
 test('hub_binds_loopback_only', () => withHub(async (hub) => {
   assert.equal(hub.host, '127.0.0.1');

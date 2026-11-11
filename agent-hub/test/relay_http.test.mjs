@@ -104,5 +104,9 @@ test('hub_forwards_accepted_events_and_usage_to_the_relay', async () => {
     assert.deepEqual(g.got.map((r) => r.url), ['/event', '/usage']);
     const rel = await (await fetch(`http://127.0.0.1:${hub.port}/relay`)).json();
     assert.deepEqual([rel.mode, rel.ok], ['http', true]);
+    const st = await (await fetch(`http://127.0.0.1:${hub.port}/state`)).json();
+    assert.deepEqual([st.relay.mode, st.relay.ok], ['http', true], 'the page reads the relay status from the state');
+    const none = await startHub({ port: 0, config: { relay: { mode: 'none' }, quotas: false } });
+    try { assert.equal((await (await fetch(`http://127.0.0.1:${none.port}/state`)).json()).relay, undefined); } finally { await none.close(); }
   } finally { await hub.close(); await g.close(); }
 });

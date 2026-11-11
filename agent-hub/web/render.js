@@ -63,7 +63,22 @@ function teamRows(s, selectedAgent) {
   return `<section class="team">${rows.join('')}</section>`;
 }
 
-/** @param {object} state GET /state body (plus `time`). @returns {string} HTML of the screen. */
+/** Relay to the gadget: nothing when there is none, else its state (the page is where a missing USB cable shows). */
+function relayHtml(relay) {
+  if (!relay || relay.mode === 'none') return '';
+  let text, ok;
+  if (relay.mode === 'serial') {
+    ok = relay.connected;
+    text = relay.released ? 'USB released' : relay.connected ? 'USB connected' : 'USB not connected';
+  } else {
+    ok = relay.ok;
+    text = relay.ok ? 'gadget connected' : 'gadget unreachable';
+  }
+  const why = !ok && relay.lastError ? ` title="${esc(relay.lastError)}"` : '';
+  return `<span class="relay ${ok ? 'ok' : 'down'}"${why}>${text}</span>`;
+}
+
+/** @param {object} state GET /state body (plus `time`, `relay`). @returns {string} HTML of the screen. */
 export function renderState(state) {
   const sessions = state.sessions ?? [];
   const sel = sessions.find((s) => s.id === state.view?.session) ?? sessions[0];
@@ -78,6 +93,6 @@ export function renderState(state) {
   return `<div class="screen${needs ? ' needs-you' : ''}">
 <header class="titlebar"><span class="name">${esc(sel ? sel.title || sel.project : 'Agent standup')}</span><span class="dots">${dots}${more}</span></header>
 <main>${body}</main>
-<footer class="bottom"><span class="quotas">${quotaHtml(state.usage)}</span><span class="clock">${esc(state.time ?? '')}</span></footer>
+<footer class="bottom"><span class="quotas">${quotaHtml(state.usage)}</span><span class="right">${relayHtml(state.relay)}<span class="clock">${esc(state.time ?? '')}</span></span></footer>
 </div>`;
 }

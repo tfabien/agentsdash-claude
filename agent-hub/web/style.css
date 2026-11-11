@@ -30,4 +30,6 @@ main { padding: 10px 12px; overflow: auto; display: grid; gap: 8px; align-conten
 .empty { color: var(--dim); text-align: center; padding: 40px 0; font-size: 1.3em; }
 .quota { margin-right: 14px; } .quota small { color: var(--dim); } .pace-tight { color: #ffd24d; } .pace-over { color: var(--error); } .unknown { color: var(--dim); }
 .clock { font-variant-numeric: tabular-nums; }
+.right { display: flex; gap: 14px; align-items: center; }
+.relay { font-size: .85em; } .relay.ok { color: var(--your_turn); } .relay.down { color: var(--needs_you); font-weight: 600; }
 .sound { display: block; margin: 8px 4px; color: var(--dim); font-size: .85em; }

@@ -50,14 +50,15 @@ export function startHub(opts = {}) {
   const usageTaps = [];
   const changeTaps = [];
 
-  const stateJson = () => ({ ...model.toState(now()), time: clockHHMM() });
+  const relayInfo = () => (relay ? { mode, ...(serial ? { port: config.relay.port } : { host: config.relay.host }), ...relay.status() } : null);
+  const stateJson = () => ({ ...model.toState(now()), time: clockHHMM(), ...(relayInfo() ? { relay: relayInfo() } : {}) });
   const publish = () => {
     const payload = JSON.stringify(stateJson());
     for (const res of clients) res.write(`data: ${payload}\n\n`);
     for (const fn of changeTaps) { try { fn(); } catch { /* a tap never breaks the hub */ } }
   };
-  const text = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' }); res.end(body); };
-  const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(obj)); };
+  const text = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'text/plain' }); res.end(body); };
+  const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 
   function serveStatic(res, urlPath) {
     const rel = urlPath === '/' ? 'index.html' : decodeURIComponent(urlPath.slice(1));
@@ -68,20 +69,24 @@ export function startHub(opts = {}) {
   }
 
   async function handle(req, res) {
+    // No CORS: other web pages cannot read the state. A request must name this hub in Host (DNS rebinding) and, when it carries
+    // an Origin (a browser POST from another page), that Origin must be the hub itself. The plugin sends no Origin.
+    const self = new Set(['127.0.0.1', 'localhost', '[::1]'].map((h) => `${h}:${server.address().port}`));
+    if (!self.has(req.headers.host)) return text(res, 403, 'forbidden host');
+    if (req.headers.origin !== undefined && !self.has(String(req.headers.origin).replace(/^http:\/\//, ''))) return text(res, 403, 'forbidden origin');
     const url = new URL(req.url, 'http://x');
     const route = `${req.method} ${url.pathname}`;
-    if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' }); return res.end(); }
     switch (route) {
       case 'GET /health': return json(res, { ok: true });
       case 'GET /state': return json(res, stateJson());
-      case 'GET /relay': return json(res, relay ? { mode, ...(serial ? { port: config.relay.port } : { host: config.relay.host }), ...relay.status() } : { mode: 'none' });
+      case 'GET /relay': return json(res, relayInfo() ?? { mode: 'none' });
       case 'POST /serial/release':
       case 'POST /serial/open':
         if (!serial) return text(res, 404, 'not in serial mode');
         if (route.endsWith('release')) serial.release(); else serial.reopen();
         return text(res, 200, 'ok');
       case 'GET /events': {
-        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'Access-Control-Allow-Origin': '*' });
+        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
         res.write(`data: ${JSON.stringify(stateJson())}\n\n`);
         clients.add(res);
         req.on('close', () => clients.delete(res));
