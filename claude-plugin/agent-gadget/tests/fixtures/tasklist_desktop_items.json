@@ -1,0 +1,30 @@
+{
+ "session_id": "0a1b2c3d-fixture",
+ "cwd": "C:\\proj\\demo",
+ "transcript_path": "",
+ "hook_event_name": "PostToolUse",
+ "tool_name": "mcp__ccd_turn__update_plan",
+ "tool_input": {
+  "items": [
+   {
+    "content": "Read the code",
+    "status": "in_progress"
+   },
+   {
+    "content": "Write the plan",
+    "status": "pending"
+   },
+   {
+    "content": "Commit",
+    "status": "pending"
+   }
+  ],
+  "scope": "first_task"
+ },
+ "tool_response": [
+  {
+   "type": "text",
+   "text": "Plan shown (3 steps)."
+  }
+ ]
+}

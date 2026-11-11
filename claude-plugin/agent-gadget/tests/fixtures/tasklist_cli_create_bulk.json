@@ -1,0 +1,11 @@
+{
+ "session_id": "0a1b2c3d-fixture",
+ "cwd": "C:\\proj\\demo",
+ "transcript_path": "",
+ "hook_event_name": "PostToolUse",
+ "tool_name": "TaskCreate",
+ "tool_input": {
+  "tasks": "[{\"content\": \"Move files\", \"status\": \"pending\"}, {\"content\": \"Set up git\", \"status\": \"pending\"}]"
+ },
+ "tool_response": {}
+}

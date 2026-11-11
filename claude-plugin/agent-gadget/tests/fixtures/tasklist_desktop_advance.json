@@ -1,0 +1,16 @@
+{
+ "session_id": "0a1b2c3d-fixture",
+ "cwd": "C:\\proj\\demo",
+ "transcript_path": "",
+ "hook_event_name": "PostToolUse",
+ "tool_name": "mcp__ccd_turn__update_plan",
+ "tool_input": {
+  "advance": true
+ },
+ "tool_response": [
+  {
+   "type": "text",
+   "text": "Plan updated: step 2 of 3 is in progress."
+  }
+ ]
+}

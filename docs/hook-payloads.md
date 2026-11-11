@@ -53,3 +53,20 @@ Observed order for one lead turn with two sub-agents: `SessionStart`, `UserPromp
 - **Every lead turn ends with `Stop` then a bare `SubagentStop`** from an internal agent: new `agent_id` each time, `agent_type` `""`,
   no `SubagentStart` and no tool hooks before it. The plugin drops a `SubagentStop` that had no `SubagentStart` and no `agent_type`.
 - With `defaultMode: auto` no permission prompt appears at all, so "needs you" only shows in modes that ask.
+
+## Task list tools (read from local transcripts, 2026-11-11)
+
+The hook's `tool_input` is the tool call's input and `tool_response` its result (`toolUseResult` in the transcript).
+Fixtures: `claude-plugin/agent-gadget/tests/fixtures/tasklist_*.json`.
+
+| Tool | `tool_input` | `tool_response` | Meaning |
+|---|---|---|---|
+| `TaskCreate` (CLI) | `subject`, `description`, optional `activeForm` | `{"task": {"id": "1", "subject": ...}}` | appends one pending task; the id comes only from the response (PostToolUse) |
+| `TaskCreate` (older form) | `tasks`: a JSON **string** of `[{"content", "status"}]` | | creates the whole list at once |
+| `TaskUpdate` (CLI) | `taskId`, `status` (`pending`, `in_progress`, `completed`), optional `subject` | `{"success", "taskId", "statusChange": {"from", "to"}}` | |
+| `mcp__ccd_turn__update_plan` (desktop app) | `items`: `[{"content", "status"}]` (whole list), optional `scope` | `[{"type": "text", "text": "Plan shown (N steps)."}]` | replaces the list |
+| same | `advance: true` | | completes the in-progress step and starts the next pending one |
+| same | `done: [n, ...]` and/or `start: n` (1-based) | | marks steps completed / in progress; may come together with `items` (applied after it) |
+
+`TodoWrite` never appears in this machine's transcripts. Both CLI and desktop hooks fire for these tools
+(matcher `*`), PreToolUse and PostToolUse; the plugin reads PostToolUse (the task id is only in the response).

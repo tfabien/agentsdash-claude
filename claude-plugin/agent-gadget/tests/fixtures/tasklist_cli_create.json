@@ -1,0 +1,18 @@
+{
+ "session_id": "0a1b2c3d-fixture",
+ "cwd": "C:\\proj\\demo",
+ "transcript_path": "",
+ "hook_event_name": "PostToolUse",
+ "tool_name": "TaskCreate",
+ "tool_input": {
+  "subject": "Write the failing tests",
+  "description": "Tests for roles.cpp",
+  "activeForm": "Writing the failing tests"
+ },
+ "tool_response": {
+  "task": {
+   "id": "1",
+   "subject": "Write the failing tests"
+  }
+ }
+}

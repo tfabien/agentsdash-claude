@@ -1,0 +1,20 @@
+{
+ "session_id": "0a1b2c3d-fixture",
+ "cwd": "C:\\proj\\demo",
+ "transcript_path": "",
+ "hook_event_name": "PostToolUse",
+ "tool_name": "mcp__ccd_turn__update_plan",
+ "tool_input": {
+  "done": [
+   1,
+   2
+  ],
+  "start": 3
+ },
+ "tool_response": [
+  {
+   "type": "text",
+   "text": "Plan updated."
+  }
+ ]
+}

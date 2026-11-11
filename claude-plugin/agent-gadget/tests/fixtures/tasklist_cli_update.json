@@ -1,0 +1,22 @@
+{
+ "session_id": "0a1b2c3d-fixture",
+ "cwd": "C:\\proj\\demo",
+ "transcript_path": "",
+ "hook_event_name": "PostToolUse",
+ "tool_name": "TaskUpdate",
+ "tool_input": {
+  "taskId": "1",
+  "status": "in_progress"
+ },
+ "tool_response": {
+  "success": true,
+  "taskId": "1",
+  "updatedFields": [
+   "status"
+  ],
+  "statusChange": {
+   "from": "pending",
+   "to": "in_progress"
+  }
+ }
+}
