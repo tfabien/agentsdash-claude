@@ -167,6 +167,15 @@ static void applyLeadUsage(Session& s, const EventV2& e, uint32_t now) {
     if (pct != s.ctxPct || s.ctxFromStatusLine) { s.ctxPct = pct; s.ctxFromStatusLine = false; changed = true; }
     if (e.ctxK >= 0) s.ctxK = (uint16_t)e.ctxK;
   }
+  if (e.planTotal >= 0) {                                    // plan progress (total 0 clears it)
+    uint8_t total = e.planTotal > 255 ? 255 : (uint8_t)e.planTotal;
+    long d = e.planDone < 0 ? s.planDone : e.planDone;
+    uint8_t done = d > total ? total : (uint8_t)d;
+    if (total != s.planTotal || done != s.planDone) { s.planTotal = total; s.planDone = done; changed = true; }
+    if (total == 0) { s.planCur[0] = s.planNext[0] = 0; }
+  }
+  if (e.hasPlanCur && strcmp(s.planCur, e.planCur) != 0) { copyStr(s.planCur, PLAN_LEN, e.planCur); changed = true; }
+  if (e.hasPlanNext && strcmp(s.planNext, e.planNext) != 0) { copyStr(s.planNext, PLAN_LEN, e.planNext); changed = true; }
   if (changed) s.usageRev = ++modelRev;
 }
 
@@ -295,7 +304,7 @@ bool modelApplyV2(const EventV2& e, uint32_t now) {
 bool modelApplyV1(const char* agent, const char* state, const char* task, uint32_t now) {
   EventV2 e;
   memset(&e, 0, sizeof e);
-  e.tok = e.stok = e.ctxPct = e.ctxK = -1;
+  e.tok = e.stok = e.ctxPct = e.ctxK = e.planDone = e.planTotal = -1;
   if (!strcmp(state, "working"))      e.state = ST_WORKING;
   else if (!strcmp(state, "waiting")) e.state = ST_NEEDS_YOU;
   else if (!strcmp(state, "done"))    e.state = ST_DONE;
@@ -498,7 +507,11 @@ String modelToJson(uint32_t now) {
          "\",\"count\":" + String(1 + modelSubCount(s)) + ",\"more\":" + String(s.more) + ",\"title\":\"" + jsonEscape(s.title) +
          "\",\"ctx_pct\":" + (s.ctxPct == CTX_UNKNOWN ? String("null") : String(s.ctxPct)) + ",\"ctx_k\":" + String(s.ctxK) +
          ",\"ctx_src\":\"" + (s.ctxPct == CTX_UNKNOWN ? "" : (s.ctxFromStatusLine ? "statusline" : "transcript")) +
-         "\",\"tok\":" + String(s.stok) + ",\"agents\":[" + agentJson(s, s.lead, true, now);
+         "\",\"tok\":" + String(s.stok) + ",\"plan\":" +
+         (s.planTotal == 0 ? String("null")
+                           : "{\"done\":" + String(s.planDone) + ",\"total\":" + String(s.planTotal) + ",\"cur\":\"" +
+                                 jsonEscape(s.planCur) + "\",\"next\":\"" + jsonEscape(s.planNext) + "\"}") +
+         ",\"agents\":[" + agentJson(s, s.lead, true, now);
     for (int i = 1; i <= modelSubCount(s); i++) j += "," + agentJson(s, *modelAgent(s, i), false, now);
     j += "]}";
   }

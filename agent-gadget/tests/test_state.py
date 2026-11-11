@@ -4,10 +4,10 @@ import unittest
 from gadget_client import Gadget, require_gadget
 
 
-def ev(session, agent, state, cmd="", evt="PreToolUse", role=None, project=None, detail=""):
-    return {"v": 2, "session": session, "project": project or f"proj-{session}", "agent": agent,
-            "role": role or ("lead" if agent == "lead" else "general"), "evt": evt, "state": state,
-            "cmd": cmd, "detail": detail}
+def ev(session, agent, state, cmd="", evt="PreToolUse", role=None, project=None, detail="", **extra):
+    return dict({"v": 2, "session": session, "project": project or f"proj-{session}", "agent": agent,
+                 "role": role or ("lead" if agent == "lead" else "general"), "evt": evt, "state": state,
+                 "cmd": cmd, "detail": detail}, **extra)
 
 
 def find_session(state, sid):
@@ -31,6 +31,27 @@ class StateTest(unittest.TestCase):
 
     def state(self):
         return self.g.state()
+
+    def test_long_role_and_cmd_kept(self):
+        cmd = "Bash: pio run -e esp32dev_test -t upload --upload-port COM3 -v1"   # 63 characters
+        self.assertEqual(len(cmd), 63)
+        self.post("aaaa", "lead", "working", "Agent x")
+        self.post("aaaa", "sub1", "working", cmd, evt="SubagentStart", role="general-purpose-agent-x")
+        a = find_agent(self.state(), "aaaa", "sub1")
+        self.assertEqual(a["role"], "general-purpose-agent-x")
+        self.assertEqual(a["cmd"], cmd)
+
+    def test_plan_fields(self):
+        self.post("aaaa", "lead", "working", "Edit x", plan_done=2, plan_total=8,
+                  plan_cur="Write the failing tests", plan_next="Implement roles.cpp")
+        plan = find_session(self.state(), "aaaa")["plan"]
+        self.assertEqual(plan, {"done": 2, "total": 8, "cur": "Write the failing tests", "next": "Implement roles.cpp"})
+        self.post("aaaa", "lead", "working", "Edit y")                       # no plan fields: kept
+        self.assertEqual(find_session(self.state(), "aaaa")["plan"]["total"], 8)
+        self.post("aaaa", "lead", "working", "Edit z", plan_done=9, plan_total=8, plan_cur="", plan_next="")
+        self.assertEqual(find_session(self.state(), "aaaa")["plan"]["done"], 8)   # clamped
+        self.post("aaaa", "lead", "working", "Edit z", plan_done=0, plan_total=0)
+        self.assertIsNone(find_session(self.state(), "aaaa")["plan"])
 
     def test_lead_waits_on_subagents(self):
         self.post("aaaa", "lead", "working", "Agent explore")

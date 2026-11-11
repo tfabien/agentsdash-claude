@@ -72,7 +72,12 @@ class BuildEventTest(unittest.TestCase):
         self.assertEqual((lead["agent"], lead["role"], lead["cmd"], lead["detail"], lead["state"]),
                          ("lead", "lead", "Edit app.py", "src/app.py", "working"))
         sub = self.build(payload(SUB, "PreToolUse", **tool))
-        self.assertEqual((sub["agent"], sub["role"], sub["session"]), ("aa0b", "general-purp", "abcd"))
+        self.assertEqual((sub["agent"], sub["role"], sub["session"]), ("aa0b", "general-purpose", "abcd"))
+
+    def test_role_and_cmd_limits(self):
+        sub = {**LEAD, "agent_id": "bb0bc7f345def841f", "agent_type": "x" * 30}
+        ev = self.build(payload(sub, "PreToolUse", tool_name="Bash", tool_input={"command": "y" * 100}))
+        self.assertEqual((len(ev["role"]), len(ev["cmd"])), (23, 63))
 
     def test_subagent_handback_is_not_a_command(self):
         ev = self.build(payload(SUB, "PreToolUse", tool_name="SubagentHandback", tool_input={"x": 1}))
@@ -80,7 +85,7 @@ class BuildEventTest(unittest.TestCase):
 
     def test_subagent_start_stop_states(self):
         start = self.build(payload(SUB, "SubagentStart"))
-        self.assertEqual((start["state"], start["cmd"], start["role"]), ("working", "Started", "general-purp"))
+        self.assertEqual((start["state"], start["cmd"], start["role"]), ("working", "Started", "general-purpose"))
         stop = self.build(payload(SUB, "SubagentStop", last_assistant_message="All done: README ok"))
         self.assertEqual((stop["state"], stop["cmd"]), ("done", "All done: README ok"))
 
@@ -167,7 +172,7 @@ class BuildEventTest(unittest.TestCase):
         text = "Corrige le bug d'authentification \u00e9 \u00e0 \u00fc \"quoted\" back\\slash " + "long " * 30
         ev = self.build(payload(LEAD, "PreToolUse", tool_name="Bash", tool_input={"command": text}))
         self.assertTrue(ev["cmd"].isascii() and ev["detail"].isascii())
-        self.assertLessEqual(len(ev["cmd"]), 43)
+        self.assertLessEqual(len(ev["cmd"]), 63)
         self.assertLessEqual(len(ev["detail"]), 60)
         self.assertEqual(json.loads(json.dumps(ev)), ev)
         self.assertIn("authentification e a u", ev["detail"])
@@ -193,7 +198,7 @@ class LegacyProtocolTest(unittest.TestCase):
         lead = {"v": 2, "session": "abcd", "project": "demo", "agent": "lead", "role": "lead",
                 "evt": "PreToolUse", "state": "working", "cmd": "Edit app.py", "detail": "src/app.py"}
         self.assertEqual(notify.to_v1(lead), {"agent": "demo-abcd", "state": "working", "task": "Edit app.py"})
-        sub = {**lead, "agent": "aa0b", "role": "general-purp", "state": "needs_you"}
+        sub = {**lead, "agent": "aa0b", "role": "general-purpose", "state": "needs_you"}
         self.assertEqual(notify.to_v1(sub), {"agent": "general-purp-aa0b", "state": "waiting", "task": "Edit app.py"})
         self.assertEqual(notify.to_v1({**lead, "state": "your_turn"})["state"], "done")
 

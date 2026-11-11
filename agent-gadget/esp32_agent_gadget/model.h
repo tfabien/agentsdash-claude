@@ -7,10 +7,11 @@
 #define MAX_SUBS 12                 // sub-agents per session (the lead is extra)
 #define ID_LEN 5                    // 4 characters + NUL
 #define PROJECT_LEN 15
-#define ROLE_LEN 13
-#define CMD_LEN 44
+#define ROLE_LEN 24
+#define CMD_LEN 64
 #define DETAIL_LEN 61
-#define TITLE_LEN 31                // session title (from the transcript), 30 characters + NUL
+#define TITLE_LEN 31
+#define PLAN_LEN 48                 // plan task titles (current, next), 47 characters + NUL                // session title (from the transcript), 30 characters + NUL
 #define CTX_UNKNOWN 255
 #define CTX_STATUSLINE_MS 120000UL  // a status line context newer than this wins over the transcript estimate
 
@@ -45,7 +46,10 @@ struct Session {
   bool ctxFromStatusLine;           // the value came from the status line (exact) rather than the transcript
   uint32_t ctxAt;                   // when the status line value arrived (millis)
   uint32_t stok;                    // tokens of the whole session (lead + every sub-agent, gone ones included)
-  uint32_t usageRev;                // changes when ctx, title or stok change
+  uint32_t usageRev;                // changes when ctx, title, stok or the plan change
+  uint8_t planDone, planTotal;      // superpowers plan progress; planTotal 0 = no plan
+  char planCur[PLAN_LEN];           // title of the task in progress
+  char planNext[PLAN_LEN];          // title of the next pending task
   Agent lead;
   Agent subs[MAX_SUBS];
   uint8_t more;                     // distinct sub-agents hidden because the session was full
@@ -67,6 +71,9 @@ struct EventV2 {                    // wire format v2, already parsed
   char detail[DETAIL_LEN];
   long tok, stok, ctxPct, ctxK;     // optional usage fields, -1 = absent
   char title[TITLE_LEN];            // optional, empty = absent
+  long planDone, planTotal;         // optional plan progress, -1 = absent
+  char planCur[PLAN_LEN], planNext[PLAN_LEN];
+  bool hasPlanCur, hasPlanNext;
 };
 
 struct UsageV1 {                    // POST /usage (status line), already parsed; LONG_MIN = absent

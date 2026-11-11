@@ -91,7 +91,7 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
   if (jsonLong(body, "v", version) && version == 2) {
     EventV2 e;
     memset(&e, 0, sizeof e);
-    e.tok = e.stok = e.ctxPct = e.ctxK = -1;
+    e.tok = e.stok = e.ctxPct = e.ctxK = e.planDone = e.planTotal = -1;
     char st[16];
     if (!jsonGet(body, "session", e.session, ID_LEN) || !jsonGet(body, "agent", e.agent, ID_LEN) ||
         !jsonGet(body, "state", st, sizeof st) || !modelParseState(st, e.state)) {
@@ -108,6 +108,10 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
     jsonLong(body, "stok", e.stok);
     jsonLong(body, "ctx_pct", e.ctxPct);
     jsonLong(body, "ctx_k", e.ctxK);
+    jsonLong(body, "plan_done", e.planDone);
+    jsonLong(body, "plan_total", e.planTotal);
+    e.hasPlanCur = jsonGet(body, "plan_cur", e.planCur, PLAN_LEN);
+    e.hasPlanNext = jsonGet(body, "plan_next", e.planNext, PLAN_LEN);
     modelApplyV2(e, millis());
     server.send(200, "text/plain", "ok");
     return;

@@ -7,7 +7,7 @@ Standard library only. It never prints to stdout (stdout of some hooks is inject
 context), never fails, and gives up after 1.5 s so it can never slow Claude down.
 
 Event (ASCII JSON): {"v":2,"session":"<id4>","project":"<=14","agent":"lead"|"<id4>","role":"lead"|"<type>",
-"evt":"<hook>","state":"working|needs_you|your_turn|done|error","cmd":"<=43","detail":"<=60"}.
+"evt":"<hook>","state":"working|needs_you|your_turn|done|error","cmd":"<=63","detail":"<=60"}.
 Optional usage fields read from the transcripts (transcript_usage.py): "tok" (this agent's tokens) and, on lead
 events, "stok" (session total), "ctx_k", "ctx_pct" (context fallback when no status line) and "title" (session title).
 See docs/hook-payloads.md (payloads observed) and the design spec section 10 (hook -> state mapping).
@@ -155,7 +155,7 @@ def build_event(payload, env=None, state_dir=None):
 
     agent_id = str(payload.get("agent_id") or "")
     agent = agent_id[:4] if agent_id else "lead"
-    role = ascii_clean(payload.get("agent_type") or "agent", 12) if agent_id else "lead"
+    role = ascii_clean(payload.get("agent_type") or "agent", 23) if agent_id else "lead"
     cwd = payload.get("cwd") or os.getcwd()
     session_id = payload.get("session_id", "")
     marker = marker_path(state_dir, session_id, agent)
@@ -164,7 +164,7 @@ def build_event(payload, env=None, state_dir=None):
         return {"v": 2, "session": re.sub(r"[^A-Za-z0-9]", "", str(session_id))[:4],
                 "project": ascii_clean(os.path.basename(str(cwd).rstrip("/\\")) or "claude", 14),
                 "agent": agent, "role": role, "evt": hook, "state": state,
-                "cmd": ascii_clean(cmd, 43), "detail": "" if mask else ascii_clean(detail, 60)}
+                "cmd": ascii_clean(cmd, 63), "detail": "" if mask else ascii_clean(detail, 60)}
 
     def tool_event(state, prefix=""):
         name = str(payload.get("tool_name", ""))
