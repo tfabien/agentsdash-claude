@@ -24,6 +24,14 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 - Context fill bar next to the plan (green under 60 %, orange 60 to 79 %, red from 80 %).
 - One lead per Claude Code session (CLI or desktop app), up to 5 sessions, with the project name or the session title.
 
+### Questions: display and notification
+
+![Question](docs/images/screen-question.png)
+
+- A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the buzzer beeps.
+- Permission prompts turn the session orange too.
+- Tap the speaker icon (bottom bar) to switch the buzzer between `all`, `ask` (needs you only) and `off`, kept in flash.
+
 ### Sub-agents: see and follow them
 
 ![Compact rows](docs/images/screen-compact.png)
@@ -32,14 +40,6 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 - 1 to 4 sub-agents get large rows, 5 to 7 compact rows, 8 or more show 6 rows and "+N more".
 - Six states with their color: working (green), needs you (orange), error (red), your turn (grey-blue), waiting on sub-agents (blue), done (faint).
 - Robots blink while working, and the state bar of an agent that needs you pulses orange.
-
-### Questions: display and notification
-
-![Question](docs/images/screen-question.png)
-
-- A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the buzzer beeps.
-- Permission prompts turn the session orange too.
-- Tap the speaker icon (bottom bar) to switch the buzzer between `all`, `ask` (needs you only) and `off`, kept in flash.
 
 ### Touch: agent detail
 
