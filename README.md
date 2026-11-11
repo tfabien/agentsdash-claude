@@ -72,6 +72,7 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 
 - Click a sub-agent row: the left panel shows its full command, tokens and previous command. Click the panel to go back.
 - Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state.
+- The page shows one session at a time, chosen like this: the session that needs you first, else one that is working (so its sub-agents show), else the one that last reached "your turn". Click a dot or a row of the list to look at another session for 30 s.
 
 ### Quotas
 
