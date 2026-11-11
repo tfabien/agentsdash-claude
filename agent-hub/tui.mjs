@@ -4,7 +4,7 @@
 import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.mjs';
-import { formatAge, formatTokens } from './web/render.js';
+import { formatAge, formatTokens } from './web/format.js';
 
 const COLOR = { needs_you: 208, error: 196, your_turn: 41, working: 75, waiting_subs: 141, done: 245 };
 const LABEL = { needs_you: 'NEEDS YOU', error: 'error', your_turn: 'your turn', working: 'working', waiting_subs: 'waiting', done: 'done' };

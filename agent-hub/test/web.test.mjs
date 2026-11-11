@@ -1,83 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderState, formatTokens, formatAge } from '../web/render.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { formatTokens, formatAge, fmtDuration, relayLabel } from '../web/format.js';
 import { startHub } from '../hub.mjs';
 
-const agent = (over = {}) => ({ tok: 0, id: 'lead', parent: '', role: 'lead', state: 'working', cmd: 'Edit a.js', detail: '', prev: '', prev_age: 0, age: 5, ...over });
-const session = (over = {}) => ({
-  id: 'aaaa', project: 'proj', dot: 'working', count: 1, more: 0, title: '', ctx_pct: null, ctx_k: 0, ctx_src: '', tok: 0,
-  plan: null, ask: null, agents: [agent()], ...over,
-});
-const state = (sessions, over = {}) => ({ sessions, more_sessions: 0, view: { session: sessions[0]?.id ?? '', agent: 'lead', mode: 'auto' }, agents: [], time: '12:34', ...over });
-
-test('render_shows_title_bar_with_session_dots', () => {
-  const html = renderState(state([session({ id: 'aaaa', title: 'Fix login' }), session({ id: 'bbbb', project: 'two', dot: 'your_turn' })]));
-  assert.match(html, /Fix login/);
-  assert.equal((html.match(/class="dot /g) || []).length, 2);
-  assert.match(html, /data-session="bbbb"/);
-  assert.match(html, /data-state="your_turn"/);
-});
-
-test('render_marks_needs_you_session', () => {
-  const html = renderState(state([session({ dot: 'needs_you', agents: [agent({ state: 'needs_you', cmd: 'Approve? Bash ls' })] })]));
-  assert.match(html, /class="screen needs-you"/);
-  assert.match(html, /Approve\? Bash ls/);
-});
-
-test('render_shows_plan_and_ctx', () => {
-  const html = renderState(state([session({ ctx_pct: 45, ctx_k: 450, tok: 12345, plan: { done: 2, total: 5, cur: 'Task 3', next: 'Task 4', state: '' } })]));
-  assert.match(html, /45%/);
-  assert.match(html, /2\/5/);
-  assert.match(html, /Task 3/);
-  assert.match(html, /Task 4/);
-  assert.match(html, /12k/);
-});
-
-test('render_shows_question_options', () => {
-  const html = renderState(state([session({ dot: 'needs_you', agents: [agent({ state: 'needs_you' })], ask: { question: 'Which database?', options: 'Postgres|SQLite' } })]));
-  assert.match(html, /Which database\?/);
-  assert.match(html, /<li[^>]*>Postgres<\/li>/);
-  assert.match(html, /<li[^>]*>SQLite<\/li>/);
-});
-
-test('render_lists_subagents_and_overflow', () => {
-  const html = renderState(state([session({
-    count: 3, more: 2,
-    agents: [agent(), agent({ id: 'ab12', role: 'explore', parent: 'lead', cmd: 'Grep foo' }), agent({ id: 'cd34', role: 'review', parent: 'lead', state: 'done', cmd: 'Finished' })],
-  })]));
-  assert.match(html, /explore/);
-  assert.match(html, /Grep foo/);
-  assert.match(html, /\+2 more/);
-});
-
-test('render_empty_state_says_waiting_for_agents', () => {
-  const html = renderState(state([]));
-  assert.match(html, /Waiting for agents/);
-  assert.match(html, /12:34/);
-});
-
-test('render_escapes_html_in_commands', () => {
-  const html = renderState(state([session({ agents: [agent({ cmd: '<img src=x onerror=1>' })] })]));
-  assert.doesNotMatch(html, /<img/);
-  assert.match(html, /&lt;img/);
-});
-
-test('render_shows_quotas_in_bottom_bar', () => {
-  const html = renderState(state([session()], { usage: { age_s: 3, h5_pct: 40, h5_reset_s: 5400, h5_rate10: 50, h5_proj: 90, h5_empty_s: -1, d7_pct: 12, d7_reset_s: 86400 } }));
-  assert.match(html, /5h 40%/);
-  assert.match(html, /7d 12%/);
-  assert.match(html, /1h30m/);
-});
-
-test('render_shows_relay_status', () => {
-  const s = [session()];
-  assert.doesNotMatch(renderState(state(s)), /relay/);
-  assert.match(renderState(state(s, { relay: { mode: 'serial', ok: false, connected: false, released: false, lastError: 'cannot open COM3' } })), /USB not connected/);
-  assert.match(renderState(state(s, { relay: { mode: 'serial', ok: false, connected: false, released: true, lastError: '' } })), /USB released/);
-  assert.match(renderState(state(s, { relay: { mode: 'serial', ok: true, connected: true, released: false, lastError: '' } })), /USB connected/);
-  assert.match(renderState(state(s, { relay: { mode: 'http', ok: false, lastError: 'timeout' } })), /gadget unreachable/);
-  assert.match(renderState(state(s, { relay: { mode: 'http', ok: true, lastError: '' } })), /gadget connected/);
-});
+const ASSETS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'assets');
 
 test('format_helpers_match_firmware', () => {
   assert.equal(formatTokens(999), '999');
@@ -86,15 +15,47 @@ test('format_helpers_match_firmware', () => {
   assert.equal(formatAge(12), '12s');
   assert.equal(formatAge(64), '1m04');
   assert.equal(formatAge(7500), '2h05m');
+  assert.deepEqual([2700, 4800, 187000, -5].map(fmtDuration), ['45m', '1h20', '2d03h', '0m']);
 });
 
-test('index_page_is_served_with_sse_client', async () => {
+test('relay_label_says_whether_the_gadget_is_reachable', () => {
+  assert.equal(relayLabel(undefined), null);
+  assert.equal(relayLabel({ mode: 'none' }), null);
+  assert.deepEqual(relayLabel({ mode: 'serial', ok: false, connected: false, released: false, lastError: 'cannot open COM3' }), { text: 'USB not connected', ok: false, why: 'cannot open COM3' });
+  assert.equal(relayLabel({ mode: 'serial', connected: false, released: true }).text, 'USB released');
+  assert.equal(relayLabel({ mode: 'serial', connected: true }).text, 'USB connected');
+  assert.deepEqual(relayLabel({ mode: 'http', ok: false, lastError: 'timeout' }), { text: 'gadget unreachable', ok: false, why: 'timeout' });
+  assert.equal(relayLabel({ mode: 'http', ok: true }).text, 'gadget connected');
+});
+
+test('every_picture_of_the_manifest_exists_and_covers_the_ids_the_screen_uses', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(ASSETS, 'manifest.json'), 'utf8'));
+  for (const file of Object.values(manifest)) assert.ok(fs.existsSync(path.join(ASSETS, file)), file);
+  for (let id = 16; id <= 86; id++) assert.ok(manifest[id], `picture ${id}`);
+});
+
+test('page_serves_the_canvas_the_script_and_the_pictures', async () => {
   const hub = await startHub({ port: 0, config: { relay: { mode: 'none' }, quotas: false } });
   try {
-    const html = await (await fetch(`http://127.0.0.1:${hub.port}/`)).text();
+    const base = `http://127.0.0.1:${hub.port}`;
+    const html = await (await fetch(`${base}/`)).text();
     assert.match(html, /<title>Agent standup<\/title>/);
-    const js = await (await fetch(`http://127.0.0.1:${hub.port}/app.js`)).text();
-    assert.match(js, /EventSource\('\/events'\)/);
-    assert.equal((await fetch(`http://127.0.0.1:${hub.port}/..%2fhub.mjs`)).status, 404);
+    assert.match(html, /<canvas id="screen"/);
+    assert.match(await (await fetch(`${base}/app.js`)).text(), /EventSource\('\/events'\)/);
+    const png = await fetch(`${base}/assets/16_background.png`);
+    assert.equal(png.headers.get('content-type'), 'image/png');
+    assert.equal((await png.arrayBuffer()).byteLength > 1000, true);
+    assert.equal((await fetch(`${base}/assets/manifest.json`)).headers.get('content-type'), 'application/json');
+    assert.equal((await fetch(`${base}/..%2fhub.mjs`)).status, 404);
   } finally { await hub.close(); }
+});
+
+test('font_metrics_copy_matches_the_firmware_header', async () => {
+  const { FONT_S16_W, FONT_S20_W, textWidth } = await import('../web/font_metrics.js');
+  const header = fs.readFileSync(path.join(ASSETS, '..', '..', '..', 'agent-gadget', 'esp32_agent_gadget', 'font_metrics.h'), 'utf8');
+  const read = (name) => header.match(new RegExp(String.raw`${name}\[95\] = \{([^}]*)\}`))[1].split(',').map((s) => s.trim()).filter(Boolean).map(Number);
+  assert.deepEqual(FONT_S16_W, read('FONT_S16_W'));
+  assert.deepEqual(FONT_S20_W, read('FONT_S20_W'));
+  assert.equal(textWidth('waiting on subs', 16), 'waiting on subs'.split('').reduce((n, c) => n + FONT_S16_W[c.charCodeAt(0) - 32], 0));
+  assert.equal(textWidth('é', 16), FONT_S16_W[0], 'non-ASCII counts as a space');
 });

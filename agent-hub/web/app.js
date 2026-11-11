@@ -1,41 +1,113 @@
-import { renderState } from '/render.js';
+// The page: the gadget screen on a canvas, redrawn from the hub's state (SSE). Taps work like the touchscreen:
+// the title bar opens the session list, a team row shows that agent's detail for 10 s, the speaker cycles the sound.
+import { renderScreen, hitTest, teamOrder, SCR_W, SCR_H } from './screen.js';
+import { createCanvasScreen, loadPictures } from './canvas_screen.js';
+import { relayLabel } from './format.js';
 
-const root = document.getElementById('root');
-const sound = document.getElementById('sound');
-let blocked = new Set();
+const MENU_MS = 8000;       // the session list closes by itself after 8 s
+const DETAIL_MS = 10000;    // a tapped agent's detail stays 10 s
+const FRAME_MS = 100;       // redraw rate: the plan pulse runs on 100 ms phases, the robots blink on 300 ms ticks
 
-function beep() {
+const canvas = document.getElementById('screen');
+const relayEl = document.getElementById('relay');
+canvas.width = SCR_W;
+canvas.height = SCR_H;
+
+let state = { sessions: [], view: {}, agents: [] };
+let receivedAt = performance.now();
+let menuUntil = 0;
+let detail = null;                                   // {session, agent, until}
+let sound = ['all', 'ask', 'off'].includes(localStorage.getItem('gadget-sound')) ? localStorage.getItem('gadget-sound') : 'all';
+let counts = null;                                   // {needs, turn} of the previous state, for the beeps
+let screen = null;
+
+const agentsOf = (st) => st.sessions.flatMap((s) => s.agents);
+
+function beep(times) {
   try {
     const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    osc.frequency.value = 880;
-    osc.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.15);
+    for (let i = 0; i < times; i++) {
+      const osc = ctx.createOscillator();
+      osc.frequency.value = 880;
+      osc.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.32);
+      osc.stop(ctx.currentTime + i * 0.32 + 0.12);
+    }
+    setTimeout(() => ctx.close(), times * 400 + 200);
   } catch { /* no audio available */ }
 }
 
-function show(state) {
-  root.innerHTML = renderState(state);
-  const now = new Set(state.sessions.filter((s) => s.dot === 'needs_you').map((s) => s.id));
-  if (sound.checked && [...now].some((id) => !blocked.has(id))) beep();
-  blocked = now;
+/** Same rule as the buzzer of the gadget: two beeps when more agents need you, one when more wait for your turn (mode "all"). */
+function alerts(next) {
+  const all = agentsOf(next);
+  const now = { needs: all.filter((a) => a.state === 'needs_you').length, turn: all.filter((a) => a.state === 'your_turn').length };
+  if (counts && sound !== 'off') {
+    if (now.needs > counts.needs) beep(2);
+    else if (now.turn > counts.turn && sound === 'all') beep(1);
+  }
+  counts = now;
 }
 
-root.addEventListener('click', (e) => {
-  const dot = e.target.closest('.dot');
-  const row = e.target.closest('[data-agent]');
-  const session = dot ? dot.dataset.session : root.querySelector('.dot.current')?.dataset.session;
-  if (!session) return;
-  const agent = dot ? 'lead' : row?.dataset.agent;
-  if (!agent) return;
-  fetch('/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session, agent }) });
+function showState(next) {
+  alerts(next);
+  state = next;
+  receivedAt = performance.now();
+  const label = relayLabel(next.relay);
+  relayEl.hidden = !label;
+  if (label) { relayEl.textContent = label.text; relayEl.title = label.why; relayEl.className = label.ok ? 'ok' : 'down'; }
+}
+
+function uiNow() {
+  const now = Date.now();
+  if (detail && now >= detail.until) detail = null;
+  return {
+    elapsedS: Math.floor((performance.now() - receivedAt) / 1000),
+    menu: now < menuUntil && state.sessions.length > 1,
+    detail,
+    sound,
+    tick: Math.floor(now / 300),
+    pulse: Math.floor(now / 100),
+    dateText: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
+    eventsTo: location.host,
+  };
+}
+
+function draw() {
+  if (!screen) return;
+  renderScreen(screen, state, uiNow());
+}
+
+canvas.addEventListener('click', (e) => {
+  const box = canvas.getBoundingClientRect();
+  const x = ((e.clientX - box.left) * SCR_W) / box.width, y = ((e.clientY - box.top) * SCR_H) / box.height;
+  const ui = uiNow();
+  const sel = Math.max(0, state.sessions.findIndex((s) => s.id === state.view?.session));
+  const hit = hitTest(x, y, { sessions: state.sessions, selected: sel, menu: ui.menu });
+  const now = Date.now();
+  if (hit.kind === 'tab') menuUntil = ui.menu || state.sessions.length < 2 ? 0 : now + MENU_MS;
+  else if (hit.kind === 'mute') { sound = sound === 'all' ? 'ask' : sound === 'ask' ? 'off' : 'all'; localStorage.setItem('gadget-sound', sound); }
+  else if (hit.kind === 'menuRow') {
+    menuUntil = 0;
+    fetch('/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: state.sessions[hit.index].id, agent: 'lead' }) });
+  } else if (hit.kind === 'lead') detail = null;
+  else if (hit.kind === 'row') {
+    const s = state.sessions[sel];
+    const slot = teamOrder(s.agents.slice(1)).order[hit.index];
+    detail = { session: s.id, agent: s.agents[slot].id, until: now + DETAIL_MS };
+  }
+  draw();
 });
 
 function connect() {
   const es = new EventSource('/events');
-  es.onmessage = (m) => show(JSON.parse(m.data));
-  es.onerror = () => { root.classList.add('offline'); };
-  es.onopen = () => { root.classList.remove('offline'); };
+  es.onmessage = (m) => { showState(JSON.parse(m.data)); draw(); };
+  es.onerror = () => { canvas.classList.add('offline'); };
+  es.onopen = () => { canvas.classList.remove('offline'); };
 }
-connect();
+
+loadPictures().then((images) => {
+  screen = createCanvasScreen(canvas, images);
+  draw();
+  setInterval(draw, FRAME_MS);
+  connect();
+});

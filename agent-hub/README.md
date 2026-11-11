@@ -15,9 +15,11 @@ and sends its event again. To run it by hand:
 node agent-hub/hub.mjs
 ```
 
-Then open <http://127.0.0.1:8765/>: title bar with one dot per session (click a dot to select it), the lead panel
-(command, plan, context, question), one row per sub-agent, quotas and clock. The session that needs you turns orange.
-The checkbox under the page beeps when a session starts to need you.
+Then open <http://127.0.0.1:8765/>: the page draws the gadget screen (480x272, scaled), with the same pictures, layout, colors and
+text cuts as the firmware: title bar with the session dots, lead panel with its plan and context, team rows, session list,
+questions, standby clock and the quota bar. It reads the same state as the gadget, so the two always agree. Taps work like
+the touchscreen: the title bar opens the session list, a team row shows that agent for 10 s, the speaker button cycles the
+beeps (all, ask only, off). Under the screen a line shows whether the relay reaches the gadget.
 
 The hub binds to `127.0.0.1` only and has no authentication.
 
@@ -79,7 +81,7 @@ change and every second), `GET /health` and `GET /` (the page).
 - `relay_http.mjs`, `relay_serial.mjs` forward events to a gadget (Wi-Fi, USB).
 - `tui.mjs` terminal view.
 - `quotas.mjs` plan quota poller (OAuth token from `~/.claude/.credentials.json`, never printed).
-- `web/` the page (`render.js` is a pure function from the state to HTML, shared with the tests).
+- `web/` the page: `screen.js` draws the screen through a small interface (port of `display_hmi.cpp`, `layout.cpp`, `ui_state.cpp`; tested with a recorder), `canvas_screen.js` gives it a canvas, `font_metrics.js` is the firmware text widths, `assets/` the pictures of the .tft (copied from `agent-gadget/assets/decor/`, same ids).
 
 ## Tests
 
