@@ -56,7 +56,7 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 ### Quotas (bottom bar of every view)
 
 - 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset).
-- Fed by the status line (terminal) or by `quotas.py`, which the hooks start in the background for the desktop app.
+- Fed by the status line (terminal) or by the agent hub, which polls the quotas for the desktop app.
 
 ### Standby clock
 
@@ -73,10 +73,14 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 
 ## Quick start
 
+**Without the hardware** (Node.js >= 18): install the plugin `claude-plugin/agent-gadget/`; the first hook starts the agent hub, then open `http://127.0.0.1:8765/`. Details: `agent-hub/README.md`.
+
+**With the gadget:**
+
 1. Flash the ESP32: `pio run -t upload` in `agent-gadget/esp32_agent_gadget/` (PlatformIO).
 2. Flash the screen: open `http://<ip>/tft` and upload `screen-hmi/agent-gadget.tft`, or follow the editor steps in `screen-hmi/guide/`.
 3. Join the `AgentGadget-XXXX` network, enter your Wi-Fi at `http://192.168.4.1/config`.
-4. Install the plugin `claude-plugin/agent-gadget/` and set the host: env `CLAUDE_GADGET_HOST` or `~/.claude/agent-gadget.json` `{"host": "<ip>"}` (`agent-gadget.local` does not resolve on every PC).
+4. Install the plugin `claude-plugin/agent-gadget/` and set the host: env `CLAUDE_GADGET_HOST` or `~/.claude/agent-gadget.json` `{"host": "<ip>"}` to send straight to the gadget, or keep the hub as host and relay to it (`agent-hub/README.md`).
 5. Change `OTA_PASSWORD` in `net.h` (default `agent-gadget`).
 6. Try it without real sessions: `python agent-gadget/scenario.py --host <ip>`.
 
@@ -88,7 +92,8 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 ## Repository map
 
 - `agent-gadget/` ESP32 firmware (core: `model`, `net`; screen: `display_hmi`, `layout`, `touch`), helper scripts, tests.
-- `claude-plugin/agent-gadget/` Claude Code plugin v0.2 (hooks, status line, quotas).
+- `agent-hub/` Node.js hub: state, browser page, quotas, relay to the gadget (no hardware needed).
+- `claude-plugin/agent-gadget/` Claude Code plugin v0.3 (Node.js: hooks, status line).
 - `screen-hmi/` screen project (`agent-gadget.HMI`), compiled `agent-gadget.tft`, fonts (`*.zi`) and `guide/` annotated editor screenshots.
 - `docs/` specs, plans, captured hook payloads and touch findings.
 
@@ -115,7 +120,6 @@ Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> scre
 - **Tap a step of the plan bar to preview it.** A tap on a segment of the plan bar would show that step (title, state) for a few seconds, then go back to the current step: a way to read the upcoming steps. Needs the full step list on the gadget (today the plan fields carry only `done`, `total`, the current and the next step), so the plan tracker must send titles of all steps, and a hit zone per segment must be added to `layout.cpp`.
 - **Answer a question by tapping the screen?** Today the screen shows the question and its numbered options, and the answer is typed in Claude Code. A tap on an option would have to travel back to the session: the hooks only send events to the gadget, and no hook can inject an answer into a running `AskUserQuestion`. Open question: a `PermissionRequest` hook can allow or deny (a tap on Allow/Deny is feasible by making the hook wait for the gadget), but a free choice among options needs another channel.
 - **Multi-hardware, with a screen that is easy to buy.** The Artillery X3 screen was used for the proof of concept because it was at hand, and it is not sold on its own. Goal: a display abstraction in the firmware (`display.h` already separates the UI from the screen backend) and support for at least one common, cheap board with a screen (for example an ESP32 with a built-in TFT or an ESP32-S3 touch display), documented with a shopping list.
-- **Node.js version for people without the hardware.** A local server that receives the same `POST /event` and `POST /usage` as the gadget, keeps the state and shows the same views in a browser page or a terminal. The plugin only needs `CLAUDE_GADGET_HOST` pointing at it. The wire format is the contract, so the server can reuse `model.cpp` rules (states, "needs you" first, sub-agent overflow).
 - **Usage and quotas stay problematic.** The desktop app does not run status lines, so quotas come from `quotas.py` (OAuth token, `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers). The usage endpoint returns 429, the backoff is 15 minutes, and the numbers can be stale. The context estimate from transcripts assumes a 1M window.
 - **The session on the screen does not follow the session selected in the app.** Today the gadget picks its session itself (needs-you first) or by touch. Goal: show the session that has focus in Claude Code or the desktop app.
 - Plugin of prompts that make standup-bot easier to use: force `AskUserQuestion` for every question to the user, force the creation and regular update of a plan (the screen only shows plans built from task-list tool calls, so a session that skips them shows no progress), and similar rules. Could ship as a skill or a `SessionStart` hook that injects the instructions.

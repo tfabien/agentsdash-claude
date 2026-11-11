@@ -1,41 +1,41 @@
 {
-  "description": "Send Claude Code activity to the agent gadget (POST /event, wire format v2).",
+  "description": "Send Claude Code activity to the agent hub and gadget (POST /event, wire format v2).",
   "hooks": {
     "SessionStart": [
-      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "UserPromptSubmit": [
-      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PreToolUse": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PostToolUse": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PostToolUseFailure": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PermissionRequest": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PermissionDenied": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "SubagentStart": [
-      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "SubagentStop": [
-      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "Notification": [
-      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "SessionEnd": [
-      { "hooks": [ { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.py\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ]
   }
 }

@@ -14,7 +14,8 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   - `hmi_bridge/` - transparent USB<->screen UART bridge (used to flash the screen from the editor). `hmi_probe/` - baud/protocol probe.
   - `scenario.py` (5 fake sessions, 12 sub-agents -> `POST /event` v2), `mock_agents.py` (old v0.1 events), `ux_mockup.html`,
     `hmi_*.py` (test scripts through the bridge), `tools/make_sprites.py` (sprite PNGs), `tests/` (API tests on a real gadget).
-- `claude-plugin/agent-gadget/` - Claude Code plugin v0.2: hooks -> `scripts/notify.py` -> `POST /event` v2 (sessions, sub-agents, needs-you).
+- `agent-hub/` - Node.js hub (no hardware needed): receives `POST /event` v2 and `POST /usage`, keeps the state (`model.mjs`, port of `model.cpp`), serves a browser page (`/`, SSE `/events`), polls the plan quotas, relays to a gadget (HTTP or USB serial). Tests: `node --test agent-hub/test/*.test.mjs`.
+- `claude-plugin/agent-gadget/` - Claude Code plugin v0.3 (Node.js only): hooks -> `scripts/notify.mjs` -> `POST /event` v2 (sessions, sub-agents, needs-you) to the hub or straight to a gadget.
 - `docs/superpowers/` - spec, plan and ideas of the agent UI; `docs/hook-payloads.md`, `docs/touch-findings.md` - captured facts.
 - `screen-hmi/` - everything about the screen project: `agent-gadget.HMI`, `agent-gadget.tft` - current USART HMI project of the screen (one page, 4 fonts, 87 pictures, redesign
   2026-11-11: `docs/superpowers/specs/2026-11-11-screen-redesign-design.md`). `blank.HMI`, `blank.tft` - baseline without pictures.
@@ -89,17 +90,18 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   (`all` / `ask` = needs_you only / `off`, kept in flash, `beep <ms>` command), clock.
 - Drawing goes through a non-blocking queue (title bar > command strip > tree); `GET /debug/stats` (test builds) shows it.
 
-## Claude plugin (v0.2)
+## Claude plugin (v0.3, Node.js)
 
 `claude-plugin/agent-gadget/`: hooks `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse(Failure)`, `PermissionRequest`, `PermissionDenied`,
-`Notification`, `SubagentStart`, `SubagentStop`, `Stop`, `SessionEnd` -> `scripts/notify.py` (Python stdlib, never blocks, never prints).
-Installed at user level, read **live from this working tree** (`agent-gadget@agent-gadget-local`): a broken `notify.py` breaks every session's hooks.
-`CLAUDE_GADGET_PROTOCOL=1` sends the old format; `CLAUDE_GADGET_DUMP=<file>` appends raw payloads. With `defaultMode: auto` no permission prompt appears, so no orange. Host: env `CLAUDE_GADGET_HOST`, or `~/.claude/agent-gadget.json` `{"host": "..."}`, default `agent-gadget.local` (**does not resolve here: configure the IP**).
-`claude plugin validate` passes. Tests: `python -m unittest discover -s claude-plugin/agent-gadget/tests` (no hardware).
-`scripts/statusline.py` is a status line (manual install in `~/.claude/settings.json`, see the plugin README) that posts context and quotas
-to `/usage`. The **desktop app does not run status lines**: one terminal session feeds the quotas. Hooks add tokens, a context estimate and
-the session title read from the transcripts (`scripts/transcript_usage.py`).
-Desktop quotas: `notify.py` starts `scripts/quotas.py` in the background at most once a minute. It reads the OAuth token of
+`Notification`, `SubagentStart`, `SubagentStop`, `Stop`, `SessionEnd` -> `scripts/notify.mjs` (Node >= 18, stdlib only, never blocks, never prints, exits 0).
+Installed at user level, read **live from this working tree** (`agent-gadget@agent-gadget-local`): a broken `notify.mjs` breaks every session's hooks.
+`CLAUDE_GADGET_DUMP=<file>` appends raw payloads. With `defaultMode: auto` no permission prompt appears, so no orange.
+Host (where events go): env `CLAUDE_GADGET_HOST`, or `~/.claude/agent-gadget.json` `{"host": "..."}`, default `127.0.0.1:8765` (the hub: the first hook starts it detached when the host is this machine). A gadget IP still works as host (events go straight to the gadget, no hub, no quota polling).
+`claude plugin validate` passes. Tests: `node --test claude-plugin/agent-gadget/tests/*.test.mjs` (no hardware).
+`scripts/statusline.mjs` is a status line (manual install in `~/.claude/settings.json`, see the plugin README) that posts context and quotas
+to `/usage`. The **desktop app does not run status lines**: the hub polls the quotas itself. Hooks add tokens, a context estimate and
+the session title read from the transcripts (`scripts/transcript_usage.mjs`).
+Desktop quotas: `agent-hub/quotas.mjs` runs inside the hub, at most once a minute while a session exists. It reads the OAuth token of
 `~/.claude/.credentials.json` (never printed), tries `api/oauth/usage`, else a 1-token Haiku call whose rate-limit headers
 give the quotas (a few tokens per call). Off: `CLAUDE_GADGET_QUOTAS=0` or `"quotas": false` in `agent-gadget.json`.
 

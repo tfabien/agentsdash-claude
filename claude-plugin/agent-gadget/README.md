@@ -1,11 +1,12 @@
 # agent-gadget (Claude Code plugin)
 
-Claude Code hooks that send what each session and sub-agent is doing to the agent gadget (ESP32 + HMI
-screen, see `../../agent-gadget/`).
+Claude Code hooks that send what each session and sub-agent is doing to the **agent hub** (a local Node.js
+server with a browser page, see `../../agent-hub/`), which shows it and can relay it to the agent gadget (ESP32 + HMI
+screen, see `../../agent-gadget/`). Node.js only, no Python.
 
 ## What it sends
 
-One `POST http://<gadget>/event` per hook (wire format v2, ASCII JSON):
+One `POST http://<hub>/event` per hook (wire format v2, ASCII JSON):
 `{"v":2,"session","project","agent":"lead"|"<id4>","role","evt","state","cmd","detail"}`.
 
 | Hook | state | cmd |
@@ -25,7 +26,7 @@ Payloads are read as UTF-8 (Windows defaults stdin to cp1252); text is cut to AS
 
 ### Plan progress
 
-`scripts/plan_tracker.py` rebuilds the session's task list from its task-list tool calls (PostToolUse of
+`scripts/plan_tracker.mjs` rebuilds the session's task list from its task-list tool calls (PostToolUse of
 `TaskCreate`/`TaskUpdate` in the CLI, `TodoWrite`, the desktop app's `update_plan` with `items`, `advance`, `done`,
 `start`) and keeps it in `<temp>/agent-gadget-plugin/plan-<session>.json`. Every lead event then carries
 `plan_done`, `plan_total`, `plan_cur` (task in progress) and `plan_next` (first pending task, titles <= 47 chars). With several tasks in progress, `plan_cur` joins their titles with " + " and `plan_state` has one character per task (`d` done, `r` running, `p` pending): the screen pulses every running segment.
@@ -35,8 +36,8 @@ A create after a fully done list starts a new list. Sub-agents' own task lists a
 
 ## Status line (context and plan quotas)
 
-`scripts/statusline.py` is a Claude Code status line. It prints `ctx 42% | 5h 48% 1h20 | 7d 61% 2d03h` and posts the
-numbers to `POST http://<gadget>/usage` (when they change, at most once a minute otherwise):
+`scripts/statusline.mjs` is a Claude Code status line. It prints `ctx 42% | 5h 48% 1h20 | 7d 61% 2d03h` and posts the
+numbers to `POST http://<hub>/usage` (when they change, at most once a minute otherwise):
 context fill, the 5-hour and weekly quotas with their reset times, and the **pace**: burn rate (%/h) and the projected %
 at reset. The gadget colors the quotas from that projection (green under 85 %, orange 85 to 100 %, red when you would
 run out before the reset). The pace history is shared by all sessions in `<temp>/agent-gadget-plugin/quota_history.json`.
@@ -44,31 +45,30 @@ run out before the reset). The pace history is shared by all sessions in `<temp>
 Install it by hand in `~/.claude/settings.json` (one status line command only):
 
 ```json
-"statusLine": {"type": "command", "command": "python <repo>/claude-plugin/agent-gadget/scripts/statusline.py", "refreshInterval": 10}
+"statusLine": {"type": "command", "command": "node <repo>/claude-plugin/agent-gadget/scripts/statusline.mjs", "refreshInterval": 10}
 ```
 
-The Claude desktop app does not run status lines (checked 2026-11-08). Quotas are account-wide, so one terminal
-`claude` session is enough to feed them. Desktop sessions still get their context, tokens and title from the hooks,
-which read the transcripts (`scripts/transcript_usage.py`): `tok`, `stok`, `ctx_k`, `ctx_pct`, `title` on v2 events.
+The Claude desktop app does not run status lines (checked 2026-11-08). The hub polls the quotas itself while a session
+exists (`agent-hub/quotas.mjs`), so the status line is optional: quotas are account-wide and one terminal `claude`
+session also feeds them. Desktop sessions still get their context, tokens and title from the hooks,
+which read the transcripts (`scripts/transcript_usage.mjs`): `tok`, `stok`, `ctx_k`, `ctx_pct`, `title` on v2 events.
 Quotas are only reported to Pro/Max subscribers.
 The context estimate from transcripts assumes a 1M window (desktop sessions); set `"context_window": 200000` in
 `~/.claude/agent-gadget.json` for 200k sessions.
 
-## Protocol switch
-
-The plugin sends v2 events by default (`DEFAULT_PROTOCOL = 2` in `scripts/notify.py`). For a gadget still flashed
-with the old firmware, set `CLAUDE_GADGET_PROTOCOL=1` to send the old flat event `{agent, state, task}`.
-
 ## Setup
 
-1. Tell the plugin where the gadget is (first match wins): env var `CLAUDE_GADGET_HOST=192.168.1.100`, or
-   `~/.claude/agent-gadget.json` `{ "host": "192.168.1.100" }`, default `agent-gadget.local` (mDNS).
+1. Tell the plugin where to send events (first match wins): env var `CLAUDE_GADGET_HOST=127.0.0.1:8765`, or
+   `~/.claude/agent-gadget.json` `{ "host": "127.0.0.1:8765" }`, default `127.0.0.1:8765` (the hub). When the host is this
+   machine and the hub is not running, the first hook starts it (detached). A gadget IP (`192.168.1.100`) still works
+   as a host: events go straight to the gadget, with no hub page and no quota polling. To use both, keep the hub as the
+   host and set `"relay": {"mode": "http", "host": "192.168.1.100"}` (see `../../agent-hub/README.md`).
 2. Load it: `claude --plugin-dir <path>/claude-plugin/agent-gadget`, or install it at user level from the local
    marketplace of this repo (`claude plugin marketplace add <repo>` then
    `claude plugin install agent-gadget@agent-gadget-local --scope user`).
    Check with `claude plugin validate <path>/claude-plugin/agent-gadget`.
 
-Requires Python 3 on the PATH (`python` or `python3`), standard library only.
+Requires Node.js >= 18 on the PATH (`node`), standard library only.
 The script never prints to stdout, always exits 0 and gives up after 1.5 s: it cannot slow Claude down.
 
 ## Privacy
@@ -84,7 +84,7 @@ raw hook payload to a file.
 
 ## Tests
 
-`python -m unittest discover -s claude-plugin/agent-gadget/tests -v`
+`node --test claude-plugin/agent-gadget/tests/*.test.mjs`
 
 ## Known limits
 

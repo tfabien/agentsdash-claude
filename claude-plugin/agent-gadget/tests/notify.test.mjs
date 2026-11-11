@@ -336,6 +336,18 @@ test('dump_appends_raw_payload', () => {
   assert.equal(JSON.parse(lines[0]).tool_name, 'Edit');
 });
 
+test('hooks_json_registers_every_event_with_node', () => {
+  const hooks = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'hooks', 'hooks.json'), 'utf8')).hooks;
+  const expected = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
+    'PermissionDenied', 'Notification', 'SubagentStart', 'SubagentStop', 'Stop', 'SessionEnd'];
+  assert.deepEqual(expected.filter((e) => !(e in hooks)), []);
+  for (const [name, groups] of Object.entries(hooks)) {
+    const cmd = groups[0].hooks[0].command;
+    assert.ok(cmd.includes('node "${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs"'), name);
+    assert.ok(!/python/.test(cmd), name);
+  }
+});
+
 test('hub_down_and_unspawnable_exits_silently_within_1500ms', async () => {
   const port = await freePort();
   const start = Date.now();
