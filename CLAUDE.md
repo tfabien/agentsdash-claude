@@ -16,8 +16,9 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
     `hmi_*.py` (test scripts through the bridge), `tools/make_sprites.py` (sprite PNGs), `tests/` (API tests on a real gadget).
 - `claude-plugin/agent-gadget/` - Claude Code plugin v0.2: hooks -> `scripts/notify.py` -> `POST /event` v2 (sessions, sub-agents, needs-you).
 - `docs/superpowers/` - spec, plan and ideas of the agent UI; `docs/hook-payloads.md`, `docs/touch-findings.md` - captured facts.
-- `agent-gadget.HMI`, `agent-gadget.tft` - current USART HMI project of the screen (black page, 2 fonts, 16 sprite pictures).
-  `blank.HMI`, `blank.tft` - the same without pictures (baseline). `f24.zi`, `f16.zi` - the fonts.
+- `agent-gadget.HMI`, `agent-gadget.tft` - current USART HMI project of the screen (one page, 4 fonts, 87 pictures, redesign
+  2026-11-11: `docs/superpowers/specs/2026-11-11-screen-redesign-design.md`). `blank.HMI`, `blank.tft` - baseline without pictures.
+  `f24.zi`, `f16.zi`, `s16.zi`, `s20.zi` - the fonts. Pictures come from `agent-gadget/tools/make_decor.py` (`assets/decor/`).
 - `guide/` - annotated screenshots of the USART HMI editor steps. `USARTHMIsetup_latest/` - editor installer.
 
 ## Hardware (identified from photos, the .tft metadata and the TJC wiki)
@@ -34,8 +35,13 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 - Current firmware (after flashing `agent-gadget.tft`): **9600 baud** at power-up. The gadget firmware moves it to **115200** at boot
   (runtime `baud=115200`, verified by `comok`; `GET /debug/stats` -> `link`: `switched`, `already fast` after an ESP32-only reset). `connect` -> `comok 2,1073-0,TJC4827X243_011C,...`. `bauds=115200` is accepted
   but **not applied**: stay at 9600. The first command after a baud change often returns `1A` (stray byte): send `FF FF FF` first.
-- Drawing commands that work on the blank page: `cls`, `fill`, `draw`, `cirs`, `xstr` (font 0 = `f24`, font 1 = `f16`, ASCII only),
-  `pic x,y,id` (ids 0..7 big 36x42 sprites lead, general, explore, plan, review, test, code, generic; 8..15 the same at 24x28).
+- Drawing commands: `cls`, `fill`, `draw`, `cirs`, `xstr` (fonts 0 `f24`, 1 `f16`, 2 `s16` Segoe UI Semibold 16 anti-aliased,
+  3 `s20` bold 20; ASCII only; 2 and 3 are proportional: widths in `font_metrics.h`), `pic x,y,id`, `picq x,y,w,h,id` (crop of a
+  full-screen picture: erases a zone). Pictures: 0..15 old sprites, 16 background, 17/18 rows, 19/20 labels, 21..26 arrows,
+  27..34 / 35..42 / 43..50 robots big 36x42 / small 24x28 / tiny 16x18 (roles lead, general, explore, plan, review, test, code,
+  generic), 51 standby, 52..61 digits, 62 colon, 63..86 the robots with closed eyes.
+- Anti-aliased fonts read best on this panel; f12 and non-anti-aliased Tahoma/Verdana were rejected on photos. Grey text needs
+  RGB >= 200 to be readable; the panel washes dark colors at an angle.
 - Touch: after `sendxy=1` (send at every boot) the page reports `67 xh xl yh yl st FF FF FF`, pixels, `st` 01 press / 00 release
   (`docs/touch-findings.md`). `baud=115200` (runtime) is applied until power-off.
   Nothing redraws over them because the page has no component. `bkcmd=0` silences acknowledgements.
@@ -47,7 +53,11 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   editor http://filedown.tjc1688.com/USARTHMI/USARTHMIsetup_latest.zip, factory project
   http://filedown.tjc1688.com/tjcwiki/factory_project/X2/TJC4827X243.HMI, datasheet
   http://filedown.tjc1688.com/tjcwiki/new_datasheet/TJC_X2/TJC4827X243_011C.pdf (wiki is HTTP only: http://wiki.tjc1688.com).
-- Project `agent-gadget.HMI` (made from `blank.HMI`): model `TJC4827X243_011`, direction 0 (landscape), `page0` solid black (`bco`=0), fonts `f24` (ID 0) and `f16` (ID 1), ASCII.
+- Project `agent-gadget.HMI` (made from `blank.HMI`): model `TJC4827X243_011`, direction 0 (landscape), `page0` solid black (`bco`=0), fonts 0..3, ASCII.
+- **Pictures and fonts without clicking**: hmi-builder (https://github.com/Ponywka/hmi-builder, MIT, pinned `f2fe864`, cloned in the
+  `artillery-x3-screen-sprites` worktree under `.cache/hmi-builder`) unpacks a `.HMI` to `project.json` + PNGs and packs it back:
+  replace or append pictures there, pack, then open the `.HMI` in the editor only for 文件 -> 输出生产文件. Run it with
+  `python -E -X utf8 tools/hmi_project.py unpack --portable X.HMI dir` / `pack dir out.HMI --config dir/project.json`.
 - **Easiest flash: the gadget's web page `http://<ip>/tft`** (user `admin`, `OTA_PASSWORD`): pick the exported `.tft`, ~1 min over Wi-Fi,
   no editor download, no bridge, no USB. Same as `curl -u admin:<pw> -F tft=@agent-gadget.tft "http://<ip>/tft?size=<bytes>"`.
 - The compile button does not write a file: **文件 -> 输出生产文件** exports the `.tft`. Flash it with **下载** (serial, port COM3, 115200) through
@@ -67,6 +77,7 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   `agent-gadget.local` (mDNS) does **not** resolve on this PC (ping fails): use the IP.
 - HTTP API (details in `agent-gadget/ARCHITECTURE.md`): `POST /event` v2 (old `{"agent","state","task"}` still accepted), `GET /state`,
   `POST /select`, `POST /reset`, `GET /update` (browser firmware upload, user `admin`), `GET /tft` (screen .tft upload, same user). `/debug/*` only in test builds (`esp32dev_test*`).
+  **Never send other requests while `/tft` uploads**: the upload aborted twice and the screen needed a power cycle.
   `POST /usage`: context and plan quotas with pace, sent by the status line script.
 - **Updates**: USB `pio run -t upload` from `esp32_agent_gadget/` (auto reset, no BOOT button); Wi-Fi
   `pio run -e esp32dev_ota -t upload --upload-port <ip>` (tested OK); browser `/update`. OTA/`/update` password = `OTA_PASSWORD` in `net.h` (default `agent-gadget`: **change it**).

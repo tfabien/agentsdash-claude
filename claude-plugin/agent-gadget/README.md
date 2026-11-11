@@ -21,6 +21,15 @@ One `POST http://<gadget>/event` per hook (wire format v2, ASCII JSON):
 
 The lead is the event without `agent_id`; a sub-agent is identified by `agent_id` (first 4 characters) and its
 role is its `agent_type`. Hook payloads actually observed: `../../docs/hook-payloads.md`.
+Payloads are read as UTF-8 (Windows defaults stdin to cp1252); text is cut to ASCII: role <= 23, cmd <= 63, detail <= 60.
+
+### Plan progress
+
+`scripts/plan_tracker.py` rebuilds the session's task list from its task-list tool calls (PostToolUse of
+`TaskCreate`/`TaskUpdate` in the CLI, `TodoWrite`, the desktop app's `update_plan` with `items`, `advance`, `done`,
+`start`) and keeps it in `<temp>/agent-gadget-plugin/plan-<session>.json`. Every lead event then carries
+`plan_done`, `plan_total`, `plan_cur` (task in progress) and `plan_next` (first pending task, titles <= 47 chars).
+A create after a fully done list starts a new list. Sub-agents' own task lists are ignored.
 
 ## Status line (context and plan quotas)
 
