@@ -1,0 +1,219 @@
+#!/usr/bin/env node
+/*
+ * Claude Code hook -> agent hub (wire format v2).
+ *
+ * Reads the hook payload (JSON on stdin), maps it to an event and POSTs it to http://<host>/event.
+ * Standard library only. It never prints to stdout (stdout of some hooks is injected into Claude's
+ * context), never fails, and gives up after 1.5 s so it can never slow Claude down.
+ *
+ * Event (ASCII JSON): {"v":2,"session":"<id4>","project":"<=14","agent":"lead"|"<id4>","role":"lead"|"<type>",
+ * "evt":"<hook>","state":"working|needs_you|your_turn|done|error","cmd":"<=63","detail":"<=60"}.
+ * See docs/hook-payloads.md (payloads observed) and the design spec section 10 (hook -> state mapping).
+ *
+ * Host (first match): env CLAUDE_GADGET_HOST, then "host" in ~/.claude/agent-gadget.json, then 127.0.0.1:8765.
+ * Options: CLAUDE_GADGET_MASK=1 hides commands and prompts (only tool names are sent);
+ * CLAUDE_GADGET_DRY_RUN=1 prints the event to stderr instead of sending it;
+ * CLAUDE_GADGET_DUMP=<file> appends every raw payload to a file (debugging).
+ *
+ * "Needs you" has no "approved" hook: a marker file (temp folder) remembers that an agent is blocked, so the
+ * PostToolUse hook only sends something when it clears that state.
+ */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { asciiClean, configWindow, hubHost, pluginConfig, stateDir } from './common.mjs';
+import { postEvent } from './hub_client.mjs';
+
+const NEEDS_YOU_TYPES = new Set(['permission_prompt', 'elicitation_dialog', 'elicitation_url_dialog', 'agent_needs_input']);
+const CLEARING_EVENTS = new Set(['PostToolUse', 'PostToolUseFailure', 'PermissionDenied']);
+
+const alnum = (s) => String(s ?? '').replace(/[^A-Za-z0-9]/g, '');
+
+/** [short argument, detail] of a tool call, e.g. ['app.py', 'src/app.py'] or ['git status', 'git status']. */
+function toolParts(name, input) {
+  const ti = input && typeof input === 'object' ? input : {};
+  if (['Edit', 'Write', 'Read', 'NotebookEdit', 'MultiEdit'].includes(name)) {
+    const p = String(ti.file_path || ti.notebook_path || '');
+    return [path.posix.basename(p.replace(/\\/g, '/')), p];
+  }
+  if (name === 'Bash' || name === 'PowerShell') { const c = String(ti.command ?? ''); return [c, c]; }
+  if (name === 'Grep' || name === 'Glob') { const p = String(ti.pattern ?? ''); return [p, p]; }
+  if (name === 'WebFetch' || name === 'WebSearch') { const t = String(ti.url || ti.query || ''); return [t, t]; }
+  if (name === 'Agent' || name === 'Task') { const d = String(ti.description ?? ''); return [d, d]; }
+  return ['', ''];
+}
+
+/** [question, options] of an AskUserQuestion call: the first question and up to 4 options joined by "|". */
+function askParts(input) {
+  const ti = input && typeof input === 'object' ? input : {};
+  const q = Array.isArray(ti.questions) && ti.questions[0] && typeof ti.questions[0] === 'object' ? ti.questions[0] : {};
+  const opts = Array.isArray(q.options) ? q.options : [];
+  const labels = opts.map((o) => (o && typeof o === 'object' ? String(o.label ?? '') : String(o)));
+  return [String(q.question ?? ''), labels.slice(0, 4).map((l) => asciiClean(l, 40).replace(/\|/g, '/')).join('|')];
+}
+
+export function markerPath(dir, sessionId, agent) {
+  return path.join(dir, `${alnum(sessionId).slice(0, 12) || 'session'}-${agent}.needs`);
+}
+
+function setMarker(file, key = 'any') {
+  try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, key, 'ascii'); } catch { /* best effort */ }
+}
+
+function readMarker(file) {
+  try {
+    const key = fs.readFileSync(file, 'ascii').trim();
+    return key === '' || key === '1' ? 'any' : key;        // "1": marker written by plugin 0.2.0
+  } catch { return null; }
+}
+
+function sessionHasMarker(dir, sessionId) {
+  const safe = alnum(sessionId).slice(0, 12) || 'session';
+  try { return fs.readdirSync(dir).some((n) => n.startsWith(`${safe}-`) && n.endsWith('.needs')); } catch { return false; }
+}
+
+function stable(value) {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${stable(value[k])}`).join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
+
+/** Identify a tool call across PermissionRequest (no tool_use_id) and PostToolUse: name + arguments. */
+function callKey(p) {
+  const digest = crypto.createHash('sha1').update(stable(p.tool_input ?? {})).digest('hex').slice(0, 12);
+  return `${p.tool_name ?? ''}|${digest}`;
+}
+
+function sameCall(key, p) {
+  if (key === 'any') return true;
+  const i = key.indexOf('|');
+  const name = key.slice(0, i);
+  if ((p.tool_name ?? '') !== name) return false;
+  if (name === 'AskUserQuestion') return true;      // PostToolUse may carry the answers in tool_input: the hash would not match
+  return !('tool_input' in p) || callKey(p) === key;
+}
+
+function clearMarker(file) {
+  try { fs.unlinkSync(file); return true; } catch { return false; }       // true when a marker existed
+}
+
+/** Map one hook payload to a v2 event object, or null when nothing should be sent. */
+export function buildEvent(p, env = process.env, dir = stateDir(env)) {
+  const hook = p.hook_event_name ?? '';
+  const mask = Boolean(env.CLAUDE_GADGET_MASK);
+  const agentId = String(p.agent_id || '');
+  const agent = agentId ? agentId.slice(0, 4) : 'lead';
+  const role = agentId ? asciiClean(p.agent_type || 'agent', 23) : 'lead';
+  const cwd = p.cwd || process.cwd();
+  const sessionId = p.session_id ?? '';
+  const marker = markerPath(dir, sessionId, agent);
+
+  const event = (state, cmd, detail = '') => ({
+    v: 2, session: alnum(sessionId).slice(0, 4), project: asciiClean(path.posix.basename(String(cwd).replace(/\\/g, '/').replace(/\/+$/, '')) || 'claude', 14),
+    agent, role, evt: hook, state, cmd: asciiClean(cmd, 63), detail: mask ? '' : asciiClean(detail, 60),
+  });
+
+  const toolEvent = (state, prefix = '') => {
+    const name = String(p.tool_name ?? '');
+    if (name === 'AskUserQuestion' && !mask && !agentId) {
+      const [question, options] = askParts(p.tool_input);
+      if (question) {
+        const ev = event('needs_you', 'Question', '');
+        ev.question = asciiClean(question, 120);
+        ev.options = options.slice(0, 100);
+        return ev;
+      }
+    }
+    if (name === 'SubagentHandback') return event(state, 'Reporting back');
+    const [arg, detail] = toolParts(name, p.tool_input);
+    return event(state, prefix + (mask ? name : `${name} ${arg}`), detail);
+  };
+
+  if (hook === 'SessionStart') return event('your_turn', 'Session started');
+  if (hook === 'UserPromptSubmit') {
+    clearMarker(marker);
+    const prompt = String(p.prompt ?? '');
+    if (prompt.trimStart().startsWith('<task-notification>')) return event('working', 'Sub-agent report');
+    return event('working', mask ? 'Prompt' : `Prompt: ${prompt}`);
+  }
+  if (hook === 'PreToolUse') {
+    if (p.tool_name === 'AskUserQuestion' && !agentId) {      // the question shows even without a permission prompt
+      setMarker(marker, callKey(p));
+      return toolEvent('needs_you');
+    }
+    if (readMarker(marker) !== null) return null;             // a parallel call starts while a prompt waits: stay "needs you"
+    return toolEvent('working');
+  }
+  if (hook === 'PermissionRequest') {
+    setMarker(marker, callKey(p));
+    return toolEvent('needs_you', 'Approve? ');
+  }
+  if (CLEARING_EVENTS.has(hook)) {
+    const key = readMarker(marker);
+    if (key === null || !sameCall(key, p)) return null;       // another (parallel) call finished: the prompt still waits
+    clearMarker(marker);
+    return event('working', hook !== 'PermissionDenied' ? 'Resumed' : 'Denied, continuing');
+  }
+  const started = `${marker.slice(0, -'.needs'.length)}.started`;     // SubagentStart seen for this agent
+  if (hook === 'SubagentStart') { setMarker(started); return event('working', 'Started'); }
+  if (hook === 'SubagentStop') {
+    clearMarker(marker);
+    // Internal agents of Claude Code end every lead turn with a bare SubagentStop (agent_type "",
+    // no SubagentStart): drop it, or the screen shows a ghost sub-agent.
+    if (!clearMarker(started) && !p.agent_type) return null;
+    return event('done', mask ? 'Finished' : p.last_assistant_message || 'Finished');
+  }
+  if (hook === 'Notification') {
+    const kind = p.notification_type ?? '';
+    if (NEEDS_YOU_TYPES.has(kind)) {
+      // permission_prompt has no agent_id and comes ~6 s after PermissionRequest: when a marker already
+      // exists in this session (often a sub-agent's), the prompt is known, so do not paint the lead orange.
+      if (kind === 'permission_prompt' && sessionHasMarker(dir, sessionId)) return null;
+      setMarker(marker);
+      return event('needs_you', p.message || 'Needs your attention');
+    }
+    if (kind === 'idle_prompt') return event('your_turn', 'Waiting for you');
+    return null;
+  }
+  if (hook === 'Stop') { clearMarker(marker); return event('your_turn', 'Done, waiting for you'); }
+  if (hook === 'SessionEnd') { clearMarker(marker); return event('done', 'Session ended'); }
+  return null;
+}
+
+// Hook points filled in by the transcript usage and plan tracker (next task).
+function addUsage(ev) { return ev; }
+function trackPlan() { return null; }
+function addPlan(ev, plan) { if (plan && ev.agent === 'lead') Object.assign(ev, plan); return ev; }
+
+function readStdin() {
+  return new Promise((resolve) => {
+    const chunks = [];
+    process.stdin.on('data', (c) => chunks.push(c));
+    process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));    // UTF-8, whatever the console code page
+    process.stdin.on('error', () => resolve(''));
+  });
+}
+
+async function main() {
+  let p;
+  try { p = JSON.parse(await readStdin()); } catch { return; }
+  if (!p || typeof p !== 'object') return;
+  const env = process.env;
+  if (env.CLAUDE_GADGET_DUMP) { try { fs.appendFileSync(env.CLAUDE_GADGET_DUMP, `${JSON.stringify(p)}\n`, 'utf8'); } catch { /* debugging aid only */ } }
+  const dir = stateDir(env);
+  const plan = trackPlan(p, dir);                          // every payload, even without an event
+  let ev = buildEvent(p, env, dir);
+  if (!ev) return;
+  ev = addPlan(addUsage(ev, p, dir, Boolean(env.CLAUDE_GADGET_MASK), configWindow(pluginConfig(env))), plan);
+  if (env.CLAUDE_GADGET_DRY_RUN) { process.stderr.write(`${JSON.stringify(ev)}\n`); return; }
+  await postEvent(ev, { host: hubHost(env), timeoutMs: 1500 });
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  setTimeout(() => process.exit(0), 3000).unref();        // failsafe: a hook never lingers
+  process.on('uncaughtException', () => process.exit(0));
+  process.on('unhandledRejection', () => process.exit(0));
+  try { await main(); } catch { /* never fails */ }
+  process.exitCode = 0;           // no process.exit(): on Windows it can abort (libuv assertion) while a hub child is detaching
+}
