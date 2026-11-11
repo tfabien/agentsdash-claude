@@ -2,10 +2,12 @@
   "description": "Send Claude Code activity to the agent hub and gadget (POST /event, wire format v2).",
   "hooks": {
     "SessionStart": [
-      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] },
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session_prompts.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "UserPromptSubmit": [
-      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] },
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session_prompts.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PreToolUse": [
       { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }

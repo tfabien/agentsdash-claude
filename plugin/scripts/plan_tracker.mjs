@@ -35,6 +35,15 @@ function load(file) {
   return [tasks, Boolean(data?.had) || tasks.length > 0];
 }
 
+/** The plan of a session for other scripts: {tasks, had, ageMs}; ageMs is null when no state file exists. */
+export function readPlan(dir, sessionId, now = Date.now()) {
+  const file = statePath(dir, sessionId);
+  const [tasks, had] = load(file);
+  let ageMs = null;
+  try { ageMs = now - fs.statSync(file).mtimeMs; } catch { /* no plan file */ }
+  return { tasks, had, ageMs };
+}
+
 function save(file, tasks, had) {
   const tmp = `${file}.${process.pid}.tmp`;
   try {
