@@ -26,7 +26,10 @@ void displayProgress(int percent);          // progress (0-100) under a message
 void displayInvalidate();                   // back to the agent list, fully redrawn
 // Raw screen command (debug builds, /debug/hmi): sent at once; drawing pauses until displayInvalidate().
 void displayRaw(const String& cmd);
-void displayRender();                       // call often: only draws what changed
+void displayRender();
+// Text width in pixels of the proportional screen fonts (2 = s16, 3 = s20), and the text cut to `width` with "~".
+int displayTextPx(const char* s, int font);
+String displayFit(const char* s, int width, int font);                       // call often: only draws what changed
 // Screen firmware (.tft) download, driven by the core's /tft upload handler. Drawing and touch stop meanwhile.
 bool displayTftBegin(uint32_t size, String& err);
 bool displayTftWrite(const uint8_t* data, size_t n, String& err);

@@ -20,7 +20,10 @@ void hmiPump();                                        // call every loop: sends
 bool hmiTakeOverflow(HmiRegion r);                     // true once after a region dropped commands (queue full): redraw it
 uint32_t hmiQueuedBytes();                             // queued + still in the UART buffer
 uint32_t hmiTitleMs();                                 // last measured time from a title bar redraw to its last byte sent
-uint32_t hmiTitleCount();                              // number of measured title bar redraws
+uint32_t hmiTitleCount();
+uint32_t hmiOverflowCount();
+void hmiNoteErase();                                   // count a background picture drawn over a zone
+uint32_t hmiEraseCount();                              // zone erases and row pictures sent (flicker check, /debug/stats)                           // commands dropped because a region queue was full (since boot)                              // number of measured title bar redraws
 void hmiDrain();                                       // discard bytes received from the screen
 int  hmiRead();                                        // next byte from the screen, -1 when none
 void hmiClear(uint16_t color);                         // cls
@@ -28,7 +31,8 @@ void hmiFill(int x, int y, int w, int h, uint16_t color);
 void hmiCircle(int x, int y, int r, uint16_t color);   // filled disc (cirs)
 void hmiRect(int x, int y, int w, int h, uint16_t color);   // 1 px outline (draw)
 void hmiPic(int x, int y, int id);                     // picture `id` of the screen project (pic), top-left at x,y
-// Text (xstr): font from the blank.tft project (0 = f24, 1 = f16), ASCII only; xcen 0 left, 1 center, 2 right.
+void hmiPicCrop(int x, int y, int w, int h, int id);   // the same area of full-screen picture `id` (picq): erases a zone
+// Text (xstr): font of agent-gadget.tft (0 f24, 1 f16, 2 s16, 3 s20; ui_theme.h), ASCII only; xcen 0 left, 1 center, 2 right.
 void hmiText(int x, int y, int w, int h, int font, uint16_t fg, uint16_t bg, int xcen, const String& s);
 // Same with no background (xstr sta=3): text drawn over what is already there (tab context fill).
 void hmiTextClear(int x, int y, int w, int h, int font, uint16_t fg, int xcen, const String& s);

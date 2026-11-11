@@ -1,7 +1,8 @@
-// SCREEN - "agent standup" UI drawn on the HMI screen (layout D). Implements display.h.
-// Title bar with session tabs, tree of the selected session (lead + sub-agents, sprites by role),
-// command strip of the selected agent. Keeps its own memory of what is on screen (signatures and
-// revisions) and redraws only what changed, in this order: title bar, command strip, tree.
+// SCREEN - "agent standup" UI drawn on the HMI screen (redesign 2026-11-11). Implements display.h.
+// Top bar (selected session tab + labels of the other sessions), lead panel (lead, context, plan), team panel
+// (one row per sub-agent), bottom bar (plan quotas, clock). The static decor is picture 16 of the .tft; text sits on
+// flat colors (xstr with a solid background). Each zone keeps a signature of what it shows and redraws only on change.
+// Draw queues: HMI_TITLE = top bar, HMI_STRIP = lead panel and bottom bar, HMI_TREE = team panel.
 #ifndef DISPLAY_SERIAL
 
 #include "display.h"
@@ -9,29 +10,26 @@
 #include "layout.h"
 #include "touch.h"
 #include "tft_upload.h"
+#include "ui_state.h"
+#include "clock.h"
 #include "ui_theme.h"
-
-#define SLOTS (1 + MAX_SUBS)
 
 static bool fullRedraw = true;
 static bool messageMode = false;
-static bool emptyShown = false;
-static bool clsPending = false;                // a cls is queued in the title region
-static uint32_t titleSig = 0, stripSig = 0, treeSig = 0;
-static uint32_t slotSig[SLOTS];
-static int frameSlot = -1;                 // slot that has the selection frame on screen
-static uint32_t lastAgeRefresh = 0;
-static const uint16_t sessionPalette[] = C_SESSION_PALETTE;
+static uint32_t topSig = 0, leadSig = 0, teamSig = 0, bottomSig = 0;
+static uint32_t rowSig[TEAM_ROWS];
+static uint32_t headSig = 0, lastAgeTick = 0;
+static bool bottomDrawn = false;
 
 // ---------- helpers ----------
 static uint16_t stateColor(AgentState s) {
   switch (s) {
-    case ST_NEEDS_YOU:    return C_ORANGE;
-    case ST_ERROR:        return C_RED;
-    case ST_YOUR_TURN:    return C_BLUEGREY;
-    case ST_WORKING:      return C_GREEN;
-    case ST_WAITING_SUBS: return C_SKY;
-    default:              return C_GREY;
+    case ST_NEEDS_YOU:    return C_NEEDS;
+    case ST_ERROR:        return C_ERROR;
+    case ST_YOUR_TURN:    return C_YOURTURN;
+    case ST_WORKING:      return C_WORKING;
+    case ST_WAITING_SUBS: return C_WAITING;
+    default:              return C_FAINT;
   }
 }
 
@@ -41,35 +39,45 @@ static const char* stateLabel(AgentState s) {
     case ST_ERROR:        return "error";
     case ST_YOUR_TURN:    return "your turn";
     case ST_WORKING:      return "working";
-    case ST_WAITING_SUBS: return "waiting on sub-agents";
+    case ST_WAITING_SUBS: return "waiting on subs";
     default:              return "done";
   }
 }
 
 static uint16_t toneColor(Tone t) {
   switch (t) {
-    case Tone::Ok:    return C_GREEN;
-    case Tone::Warn:  return C_ORANGE;
-    case Tone::Error: return C_RED;
-    default:          return C_WHITE;
+    case Tone::Ok:    return C_WORKING;
+    case Tone::Warn:  return C_NEEDS;
+    case Tone::Error: return C_ERROR;
+    default:          return C_TEXT;
   }
 }
 
 static uint32_t mix(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }   // FNV-1a step
 static uint32_t mixStr(uint32_t h, const char* s) { for (; *s; s++) h = mix(h, (uint8_t)*s); return h; }
 
-static uint16_t sessionColor(const Session& s) { return sessionPalette[mixStr(2166136261u, s.id) % 5]; }
-
-static String fit(const char* s, int width, int charW) {   // cut to the box width, "~" marks a cut
-  int max = width / charW;
-  String r(s);
-  if ((int)r.length() > max) r = r.substring(0, max > 1 ? max - 1 : 0) + "~";
-  return r;
+// Word wrap into at most `maxLines` lines of `width` pixels; the last line is cut with "~" when text remains.
+static int wrapPx(const char* s, int width, int font, String out[], int maxLines) {
+  int n = 0;
+  String rest(s);
+  rest.trim();
+  while (rest.length() && n < maxLines) {
+    if (n == maxLines - 1 || displayTextPx(rest.c_str(), font) <= width) { out[n++] = displayFit(rest.c_str(), width, font); break; }
+    int cut = -1;
+    for (int i = 1; i < (int)rest.length(); i++) {
+      if (rest[i] != ' ') continue;
+      if (displayTextPx(rest.substring(0, i).c_str(), font) > width) break;
+      cut = i;
+    }
+    if (cut < 0) { out[n++] = displayFit(rest.c_str(), width, font); break; }   // one long word: cut it
+    out[n++] = rest.substring(0, cut);
+    rest = rest.substring(cut + 1);
+    rest.trim();
+  }
+  return n;
 }
 
-static String cut(const char* s, int width, int charW) { return String(s).substring(0, width / charW); }
-
-static int pictureFor(const char* role) {      // role -> sprite id (big); unknown roles get the generic look
+static int roleIndex(const char* role) {          // role -> sprite index; unknown roles get the generic look
   String r(role);
   r.toLowerCase();
   if (r == "lead") return 0;
@@ -82,171 +90,263 @@ static int pictureFor(const char* role) {      // role -> sprite id (big); unkno
   return 7;
 }
 
-static const Session* selectedSession(const View& v) { return v.session >= 0 ? modelSession(v.session) : nullptr; }
+static String ageOf(const Agent& a, uint32_t now) { return modelFormatAge((now - a.since) / 1000); }
 
-// ---------- title bar ----------
-static int ctxBand(uint8_t ctx) { return ctx == CTX_UNKNOWN ? 0 : ctx < CTX_WARN ? 1 : ctx < CTX_HOT ? 2 : 3; }
+static int lineH(int font) { return font == FONT_S20 ? LINE_S20 : LINE_S16; }
 
-static uint16_t ctxFillColor(uint8_t ctx) {
-  switch (ctxBand(ctx)) {
-    case 1:  return C_FILL_OK;
-    case 2:  return C_FILL_WARN;
-    default: return C_FILL_HOT;
-  }
+static void line(int x, int y, int w, int font, uint16_t fg, uint16_t bg, const String& s, int xcen = 0) {
+  hmiText(x, y, w, lineH(font), font, fg, bg, xcen, displayFit(s.c_str(), w, font));
 }
 
-static uint32_t titleSignature(const View& v) {
-  uint32_t h = mix(2166136261u, modelSessionCount());
-  h = mix(h, v.session);
-  h = mix(h, modelMoreSessions);
-  h = mix(h, modelCount(ST_NEEDS_YOU));
-  for (int i = 0; i < modelSessionCount() && i < L_TAB_MAX; i++) {
-    const Session* s = modelSession(i);
-    h = mixStr(h, s->id);
-    h = mixStr(h, s->title);
-    h = mix(h, modelSessionDot(*s));
-    h = mix(h, 1 + modelSubCount(*s));
-    uint8_t ctx = modelSessionCtx(*s, millis());
-    h = mix(h, layoutTabFill(i, modelSessionCount(), ctx).w / 2);   // redraw when the fill moves by 2 px
-    h = mix(h, ctxBand(ctx));
+static void erase(const Rect& r) { hmiPicCrop(r.x, r.y, r.w, r.h, PIC_BACKGROUND); }
+
+static const Session* selectedSession(const View& v) { return v.session >= 0 ? modelSession(v.session) : nullptr; }
+
+// ---------- top bar ----------
+static uint32_t topSignature(const View& v) {
+  uint32_t h = mix(mix(2166136261u, modelSessionCount()), v.session);
+  int o[MAX_SESSIONS];
+  int others = uiOtherSessions(v.session, o);
+  h = mix(mix(h, uiLabelOffset(others)), modelCount(ST_NEEDS_YOU));
+  h = mix(mix(h, uiArrowAsks(false, v.session)), uiArrowAsks(true, v.session));
+  for (int t = 0; t < modelSessionCount(); t++) {
+    const Session* s = modelSession(t);
+    h = mixStr(mixStr(h, s->id), s->title[0] ? s->title : s->project);
+    h = mix(mix(h, modelSessionDot(*s)), modelSubCount(*s));
   }
   return h;
 }
 
-static void drawTitle(const View& v) {
-  hmiTarget(HMI_TITLE, !clsPending);              // after a full clear, keep the queued cls in front
-  clsPending = false;
-  hmiFill(0, 0, SCR_W, L_TITLE_H, C_DARK);
-  int n = modelSessionCount();
-  int shown = n < L_TAB_MAX ? n : L_TAB_MAX;
-  for (int i = 0; i < shown; i++) {
-    const Session* s = modelSession(i);
-    Rect r = layoutTab(i, n);
-    uint16_t bg = i == v.session ? C_TAB_SEL : C_TAB;
-    hmiFill(r.x, r.y, r.w, r.h, bg);
-    uint8_t ctx = modelSessionCtx(*s, millis());
-    Rect f = layoutTabFill(i, n, ctx);
-    if (f.w > 0) hmiFill(f.x, f.y, f.w, f.h - 2, ctxFillColor(ctx));         // context fill, under the text
-    hmiFill(r.x, r.y + r.h - 2, r.w, 2, sessionColor(*s));
-    hmiCircle(r.x + 6, r.y + 9, 4, stateColor(modelSessionDot(*s)));
-    String count(1 + modelSubCount(*s));
-    int nameW = r.w - 12 - 2 - 8 * count.length();
-    const char* name = s->title[0] ? s->title : s->project;
-    hmiTextClear(r.x + 11, r.y + 1, nameW, 17, FONT_SMALL, C_WHITE, 0, fit(name, nameW, FONT_SMALL_CW));
-    hmiTextClear(r.x + r.w - 1 - 8 * count.length(), r.y + 1, 8 * count.length(), 17, FONT_SMALL, C_GREY, 2, count);
+// State dot, name, agent count; the name takes what the count leaves.
+static void sessionText(const Session& s, int x, int y, int w, int h, int font, uint16_t fg, uint16_t bg, uint16_t chipBg) {
+  hmiCircle(x + 5, y + h / 2, 4, stateColor(modelSessionDot(s)));
+  String count(1 + modelSubCount(s));
+  int cw = displayTextPx(count.c_str(), FONT_S16) + 8;
+  int tx = x + 13, tw = w - 13 - cw - 4;
+  hmiText(tx, y + (h - lineH(font)) / 2, tw, lineH(font), font, fg, bg, 0, displayFit(s.title[0] ? s.title : s.project, tw, font));
+  if (chipBg != bg) hmiFill(x + w - cw, y + h / 2 - 8, cw, 16, chipBg);
+  hmiText(x + w - cw, y + h / 2 - 9, cw, LINE_S16, FONT_S16, C_TEXT, chipBg, 1, count);
+}
+
+static void drawTopContent(const View& v) {   // the caller targets and clears the top bar
+  const Session* cur = selectedSession(v);
+  Rect tab = layoutSelectedTab();
+  if (cur) sessionText(*cur, tab.x + 4, tab.y + 2, tab.w - 8, tab.h - 4, FONT_S20, C_TEXT, C_FRAME, C_CHIP);
+  int o[MAX_SESSIONS];
+  int others = uiOtherSessions(v.session, o);
+  Rect labels[2];
+  bool arrows;
+  int n = layoutLabels(others, labels, arrows);
+  int off = uiLabelOffset(others);
+  for (int i = 0; i < n && off + i < others; i++) {
+    Rect r = labels[i];
+    hmiPic(r.x, r.y, arrows ? PIC_LABEL_NARROW : PIC_LABEL);
+    sessionText(*modelSession(o[off + i]), r.x + 4, r.y + 2, r.w - 8, r.h - 4, FONT_S16, C_LIGHT, C_BAR, C_BAR);
   }
-  Rect z = layoutTabsMore(n);                                  // right zone: "+N" then "N!"
-  String more = modelMoreSessions > 0 ? "+" + String(modelMoreSessions) : String("");
+  if (arrows) {
+    for (int side = 0; side < 2; side++) {
+      bool right = side == 1;
+      bool any = right ? off + 2 < others : off > 0;
+      Rect a = layoutArrow(right);
+      hmiPic(a.x, a.y, (right ? PIC_ARROW_R : PIC_ARROW_L) + (uiArrowAsks(right, v.session) ? 2 : any ? 0 : 1));
+    }
+  }
   int asks = modelCount(ST_NEEDS_YOU);
-  String ask = asks > 0 ? String(asks) + "!" : String("");
-  int askW = ask.length() * FONT_SMALL_CW;
-  if (more.length()) hmiText(z.x, 1, z.w - askW, 17, FONT_SMALL, C_WHITE, C_DARK, 0, more);
-  if (asks > 0) hmiText(z.x + z.w - askW, 1, askW, 17, FONT_SMALL, C_ORANGE, C_DARK, 2, ask);
-}
-
-// ---------- tree ----------
-static Rect slotRect(int slot, int nSubs) {
-  if (slot == 0) return layoutLead();
-  Rect r[MAX_SUBS];
-  layoutSubs(nSubs, r);
-  return r[slot - 1];
-}
-
-static uint32_t agentSignature(const Session& s, const Agent& a) {
-  return mix(mix(a.rev, modelEffectiveState(s, a)), (uint32_t)(uintptr_t)&a);
-}
-
-static int linkY(const Rect& r, int nSubs) { return r.y + (nSubs <= 4 ? 4 + PIC_BIG_H / 2 : 2 + PIC_SMALL_H / 2); }
-
-// Link lines run only outside the slot rectangles (slot redraws never erase them): lead -> bus,
-// the vertical bus, bus -> first slot of each row, and the gaps between neighbours of a row.
-static void drawLinks(const Session& s, int nSubs) {
-  if (nSubs == 0) return;
-  uint16_t col = sessionColor(s);
-  Rect lead = layoutLead();
-  int busX = L_SUBS_X - 9;
-  int leadY = lead.y + 4 + PIC_BIG_H / 2;
-  int leadX = lead.x + (lead.w + PIC_BIG_W) / 2 + 3;      // right of the lead sprite (inside the lead slot)
-  hmiFill(leadX, leadY, busX - leadX, 2, col);
-  int top = leadY, bottom = leadY;
-  for (int i = 1; i <= nSubs; i++) {
-    Rect r = slotRect(i, nSubs);
-    int y = linkY(r, nSubs);
-    if (y < top) top = y;
-    if (y > bottom) bottom = y;
-    if ((i - 1) % 6 == 0) hmiFill(busX, y, r.x - 2 - busX, 2, col);           // bus -> first slot of the row
-    else {
-      Rect p = slotRect(i - 1, nSubs);
-      hmiFill(p.x + p.w + 2, y, r.x - 2 - (p.x + p.w + 2), 2, col);           // gap between neighbours
-    }
+  if (asks > 0) {
+    Rect b = layoutBadge();
+    hmiFill(b.x, b.y + 2, b.w, b.h - 4, C_NEEDS);
+    hmiText(b.x, b.y + 2, b.w, b.h - 4, FONT_S16, C_SCREEN, C_NEEDS, 1, String(asks) + "!");
   }
-  hmiFill(busX, top, 2, bottom - top + 2, col);
 }
 
-static void drawSlot(const Session& s, int slot, int nSubs) {
-  const Agent* a = modelAgent(s, slot);
-  Rect r = slotRect(slot, nSubs);
-  hmiFill(r.x, r.y, r.w, r.h, C_BLACK);
-  if (!a) return;
-  AgentState st = modelEffectiveState(s, *a);
-  uint16_t col = stateColor(st);
-  bool small = slot > 0 && nSubs > 4;
-  bool faded = st == ST_DONE;
-  int pw = small ? PIC_SMALL_W : PIC_BIG_W, ph = small ? PIC_SMALL_H : PIC_BIG_H;
-  int px = r.x + (r.w - pw) / 2, py = r.y + (small ? 2 : 4);
-  hmiPic(px, py, pictureFor(a->role) + (small ? PIC_SMALL_OFFSET : 0));
-  hmiCircle(px + pw + (small ? 3 : 5), py + 4, small ? 4 : 5, col);
-  int ty = py + ph + 4;
-  const char* name = slot == 0 ? s.project : a->role;
-  hmiText(r.x, ty, r.w, 17, FONT_SMALL, faded ? C_GREY : C_WHITE, C_BLACK, 1, fit(name, r.w, FONT_SMALL_CW));
-  hmiText(r.x, ty + 18, r.w, 17, FONT_SMALL, col, C_BLACK, 1, fit(a->cmd, r.w, FONT_SMALL_CW));
-  if (slot == 0 && r.h - (ty + 36 - r.y) >= 18)      // the lead slot is tall: one more line for the state
-    hmiText(r.x, ty + 36, r.w, 17, FONT_SMALL, col, C_BLACK, 1, fit(stateLabel(st), r.w, FONT_SMALL_CW));
-}
-
-static void drawFrame(int slot, int nSubs, uint16_t color) {
-  Rect r = slotRect(slot, nSubs);
-  hmiRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4, color);
-}
-
-static void drawTree(const View& v, bool full) {
+// ---------- lead panel ----------
+static uint32_t leadSignature(const View& v, uint32_t now) {
   const Session* s = selectedSession(v);
-  int nSubs = s ? modelSubCount(*s) : 0;
-  hmiTarget(HMI_TREE, full);
-  if (full) {
-    Rect t = layoutTree();
-    hmiFill(t.x, t.y, t.w, t.h, C_BLACK);
-    for (auto& k : slotSig) k = 0;
-    frameSlot = -1;
-    if (s) drawLinks(*s, nSubs);
-    if (s && s->more > 0)                          // sub-agents hidden because the session is full
-      hmiText(L_SUBS_X + 6 * L_SMALL_PITCH + 6, t.y + t.h / 2 - 9, SCR_W - (L_SUBS_X + 6 * L_SMALL_PITCH + 6) - 2, 18,
-              FONT_SMALL, C_WHITE, C_BLACK, 0, "+" + String(s->more));
-  }
+  if (!s) return mix(mixStr(2166136261u, deviceInfo.ip.c_str()), deviceInfo.apMode);
+  uint32_t h = mixStr(2166136261u, s->id);
+  h = mix(mix(mix(h, s->lead.rev), modelEffectiveState(*s, s->lead)), s->usageRev);
+  return mix(h, modelSessionCtx(*s, now));        // ages tick in place (drawLeadAge), no full redraw
+}
+
+static Rect leadStateLine() {
+  Rect p = layoutLeadPanel();
+  int tx = p.x + 6 + 42;
+  return {(int16_t)tx, (int16_t)(p.y + 26), (int16_t)(p.x + p.w - 4 - tx), LINE_S16};
+}
+
+static void drawLeadAge(const View& v, uint32_t now) {   // rewrites the state line over itself: no erase, no flicker
+  const Session* s = selectedSession(v);
   if (!s) return;
-  for (int i = 0; i <= nSubs; i++) {
-    uint32_t k = agentSignature(*s, *modelAgent(*s, i));
-    if (k != slotSig[i]) {                          // the frame sits outside the slot: untouched
-      drawSlot(*s, i, nSubs);
-      slotSig[i] = k;
-      if (i == 0) drawLinks(*s, nSubs);             // the lead link starts inside the lead slot
-    }
+  hmiTarget(HMI_STRIP, false);
+  AgentState st = modelEffectiveState(*s, s->lead);
+  Rect r = leadStateLine();
+  line(r.x, r.y, r.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(s->lead, now));
+}
+
+static void drawLeadEmpty() {
+  Rect p = layoutLeadPanel();
+  int x = p.x + 6, w = p.w - 12;
+  if (deviceInfo.apMode) {
+    line(x, p.y + 8, w, FONT_S20, C_NEEDS, C_PANEL, "Wi-Fi setup");
+    line(x, p.y + 40, w, FONT_S16, C_LIGHT, C_PANEL, "1. Join Wi-Fi:");
+    line(x, p.y + 58, w, FONT_S16, C_TEXT, C_PANEL, deviceInfo.apName);
+    line(x, p.y + 84, w, FONT_S16, C_LIGHT, C_PANEL, "2. Open");
+    line(x, p.y + 102, w, FONT_S16, C_TEXT, C_PANEL, "192.168.4.1");
+    line(x, p.y + 128, w, FONT_S16, C_LIGHT, C_PANEL, "3. Pick your Wi-Fi");
+    return;
   }
-  if (frameSlot != v.agent) {
-    if (frameSlot >= 0 && frameSlot <= nSubs) { drawFrame(frameSlot, nSubs, C_BLACK); drawLinks(*s, nSubs); }
-    drawFrame(v.agent, nSubs, C_YELLOW);
-    frameSlot = v.agent;
+  line(x, p.y + 8, w, FONT_S20, C_TEXT, C_PANEL, "No agents yet");
+  line(x, p.y + 40, w, FONT_S16, C_LIGHT, C_PANEL, "Events go to");
+  line(x, p.y + 58, w, FONT_S16, C_TEXT, C_PANEL, deviceInfo.ip.length() ? deviceInfo.ip : String("(no IP)"));
+  line(x, p.y + 84, w, FONT_S16, C_LIGHT, C_PANEL, "Wi-Fi setup:");
+  line(x, p.y + 102, w, FONT_S16, C_TEXT, C_PANEL, "/config");
+}
+
+static void drawPlan(const Session& s, int x, int y, int w, const Rect& p) {
+  line(x, y, w, FONT_S16, C_ACCENT, C_PANEL, "PLAN " + String(s.planDone) + "/" + String(s.planTotal));
+  int by = y + 20;
+  if (s.planTotal <= 16) {
+    int seg = (w - 2 * (s.planTotal - 1)) / s.planTotal;
+    for (int i = 0; i < s.planTotal; i++) {
+      uint16_t c = i < s.planDone ? C_WORKING : (i == s.planDone && s.planCur[0]) ? C_ACCENT : C_CHIP;
+      hmiFill(x + i * (seg + 2), by, seg, 6, c);
+    }
+  } else {
+    hmiFill(x, by, w, 6, C_CHIP);
+    int done = w * s.planDone / s.planTotal;
+    if (done > 0) hmiFill(x, by, done, 6, C_WORKING);
+  }
+  String t[2];
+  const char* cur = s.planCur[0] ? s.planCur : (s.planDone == s.planTotal ? "Plan done" : "");
+  int k = wrapPx(cur, w, FONT_S20, t, 2);
+  for (int i = 0; i < k; i++) line(x, by + 10 + i * 22, w, FONT_S20, C_TEXT, C_PANEL, t[i]);
+  if (s.planNext[0]) line(x, p.y + p.h - 22, w, FONT_S16, C_FAINT, C_PANEL, String("next: ") + s.planNext);
+}
+
+static void drawLeadPanel(const View& v, uint32_t now) {
+  hmiTarget(HMI_STRIP, true);
+  Rect p = layoutLeadPanel();
+  erase(p);
+  const Session* s = selectedSession(v);
+  if (!s) { drawLeadEmpty(); return; }
+  const Agent& a = s->lead;
+  AgentState st = modelEffectiveState(*s, a);
+  int x = p.x + 6, w = p.w - 12;
+  hmiPic(x, p.y + 6, PIC_SPRITE_BIG + roleIndex("lead"));
+  int tx = x + 42, tw = p.x + p.w - 4 - tx;
+  line(tx, p.y + 4, tw, FONT_S20, C_TEXT, C_PANEL, s->project);
+  Rect sl = leadStateLine();
+  line(sl.x, sl.y, sl.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(a, now));
+  uint8_t ctx = modelSessionCtx(*s, now);
+  if (ctx != CTX_UNKNOWN) line(tx, p.y + 44, tw, FONT_S16, ctx >= 80 ? C_NEEDS : C_LIGHT, C_PANEL, "ctx " + String(ctx) + "%");
+  String l[2];
+  int n = wrapPx(a.cmd, w, FONT_S16, l, 2);
+  for (int i = 0; i < n; i++) line(x, p.y + 68 + i * 18, w, FONT_S16, C_LIGHT, C_PANEL, l[i]);
+  int y = p.y + 110;
+  if (s->planTotal > 0) drawPlan(*s, x, y, w, p);
+  else if (a.prevCmd[0]) {
+    line(x, y, w, FONT_S16, C_ACCENT, C_PANEL, "BEFORE");
+    String t[2];
+    int k = wrapPx(a.prevCmd, w, FONT_S16, t, 2);
+    for (int i = 0; i < k; i++) line(x, y + 20 + i * 18, w, FONT_S16, C_LIGHT, C_PANEL, t[i]);
   }
 }
 
-// ---------- command strip ----------
-// Quota line: "5h [####--|-] 48% +18/h 1h20   7d [######-|--] 61% 2d03h", colored by the pace at reset.
+// ---------- team panel ----------
+static uint32_t rowSignature(const Session& s, int slot, uint32_t now) {
+  const Agent* a = modelAgent(s, slot);
+  (void)now;
+  return mix(mix(a->rev, modelEffectiveState(s, *a)), (uint32_t)(uintptr_t)a);   // ages: drawRowAge
+}
+
+#define AGE_BOX_W 44                                   // right-aligned age box of a row, rewritten in place
+
+static void drawRowAge(const Session& s, int slot, const Rect& r, bool compact, uint32_t now) {
+  const Agent* a = modelAgent(s, slot);
+  line(r.x + r.w - 4 - AGE_BOX_W, r.y + (compact ? 2 : 3), AGE_BOX_W, FONT_S16, C_FAINT, C_ROW, ageOf(*a, now), 2);
+}
+
+static void drawRow(const Session& s, int slot, const Rect& r, bool compact, uint32_t now) {
+  const Agent* a = modelAgent(s, slot);
+  AgentState st = modelEffectiveState(s, *a);
+  bool done = st == ST_DONE;
+  hmiPic(r.x, r.y, compact ? PIC_ROW_COMPACT : PIC_ROW);
+  hmiNoteErase();
+  hmiFill(r.x + 2, r.y + 3, 3, r.h - 6, stateColor(st));
+  uint16_t nameCol = done ? C_FAINT : C_TEXT, actCol = done ? C_FAINT : st == ST_NEEDS_YOU ? C_NEEDS : C_LIGHT;
+  int ageW = AGE_BOX_W + 4;
+  if (compact) {
+    hmiPic(r.x + 9, r.y + 2, PIC_SPRITE_TINY + roleIndex(a->role));
+    line(r.x + 30, r.y + 2, 104, FONT_S16, nameCol, C_ROW, a->role);
+    line(r.x + 138, r.y + 2, r.w - 142 - ageW, FONT_S16, actCol, C_ROW, a->cmd);
+  } else {
+    hmiPic(r.x + 9, r.y + 7, PIC_SPRITE_SMALL + roleIndex(a->role));
+    int tx = r.x + 40, tw = r.w - 44;
+    line(tx, r.y + 1, tw - ageW, FONT_S20, nameCol, C_ROW, a->role);
+    line(tx, r.y + 22, tw, FONT_S16, actCol, C_ROW, a->cmd);
+  }
+  drawRowAge(s, slot, r, compact, now);
+}
+
+static int countWorking(const Session& s) {
+  int n = 0;
+  for (int i = 1; i <= modelSubCount(s); i++) n += modelEffectiveState(s, *modelAgent(s, i)) == ST_WORKING;
+  return n;
+}
+
+static uint32_t teamSignature(const View& v) {
+  const Session* s = selectedSession(v);
+  if (!s) return 1;
+  uint8_t team[TEAM_ROWS];
+  int more = 0, n = uiTeamOrder(*s, team, more);
+  uint32_t h = mix(mix(mixStr(2166136261u, s->id), modelSubCount(*s)), more);
+  for (int i = 0; i < n; i++) h = mixStr(h, modelAgent(*s, team[i])->id);
+  return h;
+}
+
+static void drawTeam(const View& v, bool full, bool ageTick, uint32_t now) {
+  const Session* s = selectedSession(v);
+  hmiTarget(HMI_TREE, full);
+  Rect rows[TEAM_ROWS];
+  uint8_t team[TEAM_ROWS];
+  int more = 0, n = s ? uiTeamOrder(*s, team, more) : 0;
+  int nSubs = s ? modelSubCount(*s) : 0;
+  int nRows = layoutRows(nSubs, rows);
+  if (full) {
+    erase(layoutTeamPanel());
+    for (auto& k : rowSig) k = 0;
+    headSig = 0;
+    if (more > 0 && nRows == TEAM_ROWS) {
+      Rect r = rows[TEAM_ROWS - 1];
+      hmiPic(r.x, r.y, PIC_ROW_COMPACT);
+      line(r.x + 30, r.y + 2, r.w - 34, FONT_S16, C_FAINT, C_ROW, "+" + String(more) + " more");
+    }
+  }
+  String head;                                     // header line: rewritten in place when its text changes
+  if (!s) head = "NO SESSION";
+  else if (nSubs == 0) head = "NO SUB-AGENTS";
+  else head = "TEAM - " + String(nSubs) + (nSubs == 1 ? " SUB-AGENT - " : " SUB-AGENTS - ") + String(countWorking(*s)) + " WORKING";
+  uint32_t hs = mixStr(2166136261u, head.c_str());
+  if (hs != headSig) {
+    Rect hd = layoutTeamHeader();
+    line(hd.x, hd.y, hd.w, FONT_S16, C_FAINT, C_PANEL, head);
+    headSig = hs;
+  }
+  bool compact = nSubs > 4;
+  for (int i = 0; i < n; i++) {
+    uint32_t k = rowSignature(*s, team[i], now);
+    if (k != rowSig[i]) { drawRow(*s, team[i], rows[i], compact, now); rowSig[i] = k; }
+    else if (ageTick) drawRowAge(*s, team[i], rows[i], compact, now);
+  }
+}
+
+// ---------- bottom bar ----------
 static uint16_t paceColor(PaceLevel p) {
   switch (p) {
-    case PACE_OK:    return C_GREEN;
-    case PACE_TIGHT: return C_ORANGE;
-    case PACE_OVER:  return C_RED;
-    default:         return C_GREY;
+    case PACE_OK:    return C_WORKING;
+    case PACE_TIGHT: return C_NEEDS;
+    case PACE_OVER:  return C_ERROR;
+    default:         return C_FAINT;
   }
 }
 
@@ -256,95 +356,54 @@ static String fmtDuration(uint32_t s) {                     // "45m", "1h20", "2
   return String(s / 86400) + "d" + (s % 86400 / 3600 < 10 ? "0" : "") + String(s % 86400 / 3600) + "h";
 }
 
-static int drawQuota(int x, int y, uint16_t bg, const char* label, const QuotaWindow& w, bool rate, bool stale, uint32_t now) {
-  uint16_t col = stale ? C_GREY : paceColor(modelPaceLevel(w));
-  hmiText(x, y, 20, 17, FONT_SMALL, C_WHITE, bg, 0, label);
-  x += 22;
-  hmiRect(x, y + 3, L_QUOTA_BAR_W, 11, C_GREY);
-  int filled = (L_QUOTA_BAR_W - 2) * (w.pct > 100 ? 100 : w.pct) / 100;
-  if (filled > 0) hmiFill(x + 1, y + 4, filled, 9, col);
-  if (w.proj >= 0) {                                        // tick: projected % at reset
-    int tx = x + 1 + (L_QUOTA_BAR_W - 3) * (w.proj > 100 ? 100 : w.proj) / 100;
-    hmiFill(tx, y + 1, 1, 15, C_WHITE);
-  }
-  x += L_QUOTA_BAR_W + 4;
-  String t = String(w.pct) + "%";
-  if (rate && w.proj >= 0) t += " +" + String((w.rate10 + 5) / 10) + "/h";
+// One quota in the fixed slot x..slotEnd: text boxes span the slot, so a rewrite covers the old text (no erase).
+static int drawQuota(int x, int slotEnd, int y, const char* label, const QuotaWindow& w, bool stale, uint32_t now) {
+  uint16_t col = stale ? C_FAINT : paceColor(modelPaceLevel(w));
+  int lw = displayTextPx(label, FONT_S16) + 4;
+  hmiText(x, y, lw, LINE_S16, FONT_S16, C_LIGHT, C_BAR, 0, label);
+  x += lw;
+  hmiFill(x, y + 7, 44, 6, C_CHIP);
+  int filled = 44 * (w.pct > 100 ? 100 : w.pct) / 100;
+  if (filled > 0) hmiFill(x, y + 7, filled, 6, col);
+  x += 48;
   uint32_t gone = (now - modelQuotas.receivedAt) / 1000;
+  String t = String(w.pct) + "%";
   if (modelPaceLevel(w) == PACE_OVER && w.emptyS > 0 && w.pct < 100)
-    t += " empty " + fmtDuration(w.emptyS > (int32_t)gone ? w.emptyS - gone : 0);
+    t += " empty in " + fmtDuration(w.emptyS > (int32_t)gone ? w.emptyS - gone : 0);
   else
-    t += " " + fmtDuration(modelQuotaResetLeft(w.resetS, now));
-  int tw = t.length() * FONT_SMALL_CW;
-  hmiText(x, y, tw, 17, FONT_SMALL, col, bg, 0, t);
-  return x + tw;
+    t += " reset " + fmtDuration(modelQuotaResetLeft(w.resetS, now));
+  hmiText(x, y, slotEnd - x, LINE_S16, FONT_S16, stale ? C_FAINT : C_TEXT, C_BAR, 0, displayFit(t.c_str(), slotEnd - x, FONT_S16));
+  return slotEnd;
 }
 
-static void drawQuotaLine(uint16_t bg, uint32_t now) {
-  Rect q = layoutQuotaLine();
-  hmiFill(q.x, q.y, q.w, q.h, bg);
-  if (!modelQuotas.h5.known && !modelQuotas.d7.known) {
-    hmiText(q.x + 4, q.y, q.w - 8, 17, FONT_SMALL, C_GREY, bg, 0, "quotas: no status line data");
-    return;
-  }
-  bool stale = now - modelQuotas.receivedAt > 15UL * 60 * 1000;
-  int x = q.x + 4;
-  if (modelQuotas.h5.known) x = drawQuota(x, q.y, bg, "5h", modelQuotas.h5, true, stale, now) + 16;
-  if (modelQuotas.d7.known) drawQuota(x, q.y, bg, "7d", modelQuotas.d7, false, stale, now);
+static bool quotasStale(uint32_t now) { return now - modelQuotas.receivedAt > 15UL * 60 * 1000; }
+
+static uint32_t bottomSignature(uint32_t now) {
+  char hhmm[6] = "";
+  clockHHMM(hhmm);
+  uint32_t h = mixStr(mix(2166136261u, modelQuotas.rev), hhmm);
+  h = mix(h, modelQuotaResetLeft(modelQuotas.h5.resetS, now) / 60);
+  return mix(h, quotasStale(now));
 }
 
-static bool detailUseful(const Agent& a) { return a.detail[0] && !strstr(a.cmd, a.detail); }
-
-static void drawStripAges(const Agent& a, uint32_t now) {
+static void drawBottom(uint32_t now) {
   hmiTarget(HMI_STRIP, false);
-  Rect r = layoutStrip();
-  hmiText(r.x + 380, r.y + 2, 96, 26, FONT_BIG, C_GREY, C_STRIP, 2, modelFormatAge((now - a.since) / 1000));
-  if (!detailUseful(a) && a.prevCmd[0]) {                  // line 3 shows the previous command when the detail adds nothing
-    String prev = String("before: ") + a.prevCmd + "  (" + modelFormatAge((now - a.prevAt) / 1000) + " ago)";
-    hmiText(r.x + 4, r.y + 45, r.w - 8, 18, FONT_SMALL, C_GREY, C_STRIP, 0, fit(prev.c_str(), r.w - 8, FONT_SMALL_CW));
-  }
-  drawQuotaLine(C_STRIP, now);
+  Rect b = layoutBottomBar();
+  if (!bottomDrawn) { erase(b); bottomDrawn = true; }
+  if (modelQuotas.h5.known) drawQuota(b.x + 6, 196, b.y + 2, "5h", modelQuotas.h5, quotasStale(now), now);
+  if (modelQuotas.d7.known) drawQuota(202, layoutClock().x - 4, b.y + 2, "Week", modelQuotas.d7, quotasStale(now), now);
+  char hhmm[6];
+  Rect c = layoutClock();
+  if (clockHHMM(hhmm)) hmiText(c.x, c.y, c.w, c.h, FONT_S20, C_TEXT, C_BAR, 2, hhmm);
 }
 
-static void drawStrip(const View& v, uint32_t now) {
-  hmiTarget(HMI_STRIP, true);
-  Rect r = layoutStrip();
-  hmiFill(r.x, r.y, r.w, r.h, C_STRIP);
-  const Session* s = selectedSession(v);
-  const Agent* a = s ? modelAgent(*s, v.agent) : nullptr;
-  if (!a) return;
-  AgentState st = modelEffectiveState(*s, *a);
-  String name = v.agent == 0 ? String(s->project) + " (lead)" : String(a->role) + " " + a->id;
-  hmiText(r.x + 4, r.y + 2, 264, 26, FONT_BIG, C_WHITE, C_STRIP, 0, fit(name.c_str(), 264, FONT_BIG_CW));
-  hmiText(r.x + 270, r.y + 6, 108, 18, FONT_SMALL, stateColor(st), C_STRIP, 0, fit(stateLabel(st), 108, FONT_SMALL_CW));
-  Rect tk = layoutStripTokens();
-  int cmdW = tk.x - 4 - (r.x + 4);
-  hmiText(r.x + 4, r.y + 28, cmdW, 18, FONT_SMALL, C_WHITE, C_STRIP, 0, fit(a->cmd, cmdW, FONT_SMALL_CW));
-  uint32_t tok = v.agent == 0 ? s->stok : a->tok;             // lead: whole session; sub-agent: its own
-  if (tok) hmiText(tk.x, tk.y, tk.w, tk.h, FONT_SMALL, C_GREY, C_STRIP, 2, modelFormatTokens(tok));
-  if (detailUseful(*a))
-    hmiText(r.x + 4, r.y + 45, r.w - 8, 18, FONT_SMALL, C_GREY, C_STRIP, 0, fit(a->detail, r.w - 8, FONT_SMALL_CW));
-  drawStripAges(*a, now);
-}
-
-// ---------- empty screen and messages ----------
-static void drawEmpty() {
-  hmiTarget(HMI_TREE, true);
-  hmiTarget(HMI_STRIP, true);
-  hmiFill(0, L_TREE_Y, SCR_W, SCR_H - L_TREE_Y, C_BLACK);
-  if (deviceInfo.apMode) {
-    hmiText(10, 66, 460, 26, FONT_BIG, C_ORANGE, C_BLACK, 1, "Wi-Fi setup");
-    hmiText(10, 106, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, "1. Join Wi-Fi network: " + deviceInfo.apName);
-    hmiText(10, 132, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, "2. Open http://192.168.4.1");
-    hmiText(10, 158, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, "3. Pick your Wi-Fi and save");
-  } else {
-    hmiText(10, 80, 460, 26, FONT_BIG, C_GREY, C_BLACK, 1, "Waiting for agents...");
-    hmiText(10, 118, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, "POST http://" + deviceInfo.ip + "/event");
-    hmiText(10, 144, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, "or " + deviceInfo.hostname);
-    hmiText(10, 170, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, "Wi-Fi setup: /config");
-    if (modelQuotas.h5.known || modelQuotas.d7.known) drawQuotaLine(C_BLACK, millis());
-  }
-  emptyShown = true;
+// ---------- messages ----------
+static void messageLines(const String& title, const String& l1, const String& l2, const String& l3, uint16_t col) {
+  hmiPic(0, 0, PIC_STANDBY);
+  hmiText(10, 70, 460, LINE_S20, FONT_S20, col, C_SCREEN, 1, title);
+  if (l1.length()) hmiText(10, 106, 460, LINE_S16, FONT_S16, C_TEXT, C_SCREEN, 1, l1);
+  if (l2.length()) hmiText(10, 130, 460, LINE_S16, FONT_S16, C_TEXT, C_SCREEN, 1, l2);
+  if (l3.length()) hmiText(10, 154, 460, LINE_S16, FONT_S16, C_LIGHT, C_SCREEN, 1, l3);
 }
 
 static void screenSetup() {                  // after power-up or a new .tft: link speed, quiet acks, touch frames
@@ -361,7 +420,7 @@ void displayBegin() {
   hmiBegin(HMI_BAUD, HMI_RX_PIN, HMI_TX_PIN);
   delay(500);
   screenSetup();
-  hmiClear(C_BLACK);
+  hmiPic(0, 0, PIC_STANDBY);
 }
 
 static void dropQueues() {
@@ -372,11 +431,12 @@ static void dropQueues() {
 void displayMessage(const String& title, const String& l1, const String& l2, const String& l3, Tone tone) {
   messageMode = true;
   dropQueues();
-  hmiClear(C_BLACK);
-  hmiText(10, 66, 460, 26, FONT_BIG, toneColor(tone), C_BLACK, 1, title);
-  if (l1.length()) hmiText(10, 106, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, l1);
-  if (l2.length()) hmiText(10, 132, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, l2);
-  if (l3.length()) hmiText(10, 158, 460, 18, FONT_SMALL, C_GREY, C_BLACK, 1, l3);
+  messageLines(title, l1, l2, l3, toneColor(tone));
+}
+
+void displayRaw(const String& cmd) {
+  if (!messageMode) { messageMode = true; dropQueues(); }
+  hmiSendNow(cmd);
 }
 
 // ---------- screen firmware download ----------
@@ -411,16 +471,12 @@ String displayTftStatus() { return tftStatusJson(); }
 String displayStats() {
   uint32_t q = hmiQueuedBytes();
   return String("{\"screen\":true,\"link\":\"") + hmiLinkResult() + "\",\"baud\":" + hmiBaud() + ",\"queued_bytes\":" + q + ",\"est_ms\":" +
-         (uint32_t)((uint64_t)q * 10000 / hmiBaud()) + ",\"titlebar_ms\":" + hmiTitleMs() + ",\"title_count\":" + hmiTitleCount() + "}";
+         (uint32_t)((uint64_t)q * 10000 / hmiBaud()) + ",\"titlebar_ms\":" + hmiTitleMs() + ",\"title_count\":" + hmiTitleCount() +
+         ",\"overflows\":" + hmiOverflowCount() + ",\"erases\":" + hmiEraseCount() + "}";
 }
 
 void displayProgress(int percent) {
-  hmiText(10, 190, 460, 18, FONT_SMALL, C_WHITE, C_BLACK, 1, String(percent) + " %");
-}
-
-void displayRaw(const String& cmd) {
-  if (!messageMode) { messageMode = true; dropQueues(); }
-  hmiSendNow(cmd);
+  hmiText(10, 190, 460, LINE_S16, FONT_S16, C_TEXT, C_SCREEN, 1, String(percent) + " %");
 }
 
 void displayInvalidate() {
@@ -429,7 +485,7 @@ void displayInvalidate() {
 }
 
 // ---------- render ----------
-static void renderRegions(const View& v, uint32_t now);
+static void renderZones(const View& v, uint32_t now);
 
 void displayRender() {
   if (tftActive()) return;                       // the .tft download owns the UART (acks must not be read as touch)
@@ -441,47 +497,38 @@ void displayRender() {
   if (fullRedraw) {
     dropQueues();
     hmiTarget(HMI_TITLE, true);
-    hmiClear(C_BLACK);                            // drawTitle below keeps it (clsPending)
-    clsPending = true;
-    titleSig = stripSig = treeSig = 0;
-    emptyShown = false;
+    hmiPic(0, 0, PIC_BACKGROUND);                 // first command of the top bar queue: decor of the whole screen
+    topSig = leadSig = teamSig = bottomSig = 0;
+    bottomDrawn = false;
     fullRedraw = false;
   }
-  if (hmiTakeOverflow(HMI_TITLE)) titleSig = 0;    // a queue was full: redraw that region from scratch
-  if (hmiTakeOverflow(HMI_STRIP)) stripSig = 0;
-  if (hmiTakeOverflow(HMI_TREE)) treeSig = 0;
-  renderRegions(v, now);
+  if (hmiTakeOverflow(HMI_TITLE)) topSig = 0;     // a queue was full: redraw that region from scratch
+  if (hmiTakeOverflow(HMI_STRIP)) { leadSig = bottomSig = 0; bottomDrawn = false; }
+  if (hmiTakeOverflow(HMI_TREE)) teamSig = 0;
+  renderZones(v, now);
   hmiTarget(HMI_DIRECT, false);
   hmiPump();
 }
 
-static void renderRegions(const View& v, uint32_t now) {
-  uint32_t t = titleSignature(v);
-  if (t != titleSig) { drawTitle(v); titleSig = t; }
-
-  const Session* s = selectedSession(v);
-  if (!s) {
-    if (!emptyShown) { drawEmpty(); stripSig = treeSig = 0; lastAgeRefresh = now; }
-    else if (now - lastAgeRefresh > AGE_REFRESH_MS && !deviceInfo.apMode && (modelQuotas.h5.known || modelQuotas.d7.known)) {
-      hmiTarget(HMI_STRIP, false);
-      drawQuotaLine(C_BLACK, now);
-      lastAgeRefresh = now;
-    }
-    return;
+static void renderZones(const View& v, uint32_t now) {
+  bool keepBackground = topSig == 0;             // after a full redraw the background command is still queued
+  uint32_t t = topSignature(v);
+  if (t != topSig) {
+    if (keepBackground) hmiTarget(HMI_TITLE, false);
+    else { hmiTarget(HMI_TITLE, true); erase(layoutTopBar()); }
+    drawTopContent(v);
+    topSig = t;
   }
-  if (emptyShown) { emptyShown = false; stripSig = treeSig = 0; }
-
-  const Agent* a = modelAgent(*s, v.agent);
-  uint32_t k = mix(mixStr(mix(2166136261u, v.agent), s->id), a ? agentSignature(*s, *a) : 0);
-  k = mix(k, s->usageRev);
-  if (k != stripSig) { drawStrip(v, now); stripSig = k; lastAgeRefresh = now; }
-  else if (a && now - lastAgeRefresh > AGE_REFRESH_MS) { drawStripAges(*a, now); lastAgeRefresh = now; }
-
-  int nSubs = modelSubCount(*s);
-  uint32_t tree = mix(mix(mix(mixStr(2166136261u, s->id), nSubs), s->more), (uint32_t)(uintptr_t)s);
-  for (int i = 1; i <= nSubs; i++) tree = mixStr(tree, modelAgent(*s, i)->id);   // order change: relayout
-  drawTree(v, tree != treeSig);
-  treeSig = tree;
+  bool ageTick = now - lastAgeTick >= AGE_REFRESH_MS;
+  if (ageTick) lastAgeTick = now;
+  uint32_t l = leadSignature(v, now);
+  if (l != leadSig) { drawLeadPanel(v, now); leadSig = l; bottomSig = 0; }   // the lead redraw dropped the bottom bar queue
+  else if (ageTick) drawLeadAge(v, now);
+  uint32_t b = bottomSignature(now);
+  if (b != bottomSig) { drawBottom(now); bottomSig = b; }
+  uint32_t k = teamSignature(v);
+  drawTeam(v, k != teamSig, ageTick, now);
+  teamSig = k;
 }
 
 #endif  // DISPLAY_SERIAL

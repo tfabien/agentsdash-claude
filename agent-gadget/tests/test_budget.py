@@ -52,6 +52,16 @@ class BudgetTest(unittest.TestCase):
         self.assertLessEqual(st["est_ms"], 3000, st)
         self.wait_idle(5)
 
+    def test_queue_drains_after_a_session_switch(self):
+        state = self.g.state()
+        other = next(s["id"] for s in state["sessions"] if s["id"] != state["view"]["session"])
+        self.assertEqual(self.g.select(other, "lead", hold_ms=30000), 200)
+        end = time.time() + 2.5
+        while time.time() < end and self.stats()["queued_bytes"]:
+            time.sleep(0.2)
+        self.assertEqual(self.stats()["queued_bytes"], 0)
+        self.assertEqual(self.stats()["overflows"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

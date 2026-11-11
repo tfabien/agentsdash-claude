@@ -1,13 +1,14 @@
 #include "hmi_uart.h"
 
 #define TX_BUFFER 1024                       // UART software TX buffer: whole commands are written only when they fit
-static const uint16_t queueSize[HMI_REGIONS] = {1536, 1024, 6144};
-static uint8_t titleBuf[1536], stripBuf[1024], treeBuf[6144];
+static const uint16_t queueSize[HMI_REGIONS] = {1536, 2560, 6144};
+static uint8_t titleBuf[1536], stripBuf[2560], treeBuf[6144];
 static uint8_t* const queueBuf[HMI_REGIONS] = {titleBuf, stripBuf, treeBuf};
 static uint16_t queueLen[HMI_REGIONS];       // bytes used; each command is stored as [length][bytes + FF FF FF]
 static uint16_t queueHead[HMI_REGIONS];      // next byte to send
 static bool overflow[HMI_REGIONS];
 static HmiRegion target = HMI_DIRECT;
+static uint32_t overflowCount = 0;
 static uint32_t baud = 9600;
 static uint32_t titleSince = 0, titleMs = 0, titleCount = 0;
 static bool titlePending = false;
@@ -78,7 +79,7 @@ void hmiTarget(HmiRegion r, bool reset) {
 void hmiSend(const String& cmd) {
   if (target == HMI_DIRECT) { writeCommand(cmd); return; }
   uint16_t n = cmd.length() + 3;
-  if (n > 255 || queueLen[target] + 1 + n > queueSize[target]) { overflow[target] = true; return; }
+  if (n > 255 || queueLen[target] + 1 + n > queueSize[target]) { overflow[target] = true; overflowCount++; return; }
   uint8_t* q = queueBuf[target] + queueLen[target];
   q[0] = (uint8_t)n;
   memcpy(q + 1, cmd.c_str(), cmd.length());
@@ -115,6 +116,7 @@ uint32_t hmiQueuedBytes() {
 }
 
 uint32_t hmiTitleMs() { return titleMs; }
+uint32_t hmiOverflowCount() { return overflowCount; }
 uint32_t hmiTitleCount() { return titleCount; }
 
 void hmiDrain() {
@@ -139,6 +141,15 @@ void hmiRect(int x, int y, int w, int h, uint16_t color) {
 
 void hmiPic(int x, int y, int id) {
   hmiSend("pic " + String(x) + "," + String(y) + "," + String(id));
+}
+
+static uint32_t eraseCount = 0;
+uint32_t hmiEraseCount() { return eraseCount; }
+void hmiNoteErase() { eraseCount++; }
+
+void hmiPicCrop(int x, int y, int w, int h, int id) {
+  eraseCount++;
+  hmiSend("picq " + String(x) + "," + String(y) + "," + String(w) + "," + String(h) + "," + String(id));
 }
 
 void hmiCircle(int x, int y, int r, uint16_t color) {

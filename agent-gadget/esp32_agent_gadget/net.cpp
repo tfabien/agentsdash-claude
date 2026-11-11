@@ -260,6 +260,14 @@ static void handleDebugHmi() {         // POST /debug/hmi {"cmd": "..."} or {"re
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
+static void handleDebugFit() {         // GET /debug/fit?s=..&w=..&font=2|3: text cut to w pixels
+  String s = server.arg("s");
+  int font = intArg("font", 2);
+  s.replace("\"", "'"); s.replace("\\", "/");                 // keep the JSON reply valid
+  String r = displayFit(s.c_str(), intArg("w", 100), font);
+  server.send(200, "application/json", "{\"text\":\"" + r + "\",\"px\":" + displayTextPx(r.c_str(), font) + "}");
+}
+
 static void handleDebugHit() {         // GET /debug/hit?x&y&others&subs
   Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("others", 0), intArg("subs", 0));
   static const char* const kinds[] = {"none", "selected_tab", "label", "arrow_left", "arrow_right", "lead_panel", "row", "more"};
@@ -488,6 +496,7 @@ void netBegin() {
 server.on("/debug/layout", HTTP_GET, handleDebugLayout);
 server.on("/debug/hit", HTTP_GET, handleDebugHit);
 server.on("/debug/hmi", HTTP_POST, handleDebugHmi);
+server.on("/debug/fit", HTTP_GET, handleDebugFit);
 server.on("/debug/tap", HTTP_POST, handleDebugTap);
 server.on("/debug/stats", HTTP_GET, handleDebugStats);
 server.on("/debug/tft", HTTP_GET, handleDebugTft);
