@@ -7,13 +7,23 @@ void uiTap(int x, int y, uint32_t holdMs) {
   uint32_t now = millis();
   View v = modelView(now);
   const Session* cur = v.session >= 0 ? modelSession(v.session) : nullptr;
-  Hit h = hitTest(x, y, modelSessionCount(), cur ? modelSubCount(*cur) : 0);
-  if (h.kind == Hit::Tab) {
-    const Session* s = modelSession(h.index);
-    if (s) modelSelect(s->id, modelAgent(*s, modelDefaultSlot(*s))->id, now, holdMs);
-  } else if (h.kind == Hit::Agent && cur) {
-    const Agent* a = modelAgent(*cur, h.index);
+  int others = modelSessionCount() - (cur ? 1 : 0);
+  Hit h = hitTest(x, y, others, cur ? modelSubCount(*cur) : 0);
+  if (h.kind == Hit::Label) {                 // labels list the other sessions in model order (scrolling: ui_state)
+    int seen = 0;
+    for (int t = 0; t < modelSessionCount(); t++) {
+      if (t == v.session) continue;
+      if (seen++ == h.index) {
+        const Session* s = modelSession(t);
+        modelSelect(s->id, modelAgent(*s, modelDefaultSlot(*s))->id, now, holdMs);
+        break;
+      }
+    }
+  } else if (h.kind == Hit::Row && cur) {
+    const Agent* a = modelAgent(*cur, h.index + 1);
     if (a) modelSelect(cur->id, a->id, now, holdMs);
+  } else if (h.kind == Hit::LeadPanel && cur) {
+    modelSelect(cur->id, cur->lead.id, now, holdMs);
   }
 }
 

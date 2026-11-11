@@ -193,19 +193,20 @@ static String rectJson(const Rect& r) {
 
 static int intArg(const char* name, int def) { return server.hasArg(name) ? server.arg(name).toInt() : def; }
 
-static void handleDebugLayout() {      // GET /debug/layout?subs=N&tabs=T: slot rectangles of layout D
-  int subs = intArg("subs", 0), tabs = intArg("tabs", 5), ctx = intArg("ctx", 255);
-  Rect slots[12];
-  int rows = layoutSubs(subs, slots);
-  int nSubs = subs < 0 ? 0 : subs > 12 ? 12 : subs, nTabs = tabs < 0 ? 0 : tabs > 5 ? 5 : tabs;
-  String j = "{\"title\":" + rectJson(layoutTitle()) + ",\"tree\":" + rectJson(layoutTree()) +
-             ",\"lead\":" + rectJson(layoutLead()) + ",\"strip\":" + rectJson(layoutStrip()) +
-             ",\"tabs_more\":" + rectJson(layoutTabsMore(tabs)) + ",\"tab_fill\":" + rectJson(layoutTabFill(0, tabs, ctx)) +
-             ",\"strip_tokens\":" + rectJson(layoutStripTokens()) + ",\"quota_line\":" + rectJson(layoutQuotaLine()) +
-             ",\"rows\":" + rows + ",\"tabs\":[";
-  for (int i = 0; i < nTabs; i++) j += (i ? "," : "") + rectJson(layoutTab(i, tabs));
-  j += "],\"subs\":[";
-  for (int i = 0; i < nSubs; i++) j += (i ? "," : "") + rectJson(slots[i]);
+static void handleDebugLayout() {      // GET /debug/layout?subs=N&others=K: rectangles of the redesigned screen
+  int subs = intArg("subs", 0), others = intArg("others", 2);
+  Rect rows[7], labels[2];
+  bool arrows;
+  int nRows = layoutRows(subs, rows), nLabels = layoutLabels(others, labels, arrows);
+  String j = "{\"top_bar\":" + rectJson(layoutTopBar()) + ",\"selected_tab\":" + rectJson(layoutSelectedTab()) +
+             ",\"frame\":" + rectJson(layoutFrame()) + ",\"lead_panel\":" + rectJson(layoutLeadPanel()) +
+             ",\"team_panel\":" + rectJson(layoutTeamPanel()) + ",\"team_header\":" + rectJson(layoutTeamHeader()) +
+             ",\"bottom_bar\":" + rectJson(layoutBottomBar()) + ",\"clock\":" + rectJson(layoutClock()) +
+             ",\"badge\":" + rectJson(layoutBadge()) + ",\"arrows\":" + (arrows ? "true" : "false") +
+             ",\"arrow_left\":" + rectJson(layoutArrow(false)) + ",\"arrow_right\":" + rectJson(layoutArrow(true)) + ",\"labels\":[";
+  for (int i = 0; i < nLabels; i++) j += (i ? "," : "") + rectJson(labels[i]);
+  j += "],\"rows\":[";
+  for (int i = 0; i < nRows; i++) j += (i ? "," : "") + rectJson(rows[i]);
   j += "]}";
   server.send(200, "application/json", j);
 }
@@ -248,9 +249,10 @@ static void handleDebugHmi() {         // POST /debug/hmi {"cmd": "..."} or {"re
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
-static void handleDebugHit() {         // GET /debug/hit?x&y&tabs&subs
-  Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("tabs", 0), intArg("subs", 0));
-  const char* kind = h.kind == Hit::Tab ? "tab" : h.kind == Hit::Agent ? "agent" : "none";
+static void handleDebugHit() {         // GET /debug/hit?x&y&others&subs
+  Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("others", 0), intArg("subs", 0));
+  static const char* const kinds[] = {"none", "selected_tab", "label", "arrow_left", "arrow_right", "lead_panel", "row", "more"};
+  const char* kind = kinds[h.kind];
   server.send(200, "application/json", String("{\"kind\":\"") + kind + "\",\"index\":" + h.index + "}");
 }
 #endif

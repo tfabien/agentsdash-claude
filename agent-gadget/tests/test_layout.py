@@ -19,92 +19,87 @@ def center(r):
 
 
 class LayoutTest(unittest.TestCase):
+    """Geometry of the redesign (spec 2026-11-11, rows resized by the Task 1 ruling in its "Decisions" section)."""
+
     def setUp(self):
         require_gadget()
         self.g = Gadget()
 
-    def layout(self, subs, tabs=5):
-        return self.g.debug(f"/debug/layout?subs={subs}&tabs={tabs}")
+    def layout(self, subs, others=2):
+        return self.g.debug(f"/debug/layout?subs={subs}&others={others}")
+
+    def hit(self, point, subs=4, others=2):
+        return self.g.debug(f"/debug/hit?x={point[0]}&y={point[1]}&subs={subs}&others={others}")
+
+    def fixed(self, lay):
+        return [lay[k] for k in ("top_bar", "selected_tab", "frame", "lead_panel", "team_panel", "team_header",
+                                 "bottom_bar", "clock", "badge")]
 
     def test_all_rects_inside_480x272(self):
-        for subs, tabs in itertools.product(range(0, 13), (1, 3, 5, 7)):
-            lay = self.layout(subs, tabs)
-            rects = [lay["title"], lay["lead"], lay["strip"], lay["tree"], lay["tabs_more"]] + lay["tabs"] + lay["subs"]
-            for r in rects:
-                self.assertTrue(inside(r), (subs, tabs, r))
+        for subs, others in itertools.product(range(0, 13), range(0, 5)):
+            lay = self.layout(subs, others)
+            for r in self.fixed(lay) + lay["labels"] + lay["rows"] + [lay["arrow_left"], lay["arrow_right"]]:
+                self.assertTrue(inside(r), (subs, others, r))
 
-    def test_no_overlap_for_0_to_12_subs(self):
-        for subs in range(0, 13):
-            lay = self.layout(subs)
-            blocks = [lay["lead"]] + lay["subs"] + [lay["strip"]]
-            for a, b in itertools.combinations(blocks, 2):
-                self.assertFalse(overlap(a, b), (subs, a, b))
-            for r in [lay["lead"]] + lay["subs"]:                     # the tree stays inside its area
-                self.assertTrue(r["y"] >= lay["tree"]["y"] and r["y"] + r["h"] <= lay["tree"]["y"] + lay["tree"]["h"], (subs, r))
-            for a, b in itertools.combinations(lay["tabs"], 2):
-                self.assertFalse(overlap(a, b))
-
-    def test_two_rows_above_six(self):
-        for subs in range(0, 13):
-            lay = self.layout(subs)
-            self.assertEqual(len(lay["subs"]), subs)
-            self.assertEqual(lay["rows"], 0 if subs == 0 else 1 if subs <= 6 else 2, subs)
-        rows_y = {r["y"] for r in self.layout(12)["subs"]}
-        self.assertEqual(len(rows_y), 2)
-
-    def test_tabs_capped_at_five_with_more_marker(self):
-        self.assertEqual(len(self.layout(0, tabs=7)["tabs"]), 5)
-        self.assertEqual(len(self.layout(0, tabs=3)["tabs"]), 3)
-        lay = self.layout(0, tabs=3)
-        self.assertGreater(lay["tabs_more"]["w"], 0)
-        self.assertGreaterEqual(lay["tabs_more"]["x"], lay["tabs"][-1]["x"] + lay["tabs"][-1]["w"])
-
-    def test_tab_widths_shared(self):
-        for tabs, width in ((1, 434), (2, 215), (3, 142), (4, 105), (5, 83)):
-            lay = self.layout(0, tabs=tabs)
-            self.assertEqual({t["w"] for t in lay["tabs"]}, {width}, tabs)
-            self.assertLessEqual(lay["tabs"][-1]["x"] + lay["tabs"][-1]["w"], 438)
-            for a, b in itertools.combinations(lay["tabs"], 2):
-                self.assertFalse(overlap(a, b))
-
-    def test_right_zone_fixed(self):
-        for tabs in (1, 5, 7):
-            self.assertEqual(self.layout(0, tabs=tabs)["tabs_more"], {"x": 440, "y": 0, "w": 40, "h": 20})
-
-    def test_tab_fill_widths(self):
-        def fill(ctx):
-            return self.g.debug(f"/debug/layout?subs=0&tabs=5&ctx={ctx}")["tab_fill"]["w"]
-        self.assertEqual([fill(c) for c in (0, 50, 100, 150, 255)], [0, 41, 83, 83, 0])
-
-    def test_strip_token_zone_right_of_command(self):
-        tok = self.layout(0)["strip_tokens"]
-        self.assertLessEqual(tok["x"] + tok["w"], SCREEN_W)
-        self.assertGreaterEqual(tok["x"], 4 + 8 * 40)
-
-    def test_quota_line_inside_strip(self):
+    def test_fixed_zones(self):
         lay = self.layout(0)
-        q = lay["quota_line"]
-        self.assertGreaterEqual(q["y"], lay["strip"]["y"])
-        self.assertLessEqual(q["y"] + q["h"], SCREEN_H)
+        self.assertEqual(lay["lead_panel"], {"x": 12, "y": 36, "w": 150, "h": 204})
+        self.assertEqual(lay["team_panel"], {"x": 170, "y": 36, "w": 302, "h": 204})
+        self.assertEqual(lay["bottom_bar"], {"x": 0, "y": 250, "w": 480, "h": 22})
+        self.assertFalse(overlap(lay["lead_panel"], lay["team_panel"]))
 
-    def test_strip_height_about_80(self):
-        strip = self.layout(4)["strip"]
-        self.assertTrue(76 <= strip["h"] <= 90, strip)
-        self.assertEqual(strip["y"] + strip["h"], SCREEN_H)
+    def test_rows_stay_in_the_team_panel_and_never_overlap(self):
+        for subs in range(0, 13):
+            lay = self.layout(subs)
+            panel = lay["team_panel"]
+            for r in lay["rows"]:
+                self.assertTrue(r["y"] >= lay["team_header"]["y"] + lay["team_header"]["h"], (subs, r))
+                self.assertTrue(r["y"] + r["h"] <= panel["y"] + panel["h"], (subs, r))
+                self.assertTrue(r["x"] >= panel["x"] and r["x"] + r["w"] <= panel["x"] + panel["w"], (subs, r))
+            for a, b in itertools.combinations(lay["rows"], 2):
+                self.assertFalse(overlap(a, b), (subs, a, b))
 
-    def test_hit_test_finds_tabs_agents_and_nothing(self):
-        lay = self.layout(12, tabs=4)
+    def test_row_sizes_and_counts(self):
+        self.assertEqual(len(self.layout(0)["rows"]), 0)
+        four = self.layout(4)["rows"]
+        self.assertEqual([r["h"] for r in four], [42] * 4)
+        self.assertEqual(four[-1]["y"] + four[-1]["h"], 235)
+        seven = self.layout(7)["rows"]
+        self.assertEqual([r["h"] for r in seven], [22] * 7)
+        self.assertEqual(len(self.layout(5)["rows"]), 5)
+        self.assertEqual(len(self.layout(12)["rows"]), 7)         # 6 agents + the "+N more" row
 
-        def hit(point):
-            return self.g.debug(f"/debug/hit?x={point[0]}&y={point[1]}&tabs=4&subs=12")
+    def test_labels_and_arrows(self):
+        self.assertFalse(self.layout(0, others=2)["arrows"])
+        self.assertEqual(len(self.layout(0, others=1)["labels"]), 1)
+        self.assertEqual(len(self.layout(0, others=0)["labels"]), 0)
+        lay = self.layout(0, others=3)
+        self.assertTrue(lay["arrows"])
+        self.assertEqual(len(lay["labels"]), 2)
+        items = lay["labels"] + [lay["arrow_left"], lay["arrow_right"], lay["badge"], lay["selected_tab"]]
+        for a, b in itertools.combinations(items, 2):
+            self.assertFalse(overlap(a, b), (a, b))
 
-        for i, tab in enumerate(lay["tabs"]):
-            self.assertEqual(hit(center(tab)), {"kind": "tab", "index": i})
-        self.assertEqual(hit(center(lay["lead"])), {"kind": "agent", "index": 0})
-        for k, slot in enumerate(lay["subs"]):
-            self.assertEqual(hit(center(slot)), {"kind": "agent", "index": k + 1})
-        self.assertEqual(hit(center(lay["strip"]))["kind"], "none")
-        self.assertEqual(hit((SCREEN_W - 1, 1))["kind"], "none")        # right of the tabs, in the title bar
+    def test_hit_test(self):
+        lay = self.layout(4, others=3)
+        for i, label in enumerate(lay["labels"]):
+            self.assertEqual(self.hit(center(label), others=3), {"kind": "label", "index": i})
+        self.assertEqual(self.hit(center(lay["arrow_left"]), others=3)["kind"], "arrow_left")
+        self.assertEqual(self.hit(center(lay["arrow_right"]), others=3)["kind"], "arrow_right")
+        self.assertEqual(self.hit(center(lay["lead_panel"]), others=3)["kind"], "lead_panel")
+        self.assertEqual(self.hit(center(lay["selected_tab"]), others=3)["kind"], "selected_tab")
+        for i, row in enumerate(lay["rows"]):
+            self.assertEqual(self.hit(center(row), others=3), {"kind": "row", "index": i})
+        self.assertEqual(self.hit(center(lay["bottom_bar"]))["kind"], "none")
+
+    def test_labels_answer_taps_below_them(self):
+        label = self.layout(0, others=2)["labels"][0]
+        self.assertEqual(self.hit((center(label)[0], 32), others=2), {"kind": "label", "index": 0})
+
+    def test_more_row(self):
+        rows = self.layout(12)["rows"]
+        self.assertEqual(self.hit(center(rows[-1]), subs=12)["kind"], "more")
+        self.assertEqual(self.hit(center(rows[0]), subs=12), {"kind": "row", "index": 0})
 
 
 if __name__ == "__main__":
