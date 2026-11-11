@@ -16,10 +16,10 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
     `hmi_*.py` (test scripts through the bridge), `tools/make_sprites.py` (sprite PNGs), `tests/` (API tests on a real gadget).
 - `claude-plugin/agent-gadget/` - Claude Code plugin v0.2: hooks -> `scripts/notify.py` -> `POST /event` v2 (sessions, sub-agents, needs-you).
 - `docs/superpowers/` - spec, plan and ideas of the agent UI; `docs/hook-payloads.md`, `docs/touch-findings.md` - captured facts.
-- `agent-gadget.HMI`, `agent-gadget.tft` - current USART HMI project of the screen (one page, 4 fonts, 87 pictures, redesign
+- `screen-hmi/` - everything about the screen project: `agent-gadget.HMI`, `agent-gadget.tft` - current USART HMI project of the screen (one page, 4 fonts, 87 pictures, redesign
   2026-11-11: `docs/superpowers/specs/2026-11-11-screen-redesign-design.md`). `blank.HMI`, `blank.tft` - baseline without pictures.
   `f24.zi`, `f16.zi`, `s16.zi`, `s20.zi` - the fonts. Pictures come from `agent-gadget/tools/make_decor.py` (`assets/decor/`).
-- `guide/` - annotated screenshots of the USART HMI editor steps. `USARTHMIsetup_latest/` - editor installer.
+- `screen-hmi/guide/` - annotated screenshots of the USART HMI editor steps. `screen-hmi/USARTHMIsetup_latest/` - editor installer.
 
 ## Hardware (identified from photos, the .tft metadata and the TJC wiki)
 
@@ -59,7 +59,7 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
   replace or append pictures there, pack, then open the `.HMI` in the editor only for 文件 -> 输出生产文件. Run it with
   `python -E -X utf8 tools/hmi_project.py unpack --portable X.HMI dir` / `pack dir out.HMI --config dir/project.json`.
 - **Easiest flash: the gadget's web page `http://<ip>/tft`** (user `admin`, `OTA_PASSWORD`): pick the exported `.tft`, ~1 min over Wi-Fi,
-  no editor download, no bridge, no USB. Same as `curl -u admin:<pw> -F tft=@agent-gadget.tft "http://<ip>/tft?size=<bytes>"`.
+  no editor download, no bridge, no USB. Same as `curl -u admin:<pw> -F tft=@screen-hmi/agent-gadget.tft "http://<ip>/tft?size=<bytes>"`.
 - The compile button does not write a file: **文件 -> 输出生产文件** exports the `.tft`. Flash it with **下载** (serial, port COM3, 115200) through
   `hmi_bridge` on the ESP32 (no SD card needed, ~49 s), or from a FAT32 microSD. A firmware-version warning is normal.
 - Re-flashing a `.tft` needs `hmi_bridge` on the ESP32 again. The editor opens COM3 (resets the ESP32) and waits only ~39 ms for

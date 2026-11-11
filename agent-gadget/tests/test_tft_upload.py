@@ -12,7 +12,7 @@ import urllib.request
 
 from gadget_client import Gadget, require_gadget
 
-TFT = os.path.join(os.path.dirname(__file__), "..", "..", "agent-gadget.tft")
+TFT = os.path.join(os.path.dirname(__file__), "..", "..", "screen-hmi", "agent-gadget.tft")
 PASSWORD = os.environ.get("GADGET_OTA_PASSWORD", "agent-gadget")
 BOUNDARY = "----gadgettftboundary"
 
