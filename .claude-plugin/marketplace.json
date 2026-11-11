@@ -6,7 +6,7 @@
       "name": "agent-gadget",
       "source": "./claude-plugin/agent-gadget",
       "description": "Shows what Claude Code sessions and subagents are doing on an ESP32 + HMI screen gadget.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

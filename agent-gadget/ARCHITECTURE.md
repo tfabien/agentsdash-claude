@@ -27,9 +27,9 @@ A body without `"v"` is the old `{"agent","state","task"}` (a one-agent session)
 
 Optional usage fields on v2 events (plugin, read from the transcripts): `"tok"` (tokens of this agent) and, on lead
 events, `"stok"` (session total), `"ctx_pct"`, `"ctx_k"` (context estimate), `"title"` (session title, <= 30 chars) and the
-plan progress `"plan_done"`, `"plan_total"`, `"plan_cur"`, `"plan_next"` (plan_tracker.py, from the task-list tool calls).
+plan progress `"plan_done"`, `"plan_total"`, `"plan_cur"`, `"plan_next"` (plan_tracker.mjs, from the task-list tool calls).
 
-`POST /usage` (status line script `claude-plugin/agent-gadget/scripts/statusline.py`), every field optional except `v`:
+`POST /usage` (status line script `claude-plugin/agent-gadget/scripts/statusline.mjs`), every field optional except `v`:
 `{"v":1,"session","ctx_pct","ctx_k","ctx_max_k","h5_pct","h5_reset_s","h5_rate10","h5_proj","h5_empty_s","d7_pct","d7_reset_s","d7_rate10","d7_proj","d7_empty_s"}`.
 Context of a known session (wins over the event estimate for 120 s) and the account-wide plan quotas with their pace
 (`*_rate10` = %/h x 10, `*_proj` = projected % at reset, `*_empty_s` = seconds to 100 % or -1). An unknown session

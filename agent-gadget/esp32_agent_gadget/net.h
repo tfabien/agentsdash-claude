@@ -8,3 +8,4 @@
 void netBegin();                 // Wi-Fi (saved config or setup portal), HTTP server, mDNS, OTA
 void netLoop();                  // call often
 void netClearWifiConfig();       // forget the saved Wi-Fi (the device restarts in setup-portal mode)
+void netSerialLine(const String& line);   // one JSON line from the USB serial port: {"type":"event"|"usage","body":{...}} (agent hub, serial mode)

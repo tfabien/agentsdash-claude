@@ -85,10 +85,9 @@ static void cors() { server.sendHeader("Access-Control-Allow-Origin", "*"); }
 
 static bool ignoredByIsolation() { return isolateMode && !server.hasHeader("X-Gadget-Test"); }
 
-static void handleEvent() {            // POST /event: v2 body, or the old {agent,state,task}
-  cors();
-  if (ignoredByIsolation()) { server.send(200, "text/plain", "ignored"); return; }
-  String body = server.arg("plain");
+// Parse and apply a /event body (v2, or the old {agent,state,task}). nullptr when accepted, else the error text (HTTP 400).
+// Used by the HTTP handler and by the USB serial lines (netSerialLine): same wire format on both.
+static const char* applyEventBody(const String& body) {
   long version = 0;
   if (jsonLong(body, "v", version) && version == 2) {
     EventV2 e;
@@ -97,8 +96,7 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
     char st[16];
     if (!jsonGet(body, "session", e.session, ID_LEN) || !jsonGet(body, "agent", e.agent, ID_LEN) ||
         !jsonGet(body, "state", st, sizeof st) || !modelParseState(st, e.state)) {
-      server.send(400, "text/plain", "session, agent and a valid state are required");
-      return;
+      return "session, agent and a valid state are required";
     }
     jsonGet(body, "project", e.project, PROJECT_LEN);
     jsonGet(body, "role", e.role, ROLE_LEN);
@@ -118,17 +116,21 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
     jsonGet(body, "question", e.ask, ASK_LEN);
     jsonGet(body, "options", e.askOpts, ASK_OPTS_LEN);
     modelApplyV2(e, millis());
-    server.send(200, "text/plain", "ok");
-    return;
+    return nullptr;
   }
   char agent[24], st[12], task[CMD_LEN] = "";
-  if (!jsonGet(body, "agent", agent, sizeof agent) || !jsonGet(body, "state", st, sizeof st)) {
-    server.send(400, "text/plain", "agent and state are required");
-    return;
-  }
+  if (!jsonGet(body, "agent", agent, sizeof agent) || !jsonGet(body, "state", st, sizeof st)) return "agent and state are required";
   jsonGet(body, "task", task, sizeof task);
-  if (!modelApplyV1(agent, st, task, millis())) { server.send(400, "text/plain", "invalid state"); return; }
-  server.send(200, "text/plain", "ok");
+  if (!modelApplyV1(agent, st, task, millis())) return "invalid state";
+  return nullptr;
+}
+
+static void handleEvent() {            // POST /event: v2 body, or the old {agent,state,task}
+  cors();
+  if (ignoredByIsolation()) { server.send(200, "text/plain", "ignored"); return; }
+  const char* err = applyEventBody(server.arg("plain"));
+  if (err) server.send(400, "text/plain", err);
+  else server.send(200, "text/plain", "ok");
 }
 
 static long optLong(const String& body, const char* key) {
@@ -136,12 +138,10 @@ static long optLong(const String& body, const char* key) {
   return jsonLong(body, key, v) ? v : LONG_MIN;
 }
 
-static void handleUsage() {            // POST /usage: context and plan quotas from the status line script
-  cors();
-  if (ignoredByIsolation()) { server.send(200, "text/plain", "ignored"); return; }
-  String body = server.arg("plain");
+// Parse and apply a /usage body: context and plan quotas from the status line script. nullptr when accepted.
+static const char* applyUsageBody(const String& body) {
   long version = 0;
-  if (!jsonLong(body, "v", version)) { server.send(400, "text/plain", "v is required"); return; }
+  if (!jsonLong(body, "v", version)) return "v is required";
   UsageV1 u;
   memset(&u, 0, sizeof u);
   jsonGet(body, "session", u.session, ID_LEN);
@@ -151,7 +151,22 @@ static void handleUsage() {            // POST /usage: context and plan quotas f
   u.d7Pct = optLong(body, "d7_pct");      u.d7ResetS = optLong(body, "d7_reset_s"); u.d7Rate10 = optLong(body, "d7_rate10");
   u.d7Proj = optLong(body, "d7_proj");    u.d7EmptyS = optLong(body, "d7_empty_s");
   modelApplyUsage(u, millis());
-  server.send(200, "text/plain", "ok");
+  return nullptr;
+}
+
+static void handleUsage() {            // POST /usage
+  cors();
+  if (ignoredByIsolation()) { server.send(200, "text/plain", "ignored"); return; }
+  const char* err = applyUsageBody(server.arg("plain"));
+  if (err) server.send(400, "text/plain", err);
+  else server.send(200, "text/plain", "ok");
+}
+
+// One JSON line from the USB serial port (agent hub in serial mode): {"type":"event"|"usage","body":{...}}.
+// The body is the same text as a POST body; the flat key search of the helpers above reads it inside the wrapper.
+void netSerialLine(const String& line) {
+  if (line.indexOf("\"type\":\"usage\"") >= 0) applyUsageBody(line);
+  else if (line.indexOf("\"type\":\"event\"") >= 0) applyEventBody(line);
 }
 
 static void handleState() {            // GET /state
