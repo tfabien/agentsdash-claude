@@ -90,6 +90,16 @@ def tool_parts(name, tool_input):
     return "", ""
 
 
+def ask_parts(tool_input):
+    """(question, options) of an AskUserQuestion call: the first question and up to 4 options joined by "|"."""
+    ti = tool_input if isinstance(tool_input, dict) else {}
+    qs = ti.get("questions")
+    q = qs[0] if isinstance(qs, list) and qs and isinstance(qs[0], dict) else {}
+    opts = q.get("options") if isinstance(q.get("options"), list) else []
+    labels = [str(o.get("label", "")) if isinstance(o, dict) else str(o) for o in opts]
+    return str(q.get("question", "")), "|".join(ascii_clean(l, 40).replace("|", "/") for l in labels[:4])
+
+
 def marker_path(state_dir, session_id, agent):
     safe = re.sub(r"[^A-Za-z0-9]", "", str(session_id))[:12] or "session"
     return os.path.join(state_dir, f"{safe}-{agent}.needs")
@@ -134,6 +144,8 @@ def same_call(key, payload):
     name, _, digest = key.partition("|")
     if payload.get("tool_name", "") != name:
         return False
+    if name == "AskUserQuestion":     # PostToolUse may carry the answers in tool_input: the hash would not match
+        return True
     return "tool_input" not in payload or call_key(payload) == key
 
 
@@ -168,6 +180,12 @@ def build_event(payload, env=None, state_dir=None):
 
     def tool_event(state, prefix=""):
         name = str(payload.get("tool_name", ""))
+        if name == "AskUserQuestion" and not mask and not agent_id:
+            question, options = ask_parts(payload.get("tool_input"))
+            if question:
+                ev = event("needs_you", "Question", "")
+                ev["question"], ev["options"] = ascii_clean(question, 120), options[:100]
+                return ev
         if name == "SubagentHandback":
             return event(state, "Reporting back")
         arg, detail = tool_parts(name, payload.get("tool_input"))
@@ -182,6 +200,9 @@ def build_event(payload, env=None, state_dir=None):
             return event("working", "Sub-agent report")
         return event("working", "Prompt" if mask else "Prompt: " + prompt)
     if hook == "PreToolUse":
+        if payload.get("tool_name") == "AskUserQuestion" and not agent_id:   # the question shows even without a permission prompt
+            set_marker(marker, call_key(payload))
+            return tool_event("needs_you")
         if read_marker(marker) is not None:      # a parallel call starts while a prompt waits: stay "needs you"
             return None
         return tool_event("working")

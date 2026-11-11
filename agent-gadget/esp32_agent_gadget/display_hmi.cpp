@@ -11,6 +11,7 @@
 #include "touch.h"
 #include "tft_upload.h"
 #include "ui_state.h"
+#include "sound.h"
 #include "clock.h"
 #include "ui_theme.h"
 
@@ -110,6 +111,10 @@ static void erase(const Rect& r) { hmiPicCrop(r.x, r.y, r.w, r.h, PIC_BACKGROUND
 
 static const Session* selectedSession(const View& v) { return v.session >= 0 ? modelSession(v.session) : nullptr; }
 
+// A pending question takes the whole width (team rows hidden) and replaces the detail of a tapped sub-agent.
+static int panelSubs(const Session& s) { return modelAsking(s) ? 0 : modelSubCount(s); }
+static int shownSlot(const Session& s, uint32_t now) { return modelAsking(s) ? 0 : uiDetailSlot(s, now); }
+
 // ---------- top bar ----------
 static uint32_t topSignature(const View& v) {
   uint32_t h = mix(mix(2166136261u, modelSessionCount()), v.session);
@@ -171,9 +176,11 @@ static void drawTopContent(const View& v) {   // the caller targets and clears t
 static uint32_t leadSignature(const View& v, uint32_t now) {
   const Session* s = selectedSession(v);
   if (!s) return mix(mixStr(2166136261u, deviceInfo.ip.c_str()), deviceInfo.apMode);
-  uint32_t h = mix(mixStr(2166136261u, s->id), modelSubCount(*s) == 0);   // full width without sub-agents
+  uint32_t h = mix(mixStr(2166136261u, s->id), panelSubs(*s) == 0);   // full width without sub-agents or with a question
+  h = mixStr(mixStr(h, s->ask), s->askOpts);
   h = mix(mix(mix(h, s->lead.rev), modelEffectiveState(*s, s->lead)), s->usageRev);
-  int slot = uiDetailSlot(*s, now);
+  h = mixStr(h, s->planState);
+  int slot = shownSlot(*s, now);
   if (slot) {                                     // detail view: the tapped agent's revision drives the redraw
     const Agent* a = modelAgent(*s, slot);
     h = mix(mix(mix(h, 0xD37A11u), a->rev), (uint32_t)(uintptr_t)a);
@@ -192,10 +199,10 @@ static void drawLeadAge(const View& v, uint32_t now) {   // rewrites the state l
   const Session* s = selectedSession(v);
   if (!s) return;
   hmiTarget(HMI_STRIP, false);
-  int slot = uiDetailSlot(*s, now);
+  int slot = shownSlot(*s, now);
   const Agent& a = *modelAgent(*s, slot);
   AgentState st = modelEffectiveState(*s, a);
-  Rect r = leadStateLine(modelSubCount(*s));
+  Rect r = leadStateLine(panelSubs(*s));
   line(r.x, r.y, r.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(a, now));
 }
 
@@ -218,15 +225,36 @@ static void drawLeadEmpty() {
   line(x, p.y + 102, w, FONT_S16, C_TEXT, C_PANEL, "/config");
 }
 
+#define C_ACCENT_DIM 0x2A4F                       // dim end of the pulse of running plan steps
+#define PULSE_STEPS 12                            // brightness levels 0..4 per half period: a smooth breathing, not a blink
+
+static uint16_t lerp565(uint16_t a, uint16_t b, int t, int n) {   // t/n of the way from a to b, per RGB565 channel
+  int r = ((a >> 11) & 31) + (((b >> 11) & 31) - ((a >> 11) & 31)) * t / n;
+  int g = ((a >> 5) & 63) + (((b >> 5) & 63) - ((a >> 5) & 63)) * t / n;
+  int bl = (a & 31) + ((b & 31) - (a & 31)) * t / n;
+  return (uint16_t)(r << 11 | g << 5 | bl);
+}
+
+static bool planParallel(const Session& s) { return s.planState[0] && s.planTotal <= 16 && (int)strlen(s.planState) == s.planTotal; }
+
+// Segment i of the plan bar. Per-task states drive the colors when steps run in parallel; running ones pulse.
+static void drawPlanSeg(const Session& s, int i, int x, int by, int w, int level) {   // level 0..PULSE_STEPS
+  int seg = (w - 2 * (s.planTotal - 1)) / s.planTotal;
+  uint16_t c;
+  if (planParallel(s)) {
+    char st = s.planState[i];
+    c = st == 'd' ? C_WORKING : st == 'r' ? lerp565(C_ACCENT_DIM, C_ACCENT, level, PULSE_STEPS) : C_CHIP;
+  } else {
+    c = i < s.planDone ? C_WORKING : (i == s.planDone && s.planCur[0]) ? C_ACCENT : C_CHIP;
+  }
+  hmiFill(x + i * (seg + 2), by, seg, 6, c);
+}
+
 static void drawPlan(const Session& s, int x, int y, int w, const Rect& p) {
   line(x, y, w, FONT_S16, C_ACCENT, C_PANEL, "PLAN " + String(s.planDone) + "/" + String(s.planTotal));
   int by = y + 20;
   if (s.planTotal <= 16) {
-    int seg = (w - 2 * (s.planTotal - 1)) / s.planTotal;
-    for (int i = 0; i < s.planTotal; i++) {
-      uint16_t c = i < s.planDone ? C_WORKING : (i == s.planDone && s.planCur[0]) ? C_ACCENT : C_CHIP;
-      hmiFill(x + i * (seg + 2), by, seg, 6, c);
-    }
+    for (int i = 0; i < s.planTotal; i++) drawPlanSeg(s, i, x, by, w, PULSE_STEPS);
   } else {
     hmiFill(x, by, w, 6, C_CHIP);
     int done = w * s.planDone / s.planTotal;
@@ -275,10 +303,29 @@ static void drawCtxBar(int x, int y, int w, int pct) {
   line(x + bw + 4, y, tw, FONT_S16, col, C_PANEL, String(pct) + "%");
 }
 
+// Question of the lead (full-width panel, y from 68): question in bold 20 (2 lines with 4 options, else 3),
+// then one option per line in 16 ("A|B|C" on the wire, numbered here).
+static void drawQuestion(const Session& s, int x, int y, int w, const Rect& p) {
+  int nOpt = 0;
+  if (s.askOpts[0]) { nOpt = 1; for (const char* c = s.askOpts; *c; c++) nOpt += *c == '|'; }
+  String q[3];
+  int nq = wrapPx(s.ask, w, FONT_S20, q, nOpt > 3 ? 2 : 3);
+  for (int i = 0; i < nq; i++) line(x, y + i * 22, w, FONT_S20, C_NEEDS, C_PANEL, q[i]);
+  int oy = y + nq * 22 + 6, maxOpt = (p.y + p.h - 4 - oy) / 18;
+  String rest(s.askOpts);
+  for (int i = 0; i < nOpt && i < maxOpt; i++) {
+    int bar = rest.indexOf('|');
+    String one = bar < 0 ? rest : rest.substring(0, bar);
+    rest = bar < 0 ? String("") : rest.substring(bar + 1);
+    one.trim();
+    line(x, oy + i * 18, w, FONT_S16, C_LIGHT, C_PANEL, String(i + 1) + ". " + one);
+  }
+}
+
 static void drawLeadPanel(const View& v, uint32_t now) {
   hmiTarget(HMI_STRIP, true);
   const Session* s = selectedSession(v);
-  int nSubs = s ? modelSubCount(*s) : 1;
+  int nSubs = s ? panelSubs(*s) : 1;
   Rect p = layoutLeadPanel(nSubs);
   if (nSubs == 0) {                               // full width: both panels and the gap between them become one
     erase(p);
@@ -287,7 +334,7 @@ static void drawLeadPanel(const View& v, uint32_t now) {
     erase({12, 36, 158, 204});                    // lead panel and the gap; the team erase restores 170..472
   }
   if (!s) { leadPanelMode = "empty"; drawLeadEmpty(); return; }
-  int slot = uiDetailSlot(*s, now);
+  int slot = shownSlot(*s, now);
   if (slot) { leadPanelMode = "detail"; drawDetail(*s, slot, now); return; }
   leadPanelMode = "lead";
   const Agent& a = s->lead;
@@ -300,6 +347,7 @@ static void drawLeadPanel(const View& v, uint32_t now) {
   line(sl.x, sl.y, sl.w, FONT_S16, stateColor(st), C_PANEL, String(stateLabel(st)) + " " + ageOf(a, now));
   uint8_t ctx = modelSessionCtx(*s, now);
   if (ctx != CTX_UNKNOWN) drawCtxBar(tx, p.y + 44, tw, ctx);
+  if (modelAsking(*s)) { leadPanelMode = "question"; drawQuestion(*s, x, p.y + 68, w, p); return; }
   String l[2];
   int n = wrapPx(a.cmd, w, FONT_S16, l, 2);
   for (int i = 0; i < n; i++) line(x, p.y + 68 + i * 18, w, FONT_S16, C_LIGHT, C_PANEL, l[i]);
@@ -358,7 +406,7 @@ static int countWorking(const Session& s) {
 static uint32_t teamSignature(const View& v) {
   const Session* s = selectedSession(v);
   if (!s) return 1;
-  if (modelSubCount(*s) == 0) return 2;            // the lead panel owns the width
+  if (panelSubs(*s) == 0) return 2;                // the lead panel owns the width
   uint8_t team[TEAM_ROWS];
   int more = 0, n = uiTeamOrder(*s, team, more);
   uint32_t h = mix(mix(mixStr(2166136261u, s->id), modelSubCount(*s)), more);
@@ -369,7 +417,7 @@ static uint32_t teamSignature(const View& v) {
 static void drawTeam(const View& v, bool full, bool ageTick, uint32_t now) {
   const Session* s = selectedSession(v);
   hmiTarget(HMI_TREE, full);
-  if (s && modelSubCount(*s) == 0) return;         // full-width lead panel: nothing to draw here
+  if (s && panelSubs(*s) == 0) return;             // full-width lead panel: nothing to draw here
   Rect rows[TEAM_ROWS];
   uint8_t team[TEAM_ROWS];
   int more = 0, n = s ? uiTeamOrder(*s, team, more) : 0;
@@ -417,6 +465,26 @@ static void drawTeam(const View& v, bool full, bool ageTick, uint32_t now) {
   }
 }
 
+// ---------- buzzer ----------
+// Beeps when more agents need the user (two beeps) or wait for the user's turn (one, mode "all" only).
+static int prevNeeds = -1, prevTurn = -1, beepsLeft = 0;
+static uint32_t nextBeep = 0;
+
+static void alerts(uint32_t now) {
+  int needs = modelCount(ST_NEEDS_YOU), turn = modelCount(ST_YOUR_TURN);
+  if (prevNeeds >= 0 && soundMode() != SOUND_OFF) {                  // first call only records the counts (no beep at boot)
+    if (needs > prevNeeds) { beepsLeft = 2; nextBeep = now; }
+    else if (turn > prevTurn && beepsLeft == 0 && soundMode() == SOUND_ALL) { beepsLeft = 1; nextBeep = now; }
+  }
+  prevNeeds = needs; prevTurn = turn;
+  if (beepsLeft > 0 && (int32_t)(now - nextBeep) >= 0) {
+    if (soundMode() == SOUND_OFF) beepsLeft = 0;
+    else { displayBeep(120); beepsLeft--; nextBeep = now + 320; }
+  }
+}
+
+void displayBeep(int ms) { hmiSendNow("beep " + String(ms)); }
+
 // ---------- bottom bar ----------
 static uint16_t paceColor(PaceLevel p) {
   switch (p) {
@@ -460,7 +528,24 @@ static uint32_t bottomSignature(uint32_t now) {
   clockHHMM(hhmm);
   uint32_t h = mixStr(mix(2166136261u, modelQuotas.rev), hhmm);
   h = mix(h, modelQuotaResetLeft(modelQuotas.h5.resetS, now) / 60);
-  return mix(h, quotasStale(now));
+  return mix(mix(h, quotasStale(now)), soundMode());
+}
+
+// Speaker icon on a chip: all = light, 2 waves; ask only = orange, 1 wave; off = faint with a red cross.
+static void drawSoundIcon(const Rect& mb, SoundMode sm) {
+  uint16_t ic = sm == SOUND_ALL ? C_TEXT : sm == SOUND_ASK ? C_NEEDS : C_FAINT;
+  hmiFill(mb.x, mb.y + 1, mb.w, mb.h - 2, C_CHIP);
+  int x = mb.x + 8, y = mb.y + 3;
+  hmiFill(x, y + 5, 4, 6, ic);                      // body
+  hmiFill(x + 4, y + 3, 2, 10, ic);                 // cone
+  hmiFill(x + 6, y + 1, 2, 14, ic);
+  if (sm == SOUND_OFF) {
+    hmiSend("line " + String(x + 11) + "," + String(y + 3) + "," + String(x + 21) + "," + String(y + 13) + "," + String(C_ERROR));
+    hmiSend("line " + String(x + 11) + "," + String(y + 13) + "," + String(x + 21) + "," + String(y + 3) + "," + String(C_ERROR));
+    return;
+  }
+  hmiFill(x + 11, y + 5, 2, 6, ic);                 // first wave
+  if (sm == SOUND_ALL) hmiFill(x + 15, y + 2, 2, 12, ic);   // second wave
 }
 
 static void drawBottom(uint32_t now) {
@@ -468,7 +553,9 @@ static void drawBottom(uint32_t now) {
   Rect b = layoutBottomBar();
   if (!bottomDrawn) { erase(b); bottomDrawn = true; }
   if (modelQuotas.h5.known) drawQuota(b.x + 6, 196, b.y + 2, "5h", modelQuotas.h5, quotasStale(now), now);
-  if (modelQuotas.d7.known) drawQuota(202, layoutClock().x - 4, b.y + 2, "Week", modelQuotas.d7, quotasStale(now), now);
+  if (modelQuotas.d7.known) drawQuota(202, layoutMuteButton().x - 4, b.y + 2, "Week", modelQuotas.d7, quotasStale(now), now);
+  Rect mb = layoutMuteButton();
+  drawSoundIcon(mb, soundMode());
   char hhmm[6];
   Rect c = layoutClock();
   if (!standbyShown && clockHHMM(hhmm)) hmiText(c.x, c.y, c.w, c.h, FONT_S20, C_TEXT, C_BAR, 2, hhmm);
@@ -499,11 +586,12 @@ static void animate(const View& v, uint32_t now) {
   animSteps++;
   const Session* s = selectedSession(v);
   if (!s) return;
-  Rect p = layoutLeadPanel(modelSubCount(*s));
-  int slot = uiDetailSlot(*s, now);
+  Rect p = layoutLeadPanel(panelSubs(*s));
+  int slot = shownSlot(*s, now);
   const Agent& lead = *modelAgent(*s, slot);
   hmiTarget(HMI_STRIP, false);
   animSprite(p.x + 6, p.y + 6, PIC_SPRITE_BIG + roleIndex(slot ? lead.role : "lead"), modelEffectiveState(*s, lead), 0);
+  if (panelSubs(*s) == 0) return;                  // no team rows on screen
   Rect rows[TEAM_ROWS];
   uint8_t team[TEAM_ROWS];
   int more = 0, n = uiTeamOrder(*s, team, more);
@@ -519,6 +607,23 @@ static void animate(const View& v, uint32_t now) {
     else animSprite(r.x + 9, r.y + 7, PIC_SPRITE_SMALL + roleIndex(a.role), st, i + 1);
     animBar(r, st);
   }
+}
+
+// Running plan steps breathe: own 100 ms timer, triangle wave over 2 * PULSE_STEPS steps (2.4 s per breath).
+#define PULSE_MS 100UL
+static uint32_t lastPulse = 0, pulsePhase = 0;
+
+static void pulsePlan(const View& v, uint32_t now) {
+  if (now - lastPulse < PULSE_MS) return;
+  lastPulse = now;
+  pulsePhase++;
+  const Session* s = selectedSession(v);
+  if (!s || strcmp(leadPanelMode, "lead") || !planParallel(*s)) return;
+  Rect lp = layoutLeadPanel(panelSubs(*s));
+  hmiTarget(HMI_STRIP, false);
+  int ph = pulsePhase % (2 * PULSE_STEPS);
+  for (int i = 0; i < s->planTotal; i++)
+    if (s->planState[i] == 'r') drawPlanSeg(*s, i, lp.x + 6, lp.y + 130, lp.w - 12, ph < PULSE_STEPS ? ph : 2 * PULSE_STEPS - ph);
 }
 
 // ---------- standby ----------
@@ -686,6 +791,7 @@ void displayRender() {
   if (hmiTakeOverflow(HMI_STRIP)) { leadSig = bottomSig = 0; bottomDrawn = false; }
   if (hmiTakeOverflow(HMI_TREE)) teamSig = 0;
   renderZones(v, now);
+  alerts(now);
   hmiTarget(HMI_DIRECT, false);
   hmiPump();
 }
@@ -723,6 +829,7 @@ static void renderZones(const View& v, uint32_t now) {
   drawTeam(v, k != teamSig, ageTick, now);
   teamSig = k;
   animate(v, now);
+  pulsePlan(v, now);
 }
 
 #endif  // DISPLAY_SERIAL

@@ -12,6 +12,9 @@
 #define DETAIL_LEN 61
 #define TITLE_LEN 31
 #define PLAN_LEN 48                 // plan task titles (current, next), 47 characters + NUL                // session title (from the transcript), 30 characters + NUL
+#define PLAN_STATE_LEN 17           // one character per task (d done, r running, p pending), 16 tasks + NUL
+#define ASK_LEN 121                 // question the lead asks the user (AskUserQuestion), 120 characters + NUL
+#define ASK_OPTS_LEN 101            // its options, joined in one line
 #define CTX_UNKNOWN 255
 #define CTX_STATUSLINE_MS 120000UL  // a status line context newer than this wins over the transcript estimate
 
@@ -50,6 +53,9 @@ struct Session {
   uint8_t planDone, planTotal;      // superpowers plan progress; planTotal 0 = no plan
   char planCur[PLAN_LEN];           // title of the task in progress
   char planNext[PLAN_LEN];          // title of the next pending task
+  char planState[PLAN_STATE_LEN];   // per-task states when several tasks run in parallel; empty = at most one running
+  char ask[ASK_LEN];                // question waiting for the user; empty = none (cleared when the lead stops needing the user)
+  char askOpts[ASK_OPTS_LEN];       // its options, e.g. "1 Yes  2 No  3 Later"
   Agent lead;
   Agent subs[MAX_SUBS];
   uint8_t more;                     // distinct sub-agents hidden because the session was full
@@ -74,6 +80,8 @@ struct EventV2 {                    // wire format v2, already parsed
   long planDone, planTotal;         // optional plan progress, -1 = absent
   char planCur[PLAN_LEN], planNext[PLAN_LEN];
   bool hasPlanCur, hasPlanNext;
+  char planState[PLAN_STATE_LEN];             // optional, empty = absent
+  char ask[ASK_LEN], askOpts[ASK_OPTS_LEN];   // optional question and options, empty = absent
 };
 
 struct UsageV1 {                    // POST /usage (status line), already parsed; LONG_MIN = absent
@@ -135,6 +143,7 @@ String modelFormatTokens(uint32_t t);                     // "999", "12k", "1.6M
 int modelSessionCount();
 const Session* modelSession(int tab);                     // tabs ordered by urgency, then recency
 int modelSubCount(const Session& s);
+bool modelAsking(const Session& s);                       // the lead waits on the user with a question to show
 const Agent* modelAgent(const Session& s, int slot);      // slot 0 = lead, 1..12 = used sub-agents in order
 AgentState modelEffectiveState(const Session& s, const Agent& a);
 AgentState modelSessionDot(const Session& s);             // most urgent effective state of the session

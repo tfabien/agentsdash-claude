@@ -15,6 +15,7 @@ Rect layoutTeamPanel()   { return {170, 36, 302, 204}; }
 Rect layoutTeamHeader()  { return {176, 38, 290, 18}; }
 Rect layoutBottomBar()   { return {0, 250, SCR_W, 22}; }
 Rect layoutClock()       { return {416, 250, 60, 22}; }
+Rect layoutMuteButton() { return {370, 250, 42, 22}; }
 Rect layoutBadge()       { return {442, 4, 32, 22}; }
 Rect layoutArrow(bool right) { return {(int16_t)(right ? 414 : 170), 4, 24, 22}; }
 
@@ -59,6 +60,9 @@ Hit hitTest(int x, int y, int others, int nSubs) {
     if (contains(t, x, y)) return {Hit::SelectedTab, -1};
     return {Hit::None, -1};
   }
+  Rect m = layoutMuteButton();
+  m.y = 242; m.h = 30;                    // generous touch zone around the small button
+  if (contains(m, x, y)) return {Hit::Mute, -1};
   if (contains(layoutLeadPanel(nSubs), x, y)) return {Hit::LeadPanel, -1};
   Rect rows[7];
   int n = layoutRows(nSubs, rows);

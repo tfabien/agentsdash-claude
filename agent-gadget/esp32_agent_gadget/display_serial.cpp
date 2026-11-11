@@ -26,6 +26,9 @@ void displayRaw(const String& cmd) {
   Serial.println(cmd);
 }
 
+void displayBeep(int ms) { Serial.printf("[display] beep %d
+", ms); }
+
 void displayInvalidate() {
   messageMode = false;
   lastModelRev = ~0u;

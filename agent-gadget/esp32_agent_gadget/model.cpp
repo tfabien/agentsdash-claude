@@ -175,11 +175,30 @@ static void applyLeadUsage(Session& s, const EventV2& e, uint32_t now) {
     uint8_t done = d > total ? total : (uint8_t)d;
     if (total != s.planTotal || done != s.planDone) { s.planTotal = total; s.planDone = done; changed = true; }
     if (total == 0) { s.planCur[0] = s.planNext[0] = 0; }
+    if (strcmp(s.planState, e.planState) != 0) { copyStr(s.planState, PLAN_STATE_LEN, e.planState); changed = true; }   // absent = cleared
   }
   if (e.hasPlanCur && strcmp(s.planCur, e.planCur) != 0) { copyStr(s.planCur, PLAN_LEN, e.planCur); changed = true; }
   if (e.hasPlanNext && strcmp(s.planNext, e.planNext) != 0) { copyStr(s.planNext, PLAN_LEN, e.planNext); changed = true; }
   if (changed) s.usageRev = ++modelRev;
 }
+
+// The question of the lead: set by the event that carries it, cleared as soon as the lead no longer needs the user.
+static void applyLeadAsk(Session& s, const EventV2& e) {
+  bool changed = false;
+  if (e.ask[0]) {
+    if (strcmp(s.ask, e.ask) != 0 || strcmp(s.askOpts, e.askOpts) != 0) {
+      copyStr(s.ask, ASK_LEN, e.ask);
+      copyStr(s.askOpts, ASK_OPTS_LEN, e.askOpts);
+      changed = true;
+    }
+  } else if (e.state != ST_NEEDS_YOU && s.ask[0]) {    // a later needs_you without question (6 s Notification) keeps it
+    s.ask[0] = s.askOpts[0] = 0;
+    changed = true;
+  }
+  if (changed) s.usageRev = ++modelRev;
+}
+
+bool modelAsking(const Session& s) { return s.lead.used && s.lead.state == ST_NEEDS_YOU && s.ask[0]; }
 
 static void setWindow(QuotaWindow& w, long pct, long resetS, long rate10, long proj, long emptyS) {
   if (pct == LONG_MIN) return;
@@ -284,7 +303,7 @@ bool modelApplyV2(const EventV2& e, uint32_t now) {
   }
   copyStr(a->detail, DETAIL_LEN, e.detail);
   if (e.tok >= 0) a->tok = (uint32_t)e.tok;
-  if (isLead) applyLeadUsage(*s, e, now);
+  if (isLead) { applyLeadUsage(*s, e, now); applyLeadAsk(*s, e); }
   AgentState before = a->state;
   if (fresh || before != e.state) a->since = now;
   a->state = e.state;
@@ -512,7 +531,8 @@ String modelToJson(uint32_t now) {
          "\",\"tok\":" + String(s.stok) + ",\"plan\":" +
          (s.planTotal == 0 ? String("null")
                            : "{\"done\":" + String(s.planDone) + ",\"total\":" + String(s.planTotal) + ",\"cur\":\"" +
-                                 jsonEscape(s.planCur) + "\",\"next\":\"" + jsonEscape(s.planNext) + "\"}") +
+                                 jsonEscape(s.planCur) + "\",\"next\":\"" + jsonEscape(s.planNext) + "\",\"state\":\"" + s.planState + "\"}") +
+         ",\"ask\":" + (modelAsking(s) ? "{\"question\":\"" + jsonEscape(s.ask) + "\",\"options\":\"" + jsonEscape(s.askOpts) + "\"}" : String("null")) +
          ",\"agents\":[" + agentJson(s, s.lead, true, now);
     for (int i = 1; i <= modelSubCount(s); i++) j += "," + agentJson(s, *modelAgent(s, i), false, now);
     j += "]}";

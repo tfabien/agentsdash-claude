@@ -127,6 +127,15 @@ class BuildEventTest(unittest.TestCase):
         self.assertEqual(stop["state"], "done")
         self.assertEqual(os.listdir(self.state_dir), [])                    # start marker removed
 
+    def test_ask_user_question_sends_question_and_options(self):
+        ti = {"questions": [{"question": "Quelle portée ?", "header": "x",
+                             "options": [{"label": "Minimale", "description": "d"}, {"label": "Complète", "description": "d"}]}]}
+        ev = self.build(payload(LEAD, "PreToolUse", tool_name="AskUserQuestion", tool_input=ti))
+        self.assertEqual((ev["state"], ev["question"], ev["options"]), ("needs_you", "Quelle portee ?", "Minimale|Complete"))
+        answered = {**ti, "answers": {"Quelle portée ?": "Minimale"}}
+        cleared = self.build(payload(LEAD, "PostToolUse", tool_name="AskUserQuestion", tool_input=answered))
+        self.assertEqual(cleared["state"], "working")
+
     def test_permission_request_needs_you_and_posttooluse_clears(self):
         ask = self.build(payload(SUB, "PermissionRequest", tool_name="Bash", tool_input={"command": "rm -rf build"}))
         self.assertEqual(ask["state"], "needs_you")

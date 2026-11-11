@@ -114,6 +114,9 @@ static void handleEvent() {            // POST /event: v2 body, or the old {agen
     jsonLong(body, "plan_total", e.planTotal);
     e.hasPlanCur = jsonGet(body, "plan_cur", e.planCur, PLAN_LEN);
     e.hasPlanNext = jsonGet(body, "plan_next", e.planNext, PLAN_LEN);
+    jsonGet(body, "plan_state", e.planState, PLAN_STATE_LEN);
+    jsonGet(body, "question", e.ask, ASK_LEN);
+    jsonGet(body, "options", e.askOpts, ASK_OPTS_LEN);
     modelApplyV2(e, millis());
     server.send(200, "text/plain", "ok");
     return;
@@ -272,7 +275,7 @@ static void handleDebugFit() {         // GET /debug/fit?s=..&w=..&font=2|3: tex
 
 static void handleDebugHit() {         // GET /debug/hit?x&y&others&subs
   Hit h = hitTest(intArg("x", -1), intArg("y", -1), intArg("others", 0), intArg("subs", 0));
-  static const char* const kinds[] = {"none", "selected_tab", "label", "arrow_left", "arrow_right", "lead_panel", "row", "more"};
+  static const char* const kinds[] = {"none", "selected_tab", "label", "arrow_left", "arrow_right", "lead_panel", "row", "more", "mute"};
   const char* kind = kinds[h.kind];
   server.send(200, "application/json", String("{\"kind\":\"") + kind + "\",\"index\":" + h.index + "}");
 }

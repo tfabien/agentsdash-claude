@@ -3,6 +3,7 @@
 #include "layout.h"
 #include "model.h"
 #include "ui_state.h"
+#include "sound.h"
 
 void uiTap(int x, int y, uint32_t holdMs) {
   uint32_t now = millis();
@@ -11,7 +12,7 @@ void uiTap(int x, int y, uint32_t holdMs) {
   const Session* cur = v.session >= 0 ? modelSession(v.session) : nullptr;
   int o[MAX_SESSIONS];
   int others = uiOtherSessions(v.session, o);
-  Hit h = hitTest(x, y, others, cur ? modelSubCount(*cur) : 0);
+  Hit h = hitTest(x, y, others, cur && !modelAsking(*cur) ? modelSubCount(*cur) : 0);   // a question takes the whole width
   switch (h.kind) {
     case Hit::Label: {
       int idx = uiLabelOffset(others) + h.index;
@@ -39,6 +40,7 @@ void uiTap(int x, int y, uint32_t holdMs) {
       if (cur) modelSelect(cur->id, cur->lead.id, now, holdMs);
       uiHideDetail();
       break;
+    case Hit::Mute: soundCycle(); break;
     default: break;
   }
 }

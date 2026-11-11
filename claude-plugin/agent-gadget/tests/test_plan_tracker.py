@@ -111,5 +111,17 @@ class PlanTrackerTest(unittest.TestCase):
         self.assertEqual(out["plan_total"], 12)
 
 
+class ParallelFieldsTest(unittest.TestCase):
+    def test_two_running_steps_send_per_task_states(self):
+        tasks = [{"title": t, "status": st} for t, st in
+                 [("A", "completed"), ("B", "in_progress"), ("C", "in_progress"), ("D", "pending")]]
+        out = plan_tracker._fields(tasks, True)
+        self.assertEqual((out["plan_cur"], out["plan_state"], out["plan_done"]), ("B + C", "drrp", 1))
+
+    def test_single_running_step_has_no_state_key(self):
+        tasks = [{"title": "A", "status": "in_progress"}, {"title": "B", "status": "pending"}]
+        self.assertNotIn("plan_state", plan_tracker._fields(tasks, True))
+
+
 if __name__ == "__main__":
     unittest.main()

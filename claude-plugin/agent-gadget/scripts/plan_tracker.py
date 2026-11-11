@@ -146,10 +146,13 @@ def _apply(tasks, name, ti, resp):
 def _fields(tasks, had):
     if not tasks:
         return {"plan_done": 0, "plan_total": 0, "plan_cur": "", "plan_next": ""} if had else None
-    cur = next((t for t in tasks if t["status"] == "in_progress"), None)
+    running = [t for t in tasks if t["status"] == "in_progress"]
     pending = [t for t in tasks if t["status"] == "pending"]
-    return {"plan_done": sum(t["status"] == "completed" for t in tasks), "plan_total": len(tasks),
-            "plan_cur": cur["title"] if cur else "", "plan_next": pending[0]["title"] if pending else ""}
+    out = {"plan_done": sum(t["status"] == "completed" for t in tasks), "plan_total": len(tasks),
+           "plan_cur": " + ".join(t["title"] for t in running), "plan_next": pending[0]["title"] if pending else ""}
+    if len(running) > 1:                       # parallel steps: the gadget pulses each running segment ("d", "r", "p" per task)
+        out["plan_state"] = "".join({"completed": "d", "in_progress": "r"}.get(t["status"], "p") for t in tasks[:16])
+    return out
 
 
 def update(state_dir, payload):
