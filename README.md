@@ -14,7 +14,7 @@ like a stand-up meeting of your agents. When an agent needs you (permission, que
 
 | Part | Role |
 |---|---|
-| Screen `TJC4827X243_011C` (TJC X2 series) | 4.3", 480x272, capacitive touch, buzzer. Taken from the printer, its original firmware was replaced by `agent-gadget.tft`. |
+| Screen `TJC4827X243_011C` (TJC X2 series) | 4.3", 480x272, capacitive touch, buzzer. Taken from the printer, its original firmware was replaced by `screen-hmi/agent-gadget.tft`. |
 | ESP32 DevKit (30 pins) | Joins your Wi-Fi, serves an HTTP API, keeps the state of all agents, draws on the screen through a UART (9600 baud at power-up, then 115200). |
 | Claude Code plugin `claude-plugin/agent-gadget/` | Hooks send every session and sub-agent event to the ESP32 (`POST /event`). |
 
@@ -85,7 +85,7 @@ status line / quotas.py --POST /usage-->
 ## Quick start
 
 1. Flash the ESP32: `pio run -t upload` in `agent-gadget/esp32_agent_gadget/` (PlatformIO).
-2. Flash the screen: open `http://<ip>/tft` and upload `agent-gadget.tft`, or follow the editor steps in `guide/`.
+2. Flash the screen: open `http://<ip>/tft` and upload `screen-hmi/agent-gadget.tft`, or follow the editor steps in `screen-hmi/guide/`.
 3. Join the `AgentGadget-XXXX` network, enter your Wi-Fi at `http://192.168.4.1/config`.
 4. Install the plugin `claude-plugin/agent-gadget/` and set the host: env `CLAUDE_GADGET_HOST` or `~/.claude/agent-gadget.json` `{"host": "<ip>"}` (`agent-gadget.local` does not resolve on every PC).
 5. Change `OTA_PASSWORD` in `net.h` (default `agent-gadget`).
@@ -102,7 +102,7 @@ Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> scre
 
 - `agent-gadget/` ESP32 firmware (core: `model`, `net`; screen: `display_hmi`, `layout`, `touch`), helper scripts, tests.
 - `claude-plugin/agent-gadget/` Claude Code plugin v0.2 (hooks, status line, quotas).
-- `agent-gadget.HMI`, `agent-gadget.tft` screen project and compiled file; `guide/` annotated editor screenshots.
+- `screen-hmi/` screen project (`agent-gadget.HMI`), compiled `agent-gadget.tft`, fonts (`*.zi`) and `guide/` annotated editor screenshots.
 - `docs/` specs, plans, captured hook payloads and touch findings.
 
 ## TODO (known and not fixed)
