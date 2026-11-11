@@ -3,6 +3,7 @@
 #include "model.h"
 #include "display.h"
 #include "ui_state.h"
+#include "clock.h"
 #include "layout.h"
 #include "touch.h"
 #include <WiFi.h>
@@ -152,7 +153,11 @@ static void handleUsage() {            // POST /usage: context and plan quotas f
 
 static void handleState() {            // GET /state
   cors();
-  server.send(200, "application/json", modelToJson(millis()));
+  String j = modelToJson(millis());
+  char hhmm[6];
+  j.remove(j.length() - 1);                                    // the clock lives in the core, outside the model
+  j += String(",\"time\":") + (clockHHMM(hhmm) ? "\"" + String(hhmm) + "\"" : String("null")) + "}";
+  server.send(200, "application/json", j);
 }
 
 static void handleReset() {            // POST /reset: remove every agent from the list and the screen
@@ -177,7 +182,7 @@ static void handleSelect() {           // POST /select {"session","agent","hold_
 }
 
 #ifdef GADGET_DEBUG
-static void handleDebugConfig() {      // POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms","standby_ms","detail_ms"}
+static void handleDebugConfig() {      // POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms","standby_ms","detail_ms","clock_off"}
   cors();
   String body = server.arg("plain");
   bool flag;
@@ -188,6 +193,8 @@ static void handleDebugConfig() {      // POST /debug/config {"isolate","done_tt
   static long standby = STANDBY_MS, detail = DETAIL_MS;                 // screen timings, kept across calls
   bool haveStandby = jsonLong(body, "standby_ms", standby), haveDetail = jsonLong(body, "detail_ms", detail);
   if (haveStandby || haveDetail) uiStateConfigure((uint32_t)standby, (uint32_t)detail);
+  bool clockOff;
+  if (jsonBool(body, "clock_off", clockOff)) clockForceOff(clockOff);
   server.send(200, "application/json", String("{\"isolate\":") + (isolateMode ? "true" : "false") + "}");
 }
 
@@ -462,6 +469,7 @@ void netBegin() {
     deviceInfo.ip = WiFi.localIP().toString();
     Serial.printf("IP: %s\n", deviceInfo.ip.c_str());
     if (MDNS.begin("agent-gadget")) MDNS.addService("http", "tcp", 80);
+    clockBegin();
   } else {
     startPortal();
   }
