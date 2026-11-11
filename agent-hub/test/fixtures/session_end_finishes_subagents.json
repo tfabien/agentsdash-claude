@@ -1,0 +1,12 @@
+{
+  "steps": [
+    { "at": 0, "event": { "v": 2, "session": "aaaa", "project": "one", "agent": "lead", "role": "lead", "evt": "PreToolUse", "state": "working", "cmd": "Agent plan" } },
+    { "at": 100, "event": { "v": 2, "session": "aaaa", "project": "one", "agent": "sub1", "role": "plan", "evt": "SubagentStart", "state": "working", "cmd": "Started" } },
+    { "at": 200, "event": { "v": 2, "session": "aaaa", "project": "one", "agent": "lead", "role": "lead", "evt": "SessionEnd", "state": "done", "cmd": "Session ended" } }
+  ],
+  "expect": {
+    "sessions.0.agents.0.state": "done",
+    "sessions.0.agents.1.state": "done",
+    "sessions.0.dot": "done"
+  }
+}
