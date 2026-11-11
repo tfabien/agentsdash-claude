@@ -92,6 +92,24 @@ class PlanTrackerTest(unittest.TestCase):
         out = plan_tracker.update(self.dir, p)
         self.assertEqual(out["plan_total"], 1)
 
+    def test_emptied_list_clears_the_plan(self):
+        self.run_all([create("A", "1"), create("B", "2")])
+        out = self.run_all([update("1", "deleted"), update("2", "deleted")])
+        self.assertEqual(out, {"plan_done": 0, "plan_total": 0, "plan_cur": "", "plan_next": ""})
+
+    def test_parallel_creates_keep_every_task(self):
+        """Parallel tool calls run their hooks as concurrent processes: no task may be lost."""
+        import subprocess
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); import plan_tracker, json; "
+                "p = json.loads(sys.argv[3]); plan_tracker.update(sys.argv[2], p)")
+        scripts = os.path.join(HERE, "..", "scripts")
+        procs = [subprocess.Popen([sys.executable, "-c", code, scripts, self.dir, json.dumps(create(f"T{i}", str(i)))])
+                 for i in range(12)]
+        for pr in procs:
+            pr.wait(timeout=30)
+        out = plan_tracker.update(self.dir, dict(fixture("cli_update"), tool_name="Edit", tool_input={}))
+        self.assertEqual(out["plan_total"], 12)
+
 
 if __name__ == "__main__":
     unittest.main()
