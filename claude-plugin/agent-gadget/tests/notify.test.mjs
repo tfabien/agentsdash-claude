@@ -7,8 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { buildEvent, markerPath } from '../scripts/notify.mjs';
-import { asciiClean } from '../scripts/common.mjs';
+import { addUsage, buildEvent, markerPath } from '../scripts/notify.mjs';
+import { asciiClean, configWindow } from '../scripts/common.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, '..', 'scripts', 'notify.mjs');
@@ -204,6 +204,109 @@ test('same_folder_names_get_distinct_session_ids', () => {
   const b = build(payload({ ...LEAD, session_id: 'bbbb2222' }, 'SessionStart'));
   assert.equal(a.project, b.project);
   assert.notEqual(a.session, b.session);
+});
+
+// ---------- usage and plan fields (ported from UsageTest and PlanFieldsTest) ----------
+const usageLine = (mid, inp = 0, cc = 0, cr = 0, out = 0) => `${JSON.stringify({
+  type: 'assistant',
+  message: { id: mid, model: 'claude-opus-5-5', usage: { input_tokens: inp, cache_creation_input_tokens: cc, cache_read_input_tokens: cr, output_tokens: out } },
+})}\n`;
+
+function usageSetup() {
+  const root = tmp();
+  const t = {
+    dir: path.join(root, 'state'),
+    lead: path.join(root, 'abcd1234-0000.jsonl'),
+    sub: path.join(root, 'abcd1234-0000', 'subagents', 'agent-aa0bc7f345def841f.jsonl'),
+  };
+  fs.mkdirSync(path.dirname(t.sub), { recursive: true });
+  t.write = (file, text) => fs.appendFileSync(file, text, 'utf8');
+  t.leadPayload = (extra = {}) => ({ ...LEAD, hook_event_name: 'Stop', transcript_path: t.lead, ...extra });
+  t.subPayload = (extra = {}) => ({ ...SUB, hook_event_name: 'PreToolUse', transcript_path: t.lead, ...extra });
+  t.add = (p, mask = false, window) => addUsage(buildEvent(p, {}, t.dir), p, t.dir, mask, window);
+  return t;
+}
+
+test('lead_event_has_tokens_and_context', () => {
+  const t = usageSetup();
+  t.write(t.lead, usageLine('m1', 2, 6051, 145121, 460));
+  const ev = t.add(t.leadPayload());
+  assert.deepEqual([ev.tok, ev.stok, ev.ctx_k, ev.ctx_pct], [6513, 6513, 151, 15]);
+});
+
+test('context_window_comes_from_the_argument', () => {
+  const t = usageSetup();
+  t.write(t.lead, usageLine('m1', 2, 6051, 145121, 460));
+  assert.equal(t.add(t.leadPayload(), false, 200000).ctx_pct, 76);
+  assert.equal(configWindow({ context_window: 200000 }), 200000);
+  assert.equal(configWindow({}), 1000000);
+  assert.equal(configWindow({ context_window: 'junk' }), 1000000);
+});
+
+test('subagent_event_uses_its_own_transcript', () => {
+  const t = usageSetup();
+  t.write(t.lead, usageLine('m1', 2, 6051, 145121, 460));
+  t.write(t.sub, usageLine('s1', 100, 0, 0, 20));
+  const ev = t.add(t.subPayload());
+  assert.equal(ev.tok, 120);
+  assert.equal('ctx_pct' in ev, false);
+  assert.equal('stok' in ev, false);
+});
+
+test('session_total_includes_subagents', () => {
+  const t = usageSetup();
+  t.write(t.lead, usageLine('m1', 2, 6051, 145121, 460));
+  t.write(t.sub, usageLine('s1', 100, 0, 0, 20));
+  t.add(t.subPayload());
+  assert.equal(t.add(t.leadPayload()).stok, 6513 + 120);
+});
+
+test('missing_transcript_sends_event_without_usage', () => {
+  const t = usageSetup();
+  const ev = t.add(t.leadPayload());
+  assert.equal('tok' in ev, false);
+  assert.equal(ev.state, 'your_turn');
+});
+
+test('subagentstop_prefers_agent_transcript_path', () => {
+  const t = usageSetup();
+  const other = path.join(path.dirname(t.lead), 'elsewhere.jsonl');
+  t.write(other, usageLine('o1', 7, 0, 0, 3));
+  const p = { ...SUB, hook_event_name: 'SubagentStop', transcript_path: t.lead, agent_transcript_path: other, last_assistant_message: 'ok' };
+  const ev = buildEvent(p, {}, t.dir) ?? buildEvent({ ...p, hook_event_name: 'PreToolUse' }, {}, t.dir);
+  assert.equal(addUsage(ev, p, t.dir).tok, 10);
+});
+
+test('mask_keeps_numbers_and_hides_title', () => {
+  const t = usageSetup();
+  t.write(t.lead, `${JSON.stringify({ type: 'custom-title', customTitle: 'Secret' })}\n`);
+  t.write(t.lead, usageLine('m1', 1, 0, 0, 1));
+  const ev = t.add(t.leadPayload(), true);
+  assert.equal(ev.tok, 2);
+  assert.equal('title' in ev, false);
+});
+
+test('lead_event_has_ascii_title', () => {
+  const t = usageSetup();
+  t.write(t.lead, `${JSON.stringify({ type: 'custom-title', customTitle: "Packs d'ic\u00f4nes pour agents" })}\n`);
+  assert.equal(t.add(t.leadPayload()).title, "Packs d'icones pour agents");
+  t.write(t.lead, `${JSON.stringify({ type: 'ai-title', aiTitle: 'x'.repeat(40) })}\n`);
+  assert.equal(t.add(t.leadPayload()).title, 'x'.repeat(30));
+});
+
+test('bad_payload_never_throws', () => {
+  const ev = { agent: 'lead' };
+  assert.deepEqual(addUsage(ev, { transcript_path: 5 }, tmp()), ev);
+});
+
+test('lead_event_carries_plan_fields', () => {
+  const state = tmp();
+  const env = { CLAUDE_GADGET_STATE_DIR: state };
+  const base = { session_id: `plan${process.pid}${Date.now()}`, cwd: 'C:/work/demo' };
+  run(payload(base, 'PostToolUse', { tool_name: 'TaskCreate', tool_input: { subject: 'Write the tests' }, tool_response: { task: { id: '1', subject: 'Write the tests' } } }), env);
+  const out = run(payload(base, 'PreToolUse', { tool_name: 'Edit', tool_input: { file_path: 'a.py' } }), env);
+  const ev = JSON.parse(out.stderr.trim().split('\n').pop());
+  assert.deepEqual([ev.plan_done, ev.plan_total, ev.plan_cur, ev.plan_next], [0, 1, '', 'Write the tests']);
 });
 
 // ---------- process behavior ----------

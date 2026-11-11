@@ -24,6 +24,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { asciiClean, configWindow, hubHost, pluginConfig, stateDir } from './common.mjs';
 import { postEvent } from './hub_client.mjs';
+import { update as updatePlan } from './plan_tracker.mjs';
+import { contextWindow, loadCache, saveCache, scan } from './transcript_usage.mjs';
 
 const NEEDS_YOU_TYPES = new Set(['permission_prompt', 'elicitation_dialog', 'elicitation_url_dialog', 'agent_needs_input']);
 const CLEARING_EVENTS = new Set(['PostToolUse', 'PostToolUseFailure', 'PermissionDenied']);
@@ -181,9 +183,47 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
   return null;
 }
 
-// Hook points filled in by the transcript usage and plan tracker (next task).
-function addUsage(ev) { return ev; }
-function trackPlan() { return null; }
+/** Path of a sub-agent's own transcript: agent_transcript_path (SubagentStop) or derived from the lead's path. */
+function subagentTranscript(p) {
+  if (p.agent_transcript_path) return String(p.agent_transcript_path);
+  if (!p.transcript_path || !p.agent_id) return null;
+  const lead = String(p.transcript_path);
+  const base = lead.endsWith('.jsonl') ? lead.slice(0, -'.jsonl'.length) : lead;
+  return path.join(base, 'subagents', `agent-${p.agent_id}.jsonl`);
+}
+
+/** Add token counts (and, for the lead, session total, context and title) read from the transcripts.
+ * Never throws: on any problem the event goes out unchanged. */
+export function addUsage(ev, p, dir, mask = false, windowDefault = 1000000) {
+  try {
+    const session4 = alnum(p.session_id).slice(0, 4);
+    const isSub = Boolean(p.agent_id);
+    const file = isSub ? subagentTranscript(p) : p.transcript_path;
+    if (typeof file !== 'string' || !file || !fs.existsSync(file)) return ev;
+    const cache = loadCache(dir, session4);
+    const entry = scan(file, cache[file]);
+    cache[file] = entry;
+    saveCache(dir, session4, cache);
+    const out = { ...ev, tok: entry.tokens };
+    if (!isSub) {
+      out.stok = Object.values(cache).reduce((sum, e) => sum + (e && typeof e === 'object' ? e.tokens || 0 : 0), 0);
+      if (entry.last_ctx > 0) {
+        out.ctx_k = Math.round(entry.last_ctx / 1000);
+        out.ctx_pct = Math.round((100 * entry.last_ctx) / contextWindow(entry.last_ctx, entry.model, windowDefault));
+      }
+      if (entry.title && !mask) {
+        const title = asciiClean(entry.title, 30);
+        if (title) out.title = title;
+      }
+    }
+    return out;
+  } catch { return ev; }
+}
+
+/** Plan progress after this payload; null on any error, the event still goes out. */
+function trackPlan(p, dir) {
+  try { return updatePlan(dir, p); } catch { return null; }
+}
 function addPlan(ev, plan) { if (plan && ev.agent === 'lead') Object.assign(ev, plan); return ev; }
 
 function readStdin() {
