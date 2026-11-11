@@ -21,12 +21,13 @@ never touches the network.
 ### Wire format
 
 `POST /event` v2 (ASCII JSON, sent by the plugin):
-`{"v":2,"session":"<id4>","project":"<=14 chars","agent":"lead"|"<id4>","role":"lead"|"<agent_type>","evt":"<hook name>","state":"working|needs_you|your_turn|done|error","cmd":"<=43 chars","detail":"<=60 chars"}`.
+`{"v":2,"session":"<id4>","project":"<=14 chars","agent":"lead"|"<id4>","role":"lead"|"<agent_type>","evt":"<hook name>","state":"working|needs_you|your_turn|done|error","cmd":"<=63 chars","detail":"<=60 chars"}`.
 Every event carries the full state of its agent, so the next event repairs a gadget that rebooted.
 A body without `"v"` is the old `{"agent","state","task"}` (a one-agent session). Errors: 400 with a text body.
 
 Optional usage fields on v2 events (plugin, read from the transcripts): `"tok"` (tokens of this agent) and, on lead
-events, `"stok"` (session total), `"ctx_pct"`, `"ctx_k"` (context estimate) and `"title"` (session title, <= 30 chars).
+events, `"stok"` (session total), `"ctx_pct"`, `"ctx_k"` (context estimate), `"title"` (session title, <= 30 chars) and the
+plan progress `"plan_done"`, `"plan_total"`, `"plan_cur"`, `"plan_next"` (plan_tracker.py, from the task-list tool calls).
 
 `POST /usage` (status line script `claude-plugin/agent-gadget/scripts/statusline.py`), every field optional except `v`:
 `{"v":1,"session","ctx_pct","ctx_k","ctx_max_k","h5_pct","h5_reset_s","h5_rate10","h5_proj","h5_empty_s","d7_pct","d7_reset_s","d7_rate10","d7_proj","d7_empty_s"}`.
@@ -34,7 +35,7 @@ Context of a known session (wins over the event estimate for 120 s) and the acco
 (`*_rate10` = %/h x 10, `*_proj` = projected % at reset, `*_empty_s` = seconds to 100 % or -1). An unknown session
 creates nothing. 400 without `v`.
 
-`GET /state`: `{"sessions":[{"id","project","title","ctx_pct","ctx_k","ctx_src","tok","dot","count","more","agents":[{"tok","id","parent","role","state","cmd","detail","prev","prev_age","age"}]}],"more_sessions":N,"view":{"session","agent","mode":"auto|manual"},"usage":{"age_s","h5_*","d7_*"},"agents":[...flat v0.1 list...]}`
+`GET /state`: `{"sessions":[{"id","project","title","ctx_pct","ctx_k","ctx_src","tok","plan":{"done","total","cur","next"}|null,"dot","count","more","agents":[{"tok","id","parent","role","state","cmd","detail","prev","prev_age","age"}]}],"more_sessions":N,"view":{"session","agent","mode":"auto|manual","detail","standby","label_offset","arrow_left_asks","arrow_right_asks","team","team_more"},"time":"HH:MM"|null,"usage":{"age_s","h5_*","d7_*"},"agents":[...flat v0.1 list...]}`
 (`usage` absent before the first status line report; `ctx_pct` null when unknown).
 States: `needs_you`, `error`, `your_turn`, `working`, `waiting_subs` (derived, leads only), `done`.
 
@@ -42,10 +43,10 @@ Other endpoints: `POST /select {"session","agent","hold_ms"?}` (404 if unknown),
 `GET /config` (Wi-Fi), `GET /update` (firmware upload, user `admin`), `GET /tft` + `POST /tft?size=<bytes>`
 (screen `.tft` upload, same user: `tft_upload.cpp` speaks the TJC download protocol, drawing and touch pause meanwhile).
 
-Test builds only (`-DGADGET_DEBUG`, envs `esp32dev_test*`): `POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms"}`
-(isolate = ignore requests without the `X-Gadget-Test` header), `GET /debug/layout?subs=N&tabs=T`,
-`GET /debug/hit?x&y&tabs&subs`, `POST /debug/tap {"x","y","hold_ms"?}`, `GET /debug/stats`
-(link speed, draw queue, title bar latency, uptime, reset reason, RSSI, longest loop pass).
+Test builds only (`-DGADGET_DEBUG`, envs `esp32dev_test*`): `POST /debug/config {"isolate","done_ttl_ms","stale_ttl_ms","standby_ms","detail_ms","clock_off"}`
+(isolate = ignore requests without the `X-Gadget-Test` header), `GET /debug/layout?subs=N&others=K`,
+`GET /debug/hit?x&y&others&subs`, `GET /debug/fit?s&w&font`, `POST /debug/hmi {"cmd"}|{"release":true}`, `POST /debug/tap {"x","y","hold_ms"?}`, `GET /debug/stats`
+(link speed, draw queue, title bar latency, overflows, erases, tx_bytes, anim_steps, mode, lead_panel, uptime, RSSI, longest loop pass).
 
 ## Interface (`display.h`)
 
@@ -61,16 +62,21 @@ core never says what to redraw.
 | File | Role |
 |---|---|
 | `ui_theme.h` | Pins, baud rates, layout constants, fonts, colors, sprite sizes. First place to tweak the look. |
-| `layout.h/.cpp` | Pure geometry of layout D: title bar and tabs (shared width, fill), token zone, quota line, lead slot, 1 to 12 sub-agent slots (big, or small on two rows of six), command strip, `hitTest()`. |
-| `display_hmi.cpp` | The UI: tabs sharing the width (state dot, session title, count, context fill colored by size; right zone "+N" and "N!"), quota line (bars, projection tick, color from the pace at reset), tree (sprites by role, state markers, session-colored links, yellow selection frame), command strip (name, state, elapsed, command, detail, previous command). Implements `display.h`. |
+| `layout.h/.cpp` | Pure geometry (spec 2026-11-11): selected tab, session labels and arrows, frame, lead panel, team header and rows (42 px for 1-4 sub-agents, 22 px for 5-7, 6 + "+N more" past 7), bottom bar, clock, badge, `hitTest()`. |
+| `ui_state.h/.cpp` | Screen-only state: tapped agent detail (10 s), label scroll, standby (5 min idle), team row order. |
+| `clock.h/.cpp` | NTP time, Europe/Paris. |
+| `font_metrics.h` | Generated pixel widths of fonts 2 and 3 (`tools/make_font_metrics.py`), used by `displayFit`. |
+| `display_hmi.cpp` | The UI on picture 16: top bar, lead panel (lead, context, plan, or the tapped agent detail), team rows, bottom bar (quotas, clock), standby clock (pictures 51..62), discreet animation (robot blink, pulsing needs-you bar). Durations are rewritten in place (no flicker). Implements `display.h`. |
 | `touch.h/.cpp` | Touch frames `67 xh xl yh yl st FF FF FF` -> `uiTap(x, y)` -> `hitTest` -> `modelSelect` (30 s hold). |
 | `hmi_uart.h/.cpp` | Screen commands (`cls`, `fill`, `cirs`, `draw`, `pic`, `xstr`), link speed setup (9600 at power-up -> 115200), and the non-blocking draw queue: title bar > command strip > tree. |
 | `tft_upload.h/.cpp` | Screen firmware download over the UART (`whmi-wri`, 4096-byte packets acked by `0x05`), used by `/tft`. |
 | `display_serial.cpp` | Alternative backend with no screen (`-DDISPLAY_SERIAL`, envs `esp32dev_noscreen`, `esp32dev_test`). |
 
-The screen runs the `agent-gadget.tft` project (`../agent-gadget.HMI`): one black page, the fonts
-`f24` (id 0) and `f16` (id 1), and 16 sprite pictures (ids 0..7 big, 8..15 small, generated by
-`tools/make_sprites.py`). The ESP32 draws everything on that page.
+The screen runs the `agent-gadget.tft` project (`../agent-gadget.HMI`): one page, fonts `f24` (0), `f16` (1),
+`s16` (2, Segoe UI Semibold 16, anti-aliased) and `s20` (3, bold 20), and pictures generated by `tools/make_decor.py`:
+0..15 old sprites, 16 background, 17..26 rows, labels, arrows, 27..50 robots (big, small, tiny), 51 standby, 52..62
+digits, 63..86 robots with closed eyes. The `.HMI` is rebuilt with hmi-builder (unpack, replace or append pictures,
+pack); the USART HMI editor only exports the `.tft`.
 
 ## Tests
 
