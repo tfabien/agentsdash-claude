@@ -34,7 +34,9 @@ It runs on the touchscreen of an Artillery X3 3D printer, driven by an ESP32 ove
 
 ### Sub-agents: see and follow them
 
-![Compact rows](docs/images/screen-compact.png)
+![3 sub-agents](docs/images/screen-subs3.png)
+
+![7 sub-agents](docs/images/screen-subs7.png)
 
 - One row per sub-agent: role sprite (lead, general, explore, plan, review, test, code, generic), name, current action, age.
 - 1 to 4 sub-agents get large rows, 5 to 7 compact rows, 8 or more show 6 rows and "+N more".
