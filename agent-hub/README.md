@@ -40,6 +40,23 @@ If the gadget is down, the hub keeps working and retries after 3 seconds (only t
 The gadget aborts a screen upload (`/tft`) on any other request: create the file `agent-gadget-tft.lock` in the temp
 folder before uploading and delete it afterwards, and the relay sends nothing meanwhile.
 
+## Relay to a gadget (USB)
+
+For places without Wi-Fi: `"relay": {"mode": "serial", "port": "COM3"}`. The hub opens the port at 115200 baud
+(this resets the ESP32, so it waits 2.5 s) and writes one JSON line per event or usage report:
+`{"type":"event","body":{...}}` (body = the POST body). The firmware reads these lines on USB (lines that
+start with `{`; any other character keeps its old meaning, `r` `t` `w`). Install the driver once, in `agent-hub/`:
+`npm install serialport` (prebuilt binaries, no compiler needed).
+
+One program owns the COM port at a time. To flash the firmware or the screen from the PC, give the port back first:
+
+```bash
+curl -X POST http://127.0.0.1:8765/serial/release     # close COM3, stop retrying
+curl -X POST http://127.0.0.1:8765/serial/open        # take it back
+```
+
+While the port is missing the hub retries every 5 seconds; `GET /relay` shows `connected` and `lastError`.
+
 ## HTTP API
 
 `POST /event`, `POST /usage`, `GET /state`, `POST /select`, `POST /reset` as on the gadget

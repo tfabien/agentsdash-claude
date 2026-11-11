@@ -9,6 +9,7 @@ import { createModel } from './model.mjs';
 import { loadConfig } from './config.mjs';
 import { createQuotaPoller, quotasEnabled } from './quotas.mjs';
 import { createHttpRelay } from './relay_http.mjs';
+import { createSerialRelay } from './relay_serial.mjs';
 import { stateDir } from '../claude-plugin/agent-gadget/scripts/common.mjs';
 
 const WEB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'web');
@@ -73,7 +74,12 @@ export function startHub(opts = {}) {
     switch (route) {
       case 'GET /health': return json(res, { ok: true });
       case 'GET /state': return json(res, stateJson());
-      case 'GET /relay': return json(res, relay ? { mode: 'http', host: config.relay.host, ...relay.status() } : { mode: 'none' });
+      case 'GET /relay': return json(res, relay ? { mode, ...(serial ? { port: config.relay.port } : { host: config.relay.host }), ...relay.status() } : { mode: 'none' });
+      case 'POST /serial/release':
+      case 'POST /serial/open':
+        if (!serial) return text(res, 404, 'not in serial mode');
+        if (route.endsWith('release')) serial.release(); else serial.reopen();
+        return text(res, 200, 'ok');
       case 'GET /events': {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'Access-Control-Allow-Origin': '*' });
         res.write(`data: ${JSON.stringify(stateJson())}\n\n`);
@@ -119,8 +125,10 @@ export function startHub(opts = {}) {
   const timer = setInterval(() => { model.prune(now()); if (clients.size) publish(); }, TICK_MS);
   timer.unref();
 
-  // Relay to a gadget over Wi-Fi: every accepted event and usage report is forwarded as received.
-  const relay = config.relay?.mode === 'http' && config.relay.host ? createHttpRelay({ host: config.relay.host }) : null;
+  // Relay to a gadget (Wi-Fi or USB): every accepted event and usage report is forwarded as received.
+  const mode = config.relay?.mode;
+  const serial = mode === 'serial' && config.relay.port ? createSerialRelay({ path: config.relay.port, ...(opts.serial ?? {}) }) : null;
+  const relay = serial ?? (mode === 'http' && config.relay.host ? createHttpRelay({ host: config.relay.host }) : null);
   if (relay) {
     eventTaps.push((body) => relay.send('/event', body));
     usageTaps.push((body) => relay.send('/usage', body));
@@ -137,6 +145,7 @@ export function startHub(opts = {}) {
     fetchImpl: quotaOpts.fetchImpl,
   });
   if (quotaOpts.autostart !== false) quotas.start();
+  serial?.start();
 
   return new Promise((resolve, reject) => {
     server.once('error', (e) => { clearInterval(timer); quotas.stop(); reject(e); });
@@ -149,6 +158,7 @@ export function startHub(opts = {}) {
         close: () => new Promise((done) => {
           clearInterval(timer);
           quotas.stop();
+          serial?.release();
           for (const res of clients) res.end();
           clients.clear();
           server.close(() => done());

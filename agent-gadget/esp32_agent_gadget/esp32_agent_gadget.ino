@@ -36,6 +36,11 @@ void setup() {
 uint32_t loopMaxUs = 0;        // longest loop pass since the last GET /debug/stats (diagnostics)
 const char* loopMaxWhere = "";
 
+#define JSON_LINE_MAX 700               // longest accepted serial JSON line (events carry up to ~600 bytes)
+static char jsonLine[JSON_LINE_MAX + 1];
+static int jsonLen = -1;                // -1: not inside a JSON line
+static bool jsonSkip = false;           // inside a line that is too long: ignore it up to its newline
+
 void loop() {
   uint32_t t0 = micros();
   netLoop();
@@ -46,6 +51,19 @@ void loop() {
   if (t2 - t0 > loopMaxUs) { loopMaxUs = t2 - t0; loopMaxWhere = (t1 - t0 > t2 - t1) ? "net" : "display"; }
   while (Serial.available()) {
     char c = Serial.read();
+    // A line starting with '{' is a JSON event from the agent hub (USB mode): collect it whole, so its letters never act as commands.
+    // A line longer than the buffer is skipped up to its newline.
+    if (jsonLen >= 0 || jsonSkip) {
+      if (c == '\n' || c == '\r') {
+        if (jsonLen > 0 && !jsonSkip) { jsonLine[jsonLen] = 0; netSerialLine(String(jsonLine)); }
+        jsonLen = -1;
+        jsonSkip = false;
+      } else if (!jsonSkip) {
+        if (jsonLen < JSON_LINE_MAX) jsonLine[jsonLen++] = c; else jsonSkip = true;
+      }
+      continue;
+    }
+    if (c == '{') { jsonLen = 0; jsonLine[jsonLen++] = c; continue; }
     if (c == 'r') displayInvalidate();
     else if (c == 't') printTable();
     else if (c == 'w') { netClearWifiConfig(); delay(300); ESP.restart(); }
