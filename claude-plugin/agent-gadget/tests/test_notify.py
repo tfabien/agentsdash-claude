@@ -43,6 +43,18 @@ class PlanFieldsTest(unittest.TestCase):
         self.assertEqual((ev["plan_done"], ev["plan_total"], ev["plan_cur"], ev["plan_next"]), (0, 1, "", "Write the tests"))
 
 
+class Utf8StdinTest(unittest.TestCase):
+    def test_hook_payload_is_read_as_utf8(self):
+        """Claude Code writes UTF-8 on stdin; on Windows the default stdin encoding is cp1252 ("Tâches" became "TAches")."""
+        data = payload(LEAD, "UserPromptSubmit", prompt="Tâches de l'écran")
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONIOENCODING"}
+        env.update({"CLAUDE_GADGET_DRY_RUN": "1", "CLAUDE_GADGET_QUOTAS": "0", "PYTHONUTF8": "0"})
+        out = subprocess.run([sys.executable, SCRIPT], input=json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                             capture_output=True, env=env, timeout=10)
+        ev = json.loads(out.stderr.decode("ascii").strip().splitlines()[-1])
+        self.assertEqual(ev["cmd"], "Prompt: Taches de l'ecran")
+
+
 class DumpTest(unittest.TestCase):
     def test_dump_only_when_env_set(self):
         with tempfile.TemporaryDirectory() as folder:

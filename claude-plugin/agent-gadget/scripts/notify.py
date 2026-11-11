@@ -303,7 +303,7 @@ def to_v1(ev):
 
 def main():
     try:
-        payload = json.load(sys.stdin)
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))   # UTF-8, whatever the console code page
     except Exception:
         return
     dump_path = os.environ.get("CLAUDE_GADGET_DUMP")        # debugging: keep every raw hook payload
