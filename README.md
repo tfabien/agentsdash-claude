@@ -25,31 +25,29 @@ status line / quotas.py --POST /usage-->
 
 ## Features
 
-### Agents
+### Plan: see and follow the progress
 
 ![Main view](docs/images/screen-main.png)
 
+- Plan progress built from the task list of the session (`TaskCreate`/`TaskUpdate`, `TodoWrite`, the desktop `update_plan`): segmented bar, current step and next step. Steps running in parallel each pulse.
+- Context fill bar next to the plan (green under 60 %, orange 60 to 79 %, red from 80 %).
 - One lead per Claude Code session (CLI or desktop app), up to 5 sessions, with the project name or the session title.
-- One row per sub-agent: role sprite (lead, general, explore, plan, review, test, code, generic), name, current action, age.
-- Six states with their color: working (green), needs you (orange), error (red), your turn (grey-blue), waiting on sub-agents (blue), done (faint).
-- Robots blink while working, and the state bar of an agent that needs you pulses orange.
 
-### Many sub-agents
+### Sub-agents: see and follow them
 
 ![Compact rows](docs/images/screen-compact.png)
 
+- One row per sub-agent: role sprite (lead, general, explore, plan, review, test, code, generic), name, current action, age.
 - 1 to 4 sub-agents get large rows, 5 to 7 compact rows, 8 or more show 6 rows and "+N more".
+- Six states with their color: working (green), needs you (orange), error (red), your turn (grey-blue), waiting on sub-agents (blue), done (faint).
+- Robots blink while working, and the state bar of an agent that needs you pulses orange.
 
-### Lead panel: context and plan
-
-- Context fill bar (green under 60 %, orange 60 to 79 %, red from 80 %).
-- Plan progress built from the task list of the session (`TaskCreate`/`TaskUpdate`, `TodoWrite`, the desktop `update_plan`): segmented bar, current step and next step. Steps running in parallel each pulse.
-
-### Questions and permissions
+### Questions: display and notification
 
 ![Question](docs/images/screen-question.png)
 
 - A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the buzzer beeps.
+- Permission prompts turn the session orange too.
 - Tap the speaker icon (bottom bar) to switch the buzzer between `all`, `ask` (needs you only) and `off`, kept in flash.
 
 ### Touch: agent detail
@@ -90,6 +88,8 @@ status line / quotas.py --POST /usage-->
 4. Install the plugin `claude-plugin/agent-gadget/` and set the host: env `CLAUDE_GADGET_HOST` or `~/.claude/agent-gadget.json` `{"host": "<ip>"}` (`agent-gadget.local` does not resolve on every PC).
 5. Change `OTA_PASSWORD` in `net.h` (default `agent-gadget`).
 6. Try it without real sessions: `python agent-gadget/scenario.py --host <ip>`.
+
+![Wiring](docs/images/wiring.svg)
 
 Wiring: ESP32 `D16` <- screen TX, `D17` -> screen RX, `GND`, `VIN` (5 V) -> screen `VCC`.
 
