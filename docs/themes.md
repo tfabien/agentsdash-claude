@@ -41,6 +41,8 @@ icons/mypack/lead.svg      lead-blink.svg
 
 - Roles: `lead general explore plan review test code generic`. Other file names are ignored.
 - `<role>-blink.svg` is optional. It is the frame shown while the agent blinks. Without it, the plain icon stays.
+- A role file can also be a `.png`, `.webp`, `.gif` or `.jpg` (`lead.png`, `plan-blink.gif`). When a role has several files, the order is svg, png, webp, gif, jpg. Raster files are capped at 1 MB (SVG at 256 KB). Draw them at 2x or 3x the 36x42 box (72x84 or 108x126) to stay sharp.
+- An animated `.gif` or `.webp` plays on the page where the browser has `ImageDecoder` (Chrome, Edge). Elsewhere the first frame shows. Frame delays under 20 ms count as 20 ms.
 - Draw in `viewBox="0 0 36 42"`. The page scales the icon, so the size and the blink timing are the same for every pack.
 - A file over 256 KB is skipped. A pack with no valid file is not listed.
 - A missing role file falls back to the `robot` pack for that role.
@@ -83,7 +85,7 @@ Example: a `prod-*` folder shows a red badge and a distinct pack, so production 
 
 ## Security
 
-The hub serves icons from `GET /icons/<pack>/<file>.svg` only for files in the catalog, so path traversal and unlisted names return 404. Each reply carries `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff`. The page loads icons as `Image`, which never runs scripts inside an SVG. Themes hold colors only. The hub binds `127.0.0.1`.
+The hub serves icons from `GET /icons/<pack>/<file>` only for files in the catalog, so path traversal and unlisted names return 404. Each reply carries `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff`. The page loads icons as `Image`, which never runs scripts inside an SVG. Raster files cannot run code. Themes hold colors only. The hub binds `127.0.0.1`.
 
 ## Regenerate the built-ins
 
