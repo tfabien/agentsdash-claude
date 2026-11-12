@@ -31,6 +31,7 @@ A device IP still works as host (events go straight to the device, no hub). The 
 `idle_prompt` notifications are not sent (they bring back dropped or hidden sessions). The hub keeps `POST /dismiss` (hidden sessions return with a working, error or needs-you event) and `POST /settings` (beeps, shared by all pages).
 `CLAUDE_GADGET_DUMP=<file>` appends raw payloads, `CLAUDE_GADGET_DRY_RUN=1` prints the event instead of sending it, `CLAUDE_GADGET_MASK=1` hides commands.
 With `defaultMode: auto` no permission prompt appears, so no orange.
+Text sent to a device (both relays) goes through `plugin/hub/ascii.mjs` (accents stripped, typographic quotes mapped, other characters become `?`): the screen fonts are ASCII only. The web page keeps full Unicode.
 The hub binds `127.0.0.1`, answers only requests whose Host is the hub and rejects foreign Origins (no CORS). Relay: `http` (device over Wi-Fi) or `serial` (USB lines, needs `npm install serialport` in `plugin/hub/`).
 `scripts/statusline.mjs` is a status line (manual install in `~/.claude/settings.json`, see `plugin/README.md`) that posts context and quotas to `/usage`. The **desktop app does not run status lines**:
 the hub polls the quotas itself (`plugin/hub/quotas.mjs`, at most once a minute while a session exists; OAuth token of `~/.claude/.credentials.json`, never printed; `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers).
