@@ -41,8 +41,14 @@ function builder() {
 test('session_start_is_your_turn', () => {
   const { build } = builder();
   assert.deepEqual(build(payload(LEAD, 'SessionStart')), {
-    v: 2, session: 'abcd', project: 'demo', agent: 'lead', role: 'lead', evt: 'SessionStart', state: 'your_turn', cmd: 'Session started', detail: '',
+    v: 2, session: 'abcd', project: 'demo', cwd: 'C:/work/demo', agent: 'lead', role: 'lead', evt: 'SessionStart', state: 'your_turn', cmd: 'Session started', detail: '',
   });
+});
+
+test('event_carries_cwd', () => {
+  const { build } = builder();
+  assert.equal(build(payload(LEAD, 'SessionStart')).cwd, 'C:/work/demo');
+  assert.equal('cwd' in build(payload(LEAD, 'SessionStart'), { CLAUDE_GADGET_MASK: '1' }), false, 'masked events carry no path');
 });
 
 test('prompt_is_working', () => {

@@ -113,6 +113,7 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
 
   const event = (state, cmd, detail = '') => ({
     v: 2, session: alnum(sessionId).slice(0, 4), project: tidy(path.posix.basename(String(cwd).replace(/\\/g, '/').replace(/\/+$/, '')) || 'claude'),
+    ...(mask ? {} : { cwd: String(cwd) }),         // full path, for the hub's per-project rules
     agent, role, evt: hook, state, cmd: tidy(cmd), detail: mask ? '' : tidy(detail),
   });
 
