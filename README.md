@@ -53,6 +53,10 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 - Permission prompts turn the session orange too.
 - Click the speaker icon (bottom bar) to switch the beeps between `all`, `ask` (needs you only, the default) and `off`. The choice is kept by the hub, so every open page follows it.
 
+### Sessions hub: all sessions at once
+
+Open <http://127.0.0.1:8765/hub> (or the "Sessions hub" link under the screen) for a grid with one tile per session: state, context, command or question, plan. Orange tiles need you (the page beeps like the main page), red tiles have an error, a click opens that session full page. The quotas and the clock appear once, in the bar at the bottom. Past 6 sessions the least urgent fold into one placeholder tile (click to show all). The hub keeps 5 sessions by default (like the gadget): set `"max_sessions"` (up to 32) in `~/.claude/agent-gadget.json` to see more.
+
 ### Sub-agents: see and follow them
 
 ![3 sub-agents](docs/images/screen-subs3.png)
@@ -122,6 +126,7 @@ Tests (no hardware): `node --test plugin/hub/test/*.test.mjs plugin/test/*.test.
 
 ## TODO (known and not fixed)
 
+- **Share the screen component with the hub page.** The sessions hub tiles are HTML (`hub_page.js`, logic in `hub_view.js`), the full page is still one canvas (`screen.js`). Issue #2 asks for one component used by both. Also open: raise the default of `max_sessions` once the session list of the full page scrolls (12 rows overflow it today).
 - **Rename the configuration.** The file is still `~/.claude/agent-gadget.json` and the variables `CLAUDE_GADGET_*`, from the first version. Accept `standup-bot.json` and `STANDUP_BOT_*` and keep the old names as fallback.
 - **Restart the hub after a plugin update.** A hub started by the old version keeps running; the hook could compare versions and replace it.
 - **Show the model used by each session and agent** (Opus, Sonnet, Haiku) in the lead panel and the agent detail. To check: which hook payloads carry the model, then add a short `model` field to `/event`.
