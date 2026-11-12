@@ -55,7 +55,7 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 
 ### Sessions hub: all sessions at once
 
-Open <http://127.0.0.1:8765/hub> (or the "Sessions hub" link under the screen) for a grid with one tile per session: state, context, command or question, plan. Orange tiles need you (the page beeps like the main page), red tiles have an error, a click opens that session full page. The quotas and the clock appear once, in the bar at the bottom. Past 6 sessions the least urgent fold into one placeholder tile (click to show all). The hub keeps 5 sessions by default (like the gadget): set `"max_sessions"` (up to 32) in `~/.claude/agent-gadget.json` to see more.
+Open <http://127.0.0.1:8765/hub> (or choose View: Hub in the settings menu, the gear next to the clock) for a grid with one tile per session, each drawn like the single page without its title and status bars. Orange tiles need you (the page beeps like the main page), red tiles have an error, the frame of a tile pulses when something happens in its session, and a session waiting for you for 5 minutes turns grey (the hub drops it after 10). The quotas and the clock appear once, in the bar at the bottom. Past 12 sessions the least urgent fold into one placeholder tile (click to show all). The settings menu (gear) sets the view, how many tiles show, the beeps, the pulse and the grey-out; the hub keeps them for every page. The hub keeps 12 sessions by default: set `"max_sessions"` (up to 32) in `~/.claude/agent-gadget.json` to change it.
 
 ### Sub-agents: see and follow them
 
