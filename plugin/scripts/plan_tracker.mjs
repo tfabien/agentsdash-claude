@@ -59,11 +59,21 @@ export function bumpCalls(dir, sessionId) {
   });
 }
 
+/** On Windows a rename onto a file that another process (or a scanner) holds open fails with EPERM/EBUSY/EACCES for a few ms: retry. */
+function renameWithRetry(from, to) {
+  for (let i = 0; ; i++) {
+    try { return fs.renameSync(from, to); } catch (e) {
+      if (i >= 10 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      sleep(10);
+    }
+  }
+}
+
 function save(file, tasks, had, meta = { at: Date.now(), calls: 0 }) {
   const tmp = `${file}.${process.pid}.tmp`;
   try {
     fs.writeFileSync(tmp, JSON.stringify({ tasks, had, at: meta.at, calls: meta.calls }), 'utf8');
-    fs.renameSync(tmp, file);
+    renameWithRetry(tmp, file);
   } catch { try { fs.unlinkSync(tmp); } catch { /* nothing to clean */ } }
 }
 
