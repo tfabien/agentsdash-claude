@@ -54,7 +54,7 @@ icons/mypack/lead.svg      lead-blink.svg
 
 The user folder overrides the built-in one by name: a user theme called `cat` replaces the built-in `cat`, a user pack called `robot` replaces the built-in `robot`.
 
-Reload without a restart:
+Reload without a restart: press **Reload** in the theme dialog of the page, or:
 
 ```sh
 curl -X POST http://127.0.0.1:8765/reload
