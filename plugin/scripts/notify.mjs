@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { asciiClean, configWindow, hubHost, pluginConfig, stateDir } from './common.mjs';
+import { tidy, configWindow, hubHost, pluginConfig, stateDir } from './common.mjs';
 import { postEvent, restartStaleHub } from './hub_client.mjs';
 import { update as updatePlan } from './plan_tracker.mjs';
 import { contextWindow, loadCache, saveCache, scan } from './transcript_usage.mjs';
@@ -52,7 +52,7 @@ function askParts(input) {
   const q = Array.isArray(ti.questions) && ti.questions[0] && typeof ti.questions[0] === 'object' ? ti.questions[0] : {};
   const opts = Array.isArray(q.options) ? q.options : [];
   const labels = opts.map((o) => (o && typeof o === 'object' ? String(o.label ?? '') : String(o)));
-  return [String(q.question ?? ''), labels.slice(0, 4).map((l) => asciiClean(l, 40).replace(/\|/g, '/')).join('|')];
+  return [String(q.question ?? ''), labels.slice(0, 4).map((l) => tidy(l).replace(/\|/g, '/')).join('|')];
 }
 
 export function markerPath(dir, sessionId, agent) {
@@ -106,14 +106,14 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
   const mask = Boolean(env.CLAUDE_GADGET_MASK);
   const agentId = String(p.agent_id || '');
   const agent = agentId ? agentId.slice(0, 4) : 'lead';
-  const role = agentId ? asciiClean(p.agent_type || 'agent', 23) : 'lead';
+  const role = agentId ? tidy(p.agent_type || 'agent') : 'lead';
   const cwd = p.cwd || process.cwd();
   const sessionId = p.session_id ?? '';
   const marker = markerPath(dir, sessionId, agent);
 
   const event = (state, cmd, detail = '') => ({
-    v: 2, session: alnum(sessionId).slice(0, 4), project: asciiClean(path.posix.basename(String(cwd).replace(/\\/g, '/').replace(/\/+$/, '')) || 'claude', 14),
-    agent, role, evt: hook, state, cmd: asciiClean(cmd, 63), detail: mask ? '' : asciiClean(detail, 60),
+    v: 2, session: alnum(sessionId).slice(0, 4), project: tidy(path.posix.basename(String(cwd).replace(/\\/g, '/').replace(/\/+$/, '')) || 'claude'),
+    agent, role, evt: hook, state, cmd: tidy(cmd), detail: mask ? '' : tidy(detail),
   });
 
   const toolEvent = (state, prefix = '') => {
@@ -122,8 +122,8 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
       const [question, options] = askParts(p.tool_input);
       if (question) {
         const ev = event('needs_you', 'Question', '');
-        ev.question = asciiClean(question, 120);
-        ev.options = options.slice(0, 100);
+        ev.question = tidy(question);
+        ev.options = options;
         return ev;
       }
     }
@@ -206,7 +206,7 @@ export function addUsage(ev, p, dir, mask = false, windowDefault = 1000000) {
     cache[file] = entry;
     saveCache(dir, session4, cache);
     const out = { ...ev, tok: entry.tokens };
-    if (entry.model) out.model = asciiClean(entry.model, 40);
+    if (entry.model) out.model = tidy(entry.model);
     if (!isSub) {
       out.stok = Object.values(cache).reduce((sum, e) => sum + (e && typeof e === 'object' ? e.tokens || 0 : 0), 0);
       if (entry.last_ctx > 0) {
@@ -214,7 +214,7 @@ export function addUsage(ev, p, dir, mask = false, windowDefault = 1000000) {
         out.ctx_pct = Math.round((100 * entry.last_ctx) / contextWindow(entry.last_ctx, entry.model, windowDefault));
       }
       if (entry.title && !mask) {
-        const title = asciiClean(entry.title, 30);
+        const title = tidy(entry.title);
         if (title) out.title = title;
       }
     }

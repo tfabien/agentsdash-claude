@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { addUsage, buildEvent, markerPath } from '../scripts/notify.mjs';
-import { asciiClean, configWindow } from '../scripts/common.mjs';
+import { tidy, configWindow } from '../scripts/common.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, '..', 'scripts', 'notify.mjs');
@@ -67,7 +67,7 @@ test('pretooluse_lead_and_subagent', () => {
 test('role_and_cmd_limits', () => {
   const sub = { ...LEAD, agent_id: 'bb0bc7f345def841f', agent_type: 'x'.repeat(30) };
   const ev = builder().build(payload(sub, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'y'.repeat(100) } }));
-  assert.deepEqual([ev.role.length, ev.cmd.length], [23, 63]);
+  assert.deepEqual([ev.role.length, ev.cmd.length], [30, 105]);       // no limit: each screen adapts the text
 });
 
 test('subagent_handback_is_not_a_command', () => {
@@ -100,7 +100,7 @@ test('ask_user_question_sends_question_and_options', () => {
   const { build } = builder();
   const ti = { questions: [{ question: 'Quelle port\u00e9e ?', header: 'x', options: [{ label: 'Minimale', description: 'd' }, { label: 'Compl\u00e8te', description: 'd' }] }] };
   const ev = build(payload(LEAD, 'PreToolUse', { tool_name: 'AskUserQuestion', tool_input: ti }));
-  assert.deepEqual([ev.state, ev.question, ev.options], ['needs_you', 'Quelle portee ?', 'Minimale|Complete']);
+  assert.deepEqual([ev.state, ev.question, ev.options], ['needs_you', 'Quelle portée ?', 'Minimale|Complète']);
   const answered = { ...ti, answers: { 'Quelle port\u00e9e ?': 'Minimale' } };
   assert.equal(build(payload(LEAD, 'PostToolUse', { tool_name: 'AskUserQuestion', tool_input: answered })).state, 'working');
 });
@@ -180,14 +180,13 @@ test('unknown_event_returns_null', () => {
   assert.equal(build({ session_id: 'x' }), null);
 });
 
-test('ascii_truncation_and_quotes', () => {
+test('long_unicode_text_is_kept_whole', () => {
   const text = 'Corrige le bug d\'authentification \u00e9 \u00e0 \u00fc "quoted" back\\slash ' + 'long '.repeat(30);
   const ev = builder().build(payload(LEAD, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: text } }));
-  assert.match(ev.cmd + ev.detail, /^[\x20-\x7e]*$/);
-  assert.ok(ev.cmd.length <= 63 && ev.detail.length <= 60);
+  assert.ok(ev.cmd.includes('long long') && ev.detail.length > 60);
   assert.deepEqual(JSON.parse(JSON.stringify(ev)), ev);
-  assert.ok(ev.detail.includes('authentification e a u'));
-  assert.equal(asciiClean('  a \n\t b  ', 10), 'a b');
+  assert.ok(ev.detail.includes('authentification é à ü'));
+  assert.equal(tidy('  a \n\t b  '), 'a b');
 });
 
 test('mask_hides_commands_and_prompts', () => {
@@ -286,12 +285,12 @@ test('mask_keeps_numbers_and_hides_title', () => {
   assert.equal('title' in ev, false);
 });
 
-test('lead_event_has_ascii_title', () => {
+test('lead_event_has_full_title', () => {
   const t = usageSetup();
   t.write(t.lead, `${JSON.stringify({ type: 'custom-title', customTitle: "Packs d'ic\u00f4nes pour agents" })}\n`);
-  assert.equal(t.add(t.leadPayload()).title, "Packs d'icones pour agents");
+  assert.equal(t.add(t.leadPayload()).title, "Packs d'icônes pour agents");
   t.write(t.lead, `${JSON.stringify({ type: 'ai-title', aiTitle: 'x'.repeat(40) })}\n`);
-  assert.equal(t.add(t.leadPayload()).title, 'x'.repeat(30));
+  assert.equal(t.add(t.leadPayload()).title, 'x'.repeat(40));
 });
 
 test('bad_payload_never_throws', () => {
@@ -314,7 +313,7 @@ test('hook_payload_is_read_as_utf8', () => {
   const data = payload(LEAD, 'UserPromptSubmit', { prompt: 'T\u00e2ches de l\'\u00e9cran' });
   const out = run(null, { CLAUDE_GADGET_QUOTAS: '0' }, Buffer.from(JSON.stringify(data), 'utf8'));
   const ev = JSON.parse(out.stderr.trim().split('\n').pop());
-  assert.equal(ev.cmd, "Prompt: Taches de l'ecran");
+  assert.equal(ev.cmd, "Prompt: Tâches de l'écran");
 });
 
 test('dry_run_prints_to_stderr_only', () => {

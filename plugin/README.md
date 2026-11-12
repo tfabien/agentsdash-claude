@@ -6,7 +6,7 @@ Install instructions: [`../INSTALL.md`](../INSTALL.md).
 
 ## What it sends
 
-One `POST http://<hub>/event` per hook (wire format v2, ASCII JSON):
+One `POST http://<hub>/event` per hook (wire format v2, JSON):
 `{"v":2,"session","project","agent":"lead"|"<id4>","role","evt","state","cmd","detail"}`.
 
 | Hook | state | cmd |
@@ -22,7 +22,7 @@ One `POST http://<hub>/event` per hook (wire format v2, ASCII JSON):
 
 The lead is the event without `agent_id`; a sub-agent is identified by `agent_id` (first 4 characters) and its
 role is its `agent_type`. Hook payloads actually observed: `../docs/hook-payloads.md`.
-Payloads are read as UTF-8 (Windows defaults stdin to cp1252); text is cut to ASCII: role <= 23, cmd <= 63, detail <= 60.
+Payloads are read as UTF-8 (Windows defaults stdin to cp1252); text is sent whole (whitespace collapsed); the hub relays cut it for a device screen.
 
 ### Plan progress
 
