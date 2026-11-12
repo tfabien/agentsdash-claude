@@ -11,9 +11,11 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { pluginConfig, stateDir } from './common.mjs';
-import { readPlan } from './plan_tracker.mjs';
+import { bumpCalls, readPlan } from './plan_tracker.mjs';
 
 export const STALE_MS = 10 * 60 * 1000;
+export const NUDGE_EVERY = 8;        // tool calls without a plan change between two reminders (first one at the same count)
+const PLAN_TOOLS = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite', 'mcp__ccd_turn__update_plan', 'mcp__ccd_turn__wrap_up']);
 
 export const RULES = [
   'The user follows this session on the standup-bot screen, which shows questions and plan progress.',
@@ -28,10 +30,25 @@ export const promptsEnabled = (env = process.env, cfg = pluginConfig(env)) => {
   return cfg.prompts !== false;
 };
 
+/** Mid-turn reminder: a plan with open steps that did not change for NUDGE_EVERY tool calls (a step skipped, or none marked in progress). */
+function nudge(payload, dir) {
+  const tool = String(payload.tool_name || '');
+  if (!tool || PLAN_TOOLS.has(tool)) return null;
+  const calls = bumpCalls(dir, payload.session_id);
+  if (calls < NUDGE_EVERY || calls % NUDGE_EVERY !== 0) return null;
+  const { tasks } = readPlan(dir, payload.session_id);
+  const open = tasks.filter((t) => t.status !== 'completed');
+  if (!open.length) return null;
+  const running = open.some((t) => t.status === 'in_progress');
+  return `standup-bot: ${calls} tool calls since the task list last changed, ${open.length} step(s) unfinished`
+    + `${running ? '' : ' and none marked in progress'}. Mark finished steps completed and the current one in progress now.`;
+}
+
 /** The text to add to the session for this hook payload, or null. */
 export function contextFor(payload, { env = process.env, cfg = pluginConfig(env), dir = stateDir(env), now = Date.now() } = {}) {
   if (!promptsEnabled(env, cfg) || payload.agent_id) return null;
   if (payload.hook_event_name === 'SessionStart') return RULES;
+  if (payload.hook_event_name === 'PostToolUse') return nudge(payload, dir);
   if (payload.hook_event_name !== 'UserPromptSubmit') return null;
   const { tasks, ageMs } = readPlan(dir, payload.session_id, now);
   const open = tasks.filter((t) => t.status !== 'completed').length;

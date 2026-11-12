@@ -13,7 +13,8 @@
       { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PostToolUse": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] },
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session_prompts.mjs\" 2>/dev/null || true", "timeout": 5 } ] }
     ],
     "PostToolUseFailure": [
       { "matcher": "*", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.mjs\" 2>/dev/null || true", "timeout": 5 } ] }

@@ -26,28 +26,43 @@ export function statePath(dir, sessionId) {
   return path.join(dir, `plan-${safe}.json`);
 }
 
-/** [tasks, had] from the state file; a missing or broken file is an empty list never filled. */
+/** [tasks, had, meta] from the state file; a missing or broken file is an empty list never filled.
+ * meta = {at, calls}: time of the last plan change and tool calls since then (null/0 in older files). */
 function load(file) {
   let data;
-  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return [[], false]; }
+  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return [[], false, { at: null, calls: 0 }]; }
   if (Array.isArray(data)) data = { tasks: data, had: data.length > 0 };       // older format: the list alone
   const tasks = (Array.isArray(data?.tasks) ? data.tasks : []).filter((t) => t && typeof t === 'object' && 'id' in t && 'status' in t);
-  return [tasks, Boolean(data?.had) || tasks.length > 0];
+  const meta = { at: Number.isFinite(data?.at) ? data.at : null, calls: Number.isInteger(data?.calls) ? data.calls : 0 };
+  return [tasks, Boolean(data?.had) || tasks.length > 0, meta];
 }
 
-/** The plan of a session for other scripts: {tasks, had, ageMs}; ageMs is null when no state file exists. */
+/** The plan of a session for other scripts: {tasks, had, ageMs, calls}; ageMs (since the last plan change) is null when no state file exists. */
 export function readPlan(dir, sessionId, now = Date.now()) {
   const file = statePath(dir, sessionId);
-  const [tasks, had] = load(file);
+  const [tasks, had, meta] = load(file);
   let ageMs = null;
-  try { ageMs = now - fs.statSync(file).mtimeMs; } catch { /* no plan file */ }
-  return { tasks, had, ageMs };
+  try { ageMs = now - (meta.at ?? fs.statSync(file).mtimeMs); } catch { /* no plan file */ }
+  return { tasks, had, ageMs, calls: meta.calls };
 }
 
-function save(file, tasks, had) {
+/** Count one non-plan tool call of a session with a plan (for the "plan not updated" reminder); returns the new count, or 0 without a plan. */
+export function bumpCalls(dir, sessionId) {
+  const file = statePath(dir, sessionId);
+  if (!fs.existsSync(file)) return 0;
+  return withLock(file, () => {
+    const [tasks, had, meta] = load(file);
+    if (!tasks.length) return 0;
+    const calls = meta.calls + 1;
+    save(file, tasks, had, { at: meta.at ?? fs.statSync(file).mtimeMs, calls });
+    return calls;
+  });
+}
+
+function save(file, tasks, had, meta = { at: Date.now(), calls: 0 }) {
   const tmp = `${file}.${process.pid}.tmp`;
   try {
-    fs.writeFileSync(tmp, JSON.stringify({ tasks, had }), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify({ tasks, had, at: meta.at, calls: meta.calls }), 'utf8');
     fs.renameSync(tmp, file);
   } catch { try { fs.unlinkSync(tmp); } catch { /* nothing to clean */ } }
 }
@@ -127,13 +142,13 @@ export function fields(tasks, had) {
   return out;
 }
 
-/** Forget the list when it is out of date: a new session, a finished list when the next prompt arrives, or one untouched for hours. */
+/** Forget the list when it is out of date: a new session, a finished list at the end of a turn or when the next prompt arrives, or one untouched for hours. */
 function dropStale(file, hook) {
   let stale = hook === 'SessionStart';
   if (!stale) {
     try {
       if (Date.now() - fs.statSync(file).mtimeMs > PLAN_MAX_AGE_MS) stale = true;
-      else if (hook === 'UserPromptSubmit') { const [tasks] = load(file); stale = tasks.length > 0 && tasks.every((t) => t.status === 'completed'); }
+      else if (hook === 'UserPromptSubmit' || hook === 'Stop') { const [tasks] = load(file); stale = tasks.length > 0 && tasks.every((t) => t.status === 'completed'); }
     } catch { return; }
   }
   if (stale) { try { fs.unlinkSync(file); } catch { /* nothing to drop */ } }
@@ -155,7 +170,7 @@ export function update(dir, payload) {
     if (next !== null) {
       tasks = next;
       had = had || next.length > 0;
-      save(file, tasks, had);
+      save(file, tasks, had);                                    // resets the "plan not updated" counter
     }
     return fields(tasks, had);
   });

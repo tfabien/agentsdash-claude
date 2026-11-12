@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { contextFor, promptsEnabled, RULES, STALE_MS } from '../scripts/session_prompts.mjs';
+import { contextFor, promptsEnabled, NUDGE_EVERY, RULES, STALE_MS } from '../scripts/session_prompts.mjs';
 import { statePath } from '../scripts/plan_tracker.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'session_prompts.mjs');
@@ -61,4 +61,18 @@ test('script prints hook JSON when enabled, nothing when off or on bad input', (
   const bad = run('not json', on);
   assert.equal(bad.status, 0);
   assert.equal(bad.stdout, '');
+});
+
+test('PostToolUse nudges every NUDGE_EVERY calls while steps are open, a plan tool resets the count', () => {
+  const dir = tmp();
+  const post = (tool) => ({ hook_event_name: 'PostToolUse', session_id: 'abc', tool_name: tool });
+  assert.equal(contextFor(post('Edit'), { env: on, cfg: {}, dir }), null, 'no plan');
+  writePlan(dir, [{ id: '1', title: 'a', status: 'pending' }], 0);
+  const out = [];
+  for (let i = 0; i < NUDGE_EVERY; i++) out.push(contextFor(post('Edit'), { env: on, cfg: {}, dir }));
+  assert.deepEqual(out.slice(0, -1).filter(Boolean), []);
+  assert.match(out.at(-1), /8 tool calls.*1 step.*none marked in progress/);
+  assert.equal(contextFor(post('mcp__ccd_turn__update_plan'), { env: on, cfg: {}, dir }), null, 'plan tools are not counted');
+  writePlan(dir, [{ id: '1', title: 'a', status: 'completed' }], 0);
+  for (let i = 0; i < NUDGE_EVERY; i++) assert.equal(contextFor(post('Edit'), { env: on, cfg: {}, dir }), null, 'finished plan');
 });

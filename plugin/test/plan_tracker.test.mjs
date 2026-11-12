@@ -136,3 +136,13 @@ test('single_running_step_has_no_state_key', () => {
   const out = fields([{ title: 'A', status: 'in_progress' }, { title: 'B', status: 'pending' }], true);
   assert.equal('plan_state' in out, false);
 });
+
+test('stop_clears_a_finished_plan_and_keeps_an_open_one', () => {
+  const dir = tmp();
+  runAll(dir, [create('A', '1'), create('B', '2'), upd('1', 'completed')]);
+  const stop = { ...fixture('cli_update'), hook_event_name: 'Stop', tool_name: undefined, tool_input: undefined };
+  assert.equal(update(dir, stop).plan_total, 2, 'open steps stay');
+  update(dir, upd('2', 'completed'));
+  assert.deepEqual(update(dir, stop), { plan_done: 0, plan_total: 0, plan_cur: '', plan_next: '' });
+  assert.equal(fs.existsSync(statePath(dir, stop.session_id)), false);
+});
