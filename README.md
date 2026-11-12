@@ -83,6 +83,10 @@ Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn l
 - Bottom bar: 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset). The hub polls them for the desktop app; a terminal status line can feed them too.
 - A small clock sits at the right of the bottom bar. The page has no standby view (the big clock after 5 idle minutes): that stays on the ESP32 gadget.
 
+### Themes
+
+- standup-bot ships with the `default` theme and the `robot` icon pack. More themes (cat, lemmings, office, pirates, spelunky, yokai...) are in [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes). Ask Claude Code "install a standup-bot theme" (skill `install-theme`) or follow that repository's `install.md`, which also explains how to create your own. Details: `docs/themes.md`.
+
 ## How it works
 
 ```text

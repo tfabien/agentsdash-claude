@@ -2,17 +2,11 @@
 
 The page has one global theme, chosen with the palette button of the bottom bar (a dialog with a preview of each theme). The hub keeps the choice (`theme` in `hub-settings.json`), so every page and browser follows without a restart. The physical screen is not affected.
 
-Themes and icon packs are files. The hub reads the built-in ones from `plugin/hub/` and yours from `~/.claude/standup-bot/`, and publishes them as `catalog` in `GET /state`.
+Themes and icon packs are files. The hub reads the built-in ones (`default`, `robot`) from `plugin/hub/` and yours from `~/.claude/standup-bot/`, and publishes them as `catalog` in `GET /state`.
 
-## Built-in themes
+## Built-in theme and more themes
 
-| Name | Icon pack | Look |
-| --- | --- | --- |
-| `default` | `robot` | Colors of the firmware (`ui_theme.h`), the 8 role robots |
-| `cat` | `cat` | Warm brown palette, one cat coat per role |
-| `lemmings` | `lemmings` | Dark green palette, the walking lemming of the game (green hair, blue robe) with the tool of a skill per role |
-| `office` | `office` | Slate blue palette, a colleague in a suit per role (headset, glasses, cap) |
-| `pirates` | `pirates` | Night sea palette with a wood frame, a crew member per role (captain with a skull hat, eye patch, spyglass) |
+standup-bot ships with one theme, `default` (colors of the firmware, `ui_theme.h`), and one icon pack, `robot` (the 8 role robots). Every other theme lives in https://github.com/tfabien/standup-bot-themes (cat, lemmings, office, pirates, spelunky and more). Install them with the `install-theme` skill of the plugin, or follow `install.md` of that repository, which also lists the constraints to create a theme.
 
 ## Theme file
 
