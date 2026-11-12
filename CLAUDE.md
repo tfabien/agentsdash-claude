@@ -36,6 +36,7 @@ The hub binds `127.0.0.1`, answers only requests whose Host is the hub and rejec
 `scripts/statusline.mjs` is a status line (manual install in `~/.claude/settings.json`, see `plugin/README.md`) that posts context and quotas to `/usage`. The **desktop app does not run status lines**:
 the hub polls the quotas itself (`plugin/hub/quotas.mjs`, at most once a minute while a session exists; OAuth token of `~/.claude/.credentials.json`, never printed; `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers).
 Off: `CLAUDE_GADGET_QUOTAS=0` or `"quotas": false`. Hooks add tokens, a context estimate and the session title read from the transcripts.
+Themes (`themes/*.json`) and icon packs (`icons/<pack>/*.svg`) are read from `plugin/hub/` and `~/.claude/standup-bot/` (the user folder wins), published as `catalog` in the state; `GET /icons/<pack>/<file>` serves only listed files (sandboxed SVG) and `POST /reload` rescans.
 The page redraws the device screen as vectors: `web/screen.js` is a port of the firmware's `display_hmi.cpp`, `layout.cpp`, `ui_state.cpp` (same 480x272 units); keep them in step when the firmware UI changes.
 
 ## Pitfalls
