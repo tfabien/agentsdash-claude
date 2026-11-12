@@ -5,10 +5,9 @@ import path from 'node:path';
 
 export const DEFAULT_HUB = '127.0.0.1:8765';
 
-/** The screen is ASCII only: strip accents, drop the rest, collapse whitespace, truncate. */
-export function asciiClean(text, limit) {
-  const plain = String(text ?? '').normalize('NFKD').replace(/[^\x00-\x7f]/g, '');
-  return plain.split(/\s+/).filter(Boolean).join(' ').slice(0, limit);
+/** Collapse whitespace. No limit and no ASCII reduction: the hub keeps the full text, each screen adapts it (devices: relay's forDevice). */
+export function tidy(text) {
+  return String(text ?? '').split(/\s+/).filter(Boolean).join(' ');
 }
 
 /** ~/.claude/agent-gadget.json as an object; {} when missing or broken. */

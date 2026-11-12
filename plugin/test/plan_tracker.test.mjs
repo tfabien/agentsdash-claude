@@ -85,10 +85,10 @@ test('subagent_calls_are_ignored', () => {
   assert.equal(update(tmp(), { ...create('Sub task', '9'), agent_id: 'aa0bc7f345def841f' }), null);
 });
 
-test('titles_are_ascii_and_cut', () => {
+test('titles_keep_text_and_length', () => {
   const out = runAll(tmp(), [create(`Ecrire les tests élémentaires ${'x'.repeat(60)}`, '1')]);
-  assert.equal(out.plan_next.length, 47);
-  assert.ok(out.plan_next.startsWith('Ecrire les tests elementaires'));
+  assert.equal(out.plan_next.length, 90);
+  assert.ok(out.plan_next.startsWith('Ecrire les tests élémentaires'));
 });
 
 test('broken_state_file', () => {

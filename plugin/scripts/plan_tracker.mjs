@@ -9,16 +9,15 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { asciiClean } from './common.mjs';
+import { tidy } from './common.mjs';
 
-const TITLE_LEN = 47;
 const DESKTOP_TOOL = 'mcp__ccd_turn__update_plan';     // the desktop app's task list
 const DESKTOP_WRAP_UP = 'mcp__ccd_turn__wrap_up';       // the desktop app closes the task list of a turn with it
 const LOCK_WAIT_MS = 2000;      // give up waiting for the lock after this (the event goes out without a plan update)
 const LOCK_STALE_MS = 10000;
 const PLAN_MAX_AGE_MS = 6 * 3600 * 1000;    // a list untouched for this long belongs to a finished piece of work    // a lock older than this was left by a killed process
 
-const clean = (text) => asciiClean(text, TITLE_LEN);
+const clean = (text) => tidy(text);
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 export function statePath(dir, sessionId) {
