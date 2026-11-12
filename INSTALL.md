@@ -72,6 +72,7 @@ node <plugin folder>/hub/hub.mjs
   `CLAUDE_GADGET_MASK=1` in the environment of Claude Code hides them (only tool names are sent).
 - Plan quotas (5 hours, week) appear by themselves; they come from the Claude account of the user (OAuth token, never printed).
   `CLAUDE_GADGET_QUOTAS=0` turns the polling off.
+- Optional themes (cat, lemmings, pirates...) are in https://github.com/tfabien/standup-bot-themes ; to install them, follow its `install.md`.
 - An external screen (ESP32 gadget, USB display) is optional: see `devices/README.md`.
 
 ## Update, uninstall, troubleshooting
