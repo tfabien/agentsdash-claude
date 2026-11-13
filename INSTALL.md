@@ -69,9 +69,9 @@ node <plugin folder>/hub/hub.mjs
 - The page is http://127.0.0.1:8765/ ; bookmark it or pin the tab. Click the title bar for the list of sessions, a row for
   the detail of an agent, the speaker for the beeps (`all`, `ask only`, `off`).
 - The hub only listens on this computer (`127.0.0.1`). Prompts, commands and file paths of the sessions are shown on the page.
-  `CLAUDE_GADGET_MASK=1` in the environment of Claude Code hides them (only tool names are sent).
+  `AGENTSDASH_MASK=1` in the environment of Claude Code hides them (only tool names are sent).
 - Plan quotas (5 hours, week) appear by themselves; they come from the Claude account of the user (OAuth token, never printed).
-  `CLAUDE_GADGET_QUOTAS=0` turns the polling off.
+  `AGENTSDASH_QUOTAS=0` turns the polling off.
 - Optional themes (cat, lemmings, pirates...) are in https://github.com/tfabien/agentsdash-themes ; to install them, follow its `install.md`.
 - An external screen (ESP32 gadget, USB display) is optional: see `devices/README.md`.
 
@@ -82,8 +82,8 @@ node <plugin folder>/hub/hub.mjs
 | Update | `claude plugin marketplace update agentsdash`, then `claude plugin update agentsdash@agentsdash`, then open a new session. Stop the old hub so the new one starts: close the process listening on port 8765. |
 | Uninstall | `claude plugin uninstall agentsdash@agentsdash` and `claude plugin marketplace remove agentsdash` |
 | Page empty | The session was opened before the install: open a new one. Check `claude plugin list` (enabled). |
-| Port 8765 busy | Another program uses it. Set `{"host": "127.0.0.1:8777"}` in `~/.claude/agent-gadget.json` (or the environment variable `CLAUDE_GADGET_HOST=127.0.0.1:8777`), then open that address. |
+| Port 8765 busy | Another program uses it. Set `{"host": "127.0.0.1:8777"}` in `~/.agentsdash/config.json` (or the environment variable `AGENTSDASH_HOST=127.0.0.1:8777`), then open that address. |
 | `node` not found by hooks | Claude Code must find `node` in its `PATH`: restart it after installing Node.js. |
-| Hooks seem to do nothing | Run a hook by hand: `echo '{"hook_event_name":"Stop","session_id":"abcd1234","cwd":"."}' \| CLAUDE_GADGET_DRY_RUN=1 node <plugin folder>/scripts/notify.mjs` prints the event it would send. |
+| Hooks seem to do nothing | Run a hook by hand: `echo '{"hook_event_name":"Stop","session_id":"abcd1234","cwd":"."}' \| AGENTSDASH_DRY_RUN=1 node <plugin folder>/scripts/notify.mjs` prints the event it would send. |
 
 Full documentation: [README.md](README.md), [plugin/README.md](plugin/README.md), [plugin/hub/README.md](plugin/hub/README.md).

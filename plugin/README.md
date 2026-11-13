@@ -28,7 +28,7 @@ Payloads are read as UTF-8 (Windows defaults stdin to cp1252); text is sent whol
 
 `scripts/plan_tracker.mjs` rebuilds the session's task list from its task-list tool calls (PostToolUse of
 `TaskCreate`/`TaskUpdate` in the CLI, `TodoWrite`, the desktop app's `update_plan` with `items`, `advance`, `done`,
-`start`) and keeps it in `<temp>/agent-gadget-plugin/plan-<session>.json`. Every lead event then carries
+`start`) and keeps it in `<temp>/agentsdash/plan-<session>.json`. Every lead event then carries
 `plan_done`, `plan_total`, `plan_cur` (task in progress) and `plan_next` (first pending task, titles <= 47 chars). With several tasks in progress, `plan_cur` joins their titles with " + " and `plan_state` has one character per task (`d` done, `r` running, `p` pending): the screen pulses every running segment.
 
 `AskUserQuestion` (lead only) sends `needs_you` with `question` (<= 120 characters) and `options` (up to 4 labels joined by `|`); the screen shows them full width until the answer (`PostToolUse`).
@@ -38,7 +38,7 @@ A create after a fully done list starts a new list. Sub-agents' own task lists a
 
 The screen can only show questions that go through `AskUserQuestion` and plans built from task-list tool calls.
 `scripts/session_prompts.mjs` (hooks `SessionStart` and `UserPromptSubmit`) asks Claude to do both. It adds text to every
-session. It is on by default; turn it off with `CLAUDE_GADGET_PROMPTS=0` or `{"prompts": false}` in `~/.claude/agent-gadget.json`
+session. It is on by default; turn it off with `AGENTSDASH_PROMPTS=0` or `{"prompts": false}` in `~/.agentsdash/config.json`
 (the variable wins over the file). `SessionStart` adds three rules (ask through `AskUserQuestion`, create a task list
 for multi-step work, keep it current). `UserPromptSubmit` adds a reminder when the task list has unfinished steps and has not
 changed for 10 minutes. Sub-agents get nothing. Open a new session after changing the setting.
@@ -49,7 +49,7 @@ changed for 10 minutes. Sub-agents get nothing. Open a new session after changin
 numbers to `POST http://<hub>/usage` (when they change, at most once a minute otherwise):
 context fill, the 5-hour and weekly quotas with their reset times, and the **pace**: burn rate (%/h) and the projected %
 at reset. The gadget colors the quotas from that projection (green under 85 %, orange 85 to 100 %, red when you would
-run out before the reset). The pace history is shared by all sessions in `<temp>/agent-gadget-plugin/quota_history.json`.
+run out before the reset). The pace history is shared by all sessions in `<temp>/agentsdash/quota_history.json`.
 
 Install it by hand in `~/.claude/settings.json` (one status line command only):
 
@@ -57,18 +57,18 @@ Install it by hand in `~/.claude/settings.json` (one status line command only):
 "statusLine": {"type": "command", "command": "node <plugin folder>/scripts/statusline.mjs", "refreshInterval": 10}
 ```
 
-The Claude desktop app does not run status lines (checked 2026-11-08). The hub polls the quotas itself while a session
-exists (`hub/quotas.mjs`), so the status line is optional: quotas are account-wide and one terminal `claude`
+The Claude desktop app does not run status lines (checked 2026-11-08). A script of the plugin polls the quotas
+(`scripts/quota_poller.mjs`, started by the hooks at most once a minute, posts `/usage`), so the status line is optional: quotas are account-wide and one terminal `claude`
 session also feeds them. Desktop sessions still get their context, tokens and title from the hooks,
 which read the transcripts (`scripts/transcript_usage.mjs`): `tok`, `stok`, `ctx_k`, `ctx_pct`, `title` on v2 events.
 Quotas are only reported to Pro/Max subscribers.
 The context estimate from transcripts assumes a 1M window (desktop sessions); set `"context_window": 200000` in
-`~/.claude/agent-gadget.json` for 200k sessions.
+`~/.agentsdash/config.json` for 200k sessions.
 
 ## Setup
 
-1. Tell the plugin where to send events (first match wins): env var `CLAUDE_GADGET_HOST=127.0.0.1:8765`, or
-   `~/.claude/agent-gadget.json` `{ "host": "127.0.0.1:8765" }`, default `127.0.0.1:8765` (the hub). When the host is this
+1. Tell the plugin where to send events (first match wins): env var `AGENTSDASH_HOST=127.0.0.1:8765`, or
+   `~/.agentsdash/config.json` `{ "host": "127.0.0.1:8765" }`, default `127.0.0.1:8765` (the hub). When the host is this
    machine and the hub is not running, the first hook starts it (detached). A gadget IP (`192.168.1.100`) still works
    as a host: events go straight to the gadget, with no hub page and no quota polling. To use both, keep the hub as the
    host and set `"relay": {"mode": "http", "host": "192.168.1.100"}` (see `hub/README.md`).
@@ -83,12 +83,12 @@ The script never prints to stdout, always exits 0 and gives up after 1.5 s: it c
 ## Privacy
 
 Prompts, commands and file paths are sent **in clear text over your local network** and shown on a screen on
-your desk. A command containing a secret would be displayed. Set `CLAUDE_GADGET_MASK=1` to send only tool names
+your desk. A command containing a secret would be displayed. Set `AGENTSDASH_MASK=1` to send only tool names
 (no prompts, commands or paths).
 
 ## Options for debugging
 
-`CLAUDE_GADGET_DRY_RUN=1` prints the event to stderr instead of sending it; `CLAUDE_GADGET_DUMP=<file>` appends every
+`AGENTSDASH_DRY_RUN=1` prints the event to stderr instead of sending it; `AGENTSDASH_DUMP=<file>` appends every
 raw hook payload to a file.
 
 ## Tests
@@ -98,5 +98,5 @@ raw hook payload to a file.
 ## Known limits
 
 - There is no "approved" hook: after an approval, a long command keeps the agent in `needs_you` until it finishes.
-- A "needs you" marker lives in the temp folder (`agent-gadget-plugin/`); a crash can leave a stale one, which is
+- A "needs you" marker lives in the temp folder (`agentsdash/`); a crash can leave a stale one, which is
   cleared by the next prompt or stop of that agent.
