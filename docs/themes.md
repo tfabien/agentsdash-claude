@@ -53,6 +53,23 @@ icons/mypack/lead.svg      lead-blink.svg
 - A file over 256 KB is skipped. A pack with no valid file is not listed.
 - A missing role file falls back to the `robot` pack for that role.
 
+## Looks: several characters, ticked by the user
+
+A palette variant changes the whole page and only one is active. **Looks** change how agents are drawn, and several can be active: each agent takes one of the active looks by a hash of its id (so it keeps its look), the lead of a session by the session id.
+
+```json
+{ "looks": {
+    "classic": { "label": "Classic" },
+    "ember":   { "label": "Ember", "accent": "#f2a33a" },
+    "night":   { "label": "Night", "sprite": 2, "accent": "#6e7bf2" } },
+  "defaultLooks": ["classic", "ember"] }
+```
+
+- `looks`: up to 12 entries (`a-z0-9-` keys). `label`: the chip text. `sprite`: optional integer 1 to 99, the numbered files of the pack (`1` is `lead.png`, `2` is `lead-2.png`); a role without that number draws its plain file. `accent`: optional `#rrggbb`, tints the agent through the pack's tint mode (a pack with `tint: none` ignores it). A look without `accent` uses the theme or variant accent.
+- `defaultLooks`: the looks active until the user chooses. Missing or empty: all of them. Unknown keys are dropped.
+- The theme card shows a chip per look when the theme has more than one. A click turns a look on or off (the last active look stays on). The choice is the hub setting `themeLooks` (`{ "<theme>": ["<look>", ...] }`), shared by all pages. **Save as theme** keeps the active looks as `looks` and `defaultLooks` of the new theme.
+- A theme without `looks` behaves as before: the hash picks among all the numbered files of each role.
+
 ## Icon accent: `pack.json`
 
 An optional `icons/<pack>/pack.json` says how the theme `accent` tints the pack:
