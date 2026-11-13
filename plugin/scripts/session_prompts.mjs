@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * Prompts for the agentsdash screen (SessionStart and UserPromptSubmit hooks). On by default; turn off with
- * env CLAUDE_GADGET_PROMPTS=0 or {"prompts": false} in ~/.claude/agent-gadget.json.
+ * env AGENTSDASH_PROMPTS=0 (old name CLAUDE_GADGET_PROMPTS) or {"prompts": false} in the config file.
  *
  * SessionStart: tells Claude to ask every question through AskUserQuestion and to keep a task list, which is the only
  * thing the screen can show (questions and plan progress). UserPromptSubmit: when the session's task list has unfinished
@@ -10,7 +10,7 @@
  */
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { pluginConfig, stateDir } from './common.mjs';
+import { envVar, pluginConfig, stateDir } from './common.mjs';
 import { bumpCalls, readPlan } from './plan_tracker.mjs';
 
 export const STALE_MS = 10 * 60 * 1000;
@@ -25,7 +25,7 @@ export const RULES = [
 ].join('\n');
 
 export const promptsEnabled = (env = process.env, cfg = pluginConfig(env)) => {
-  const v = env.CLAUDE_GADGET_PROMPTS;
+  const v = envVar('PROMPTS', env);
   if (v !== undefined && v !== '') return v !== '0' && v.toLowerCase() !== 'false';
   return cfg.prompts !== false;
 };

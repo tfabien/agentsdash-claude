@@ -10,10 +10,11 @@
  * "evt":"<hook>","state":"working|needs_you|your_turn|done|error","cmd":"<=63","detail":"<=60"}.
  * See docs/hook-payloads.md (payloads observed) and the design spec section 10 (hook -> state mapping).
  *
- * Host (first match): env CLAUDE_GADGET_HOST, then "host" in ~/.claude/agent-gadget.json, then 127.0.0.1:8765.
- * Options: CLAUDE_GADGET_MASK=1 hides commands and prompts (only tool names are sent);
- * CLAUDE_GADGET_DRY_RUN=1 prints the event to stderr instead of sending it;
- * CLAUDE_GADGET_DUMP=<file> appends every raw payload to a file (debugging).
+ * Host (first match): env AGENTSDASH_HOST, then "host" in ~/.agentsdash/config.json, then 127.0.0.1:8765.
+ * Options: AGENTSDASH_MASK=1 hides commands and prompts (only tool names are sent);
+ * AGENTSDASH_DRY_RUN=1 prints the event to stderr instead of sending it;
+ * AGENTSDASH_DUMP=<file> appends every raw payload to a file (debugging).
+ * The old CLAUDE_GADGET_* names and ~/.claude/agent-gadget.json still work as a fallback.
  *
  * "Needs you" has no "approved" hook: a marker file (temp folder) remembers that an agent is blocked, so the
  * PostToolUse hook only sends something when it clears that state.
@@ -22,7 +23,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { tidy, configWindow, hubHost, pluginConfig, stateDir } from './common.mjs';
+import { tidy, configWindow, envVar, hubHost, pluginConfig, stateDir } from './common.mjs';
 import { postEvent, restartStaleHub } from './hub_client.mjs';
 import { maybeSpawnPoller } from './quota_poller.mjs';
 import { update as updatePlan } from './plan_tracker.mjs';
@@ -119,7 +120,7 @@ export function replyExcerpts(message) {
 /** Map one hook payload to a v2 event object, or null when nothing should be sent. */
 export function buildEvent(p, env = process.env, dir = stateDir(env)) {
   const hook = p.hook_event_name ?? '';
-  const mask = Boolean(env.CLAUDE_GADGET_MASK);
+  const mask = Boolean(envVar('MASK', env));
   const agentId = String(p.agent_id || '');
   const agent = agentId ? agentId.slice(0, 4) : 'lead';
   const role = agentId ? tidy(p.agent_type || 'agent') : 'lead';
@@ -264,13 +265,13 @@ async function main() {
   try { p = JSON.parse(await readStdin()); } catch { return; }
   if (!p || typeof p !== 'object') return;
   const env = process.env;
-  if (env.CLAUDE_GADGET_DUMP) { try { fs.appendFileSync(env.CLAUDE_GADGET_DUMP, `${JSON.stringify(p)}\n`, 'utf8'); } catch { /* debugging aid only */ } }
+  if (envVar('DUMP', env)) { try { fs.appendFileSync(envVar('DUMP', env), `${JSON.stringify(p)}\n`, 'utf8'); } catch { /* debugging aid only */ } }
   const dir = stateDir(env);
   const plan = trackPlan(p, dir);                          // every payload, even without an event
   let ev = buildEvent(p, env, dir);
   if (!ev) return;
-  ev = addPlan(addUsage(ev, p, dir, Boolean(env.CLAUDE_GADGET_MASK), configWindow(pluginConfig(env))), plan);
-  if (env.CLAUDE_GADGET_DRY_RUN) { process.stderr.write(`${JSON.stringify(ev)}\n`); return; }
+  ev = addPlan(addUsage(ev, p, dir, Boolean(envVar('MASK', env)), configWindow(pluginConfig(env))), plan);
+  if (envVar('DRY_RUN', env)) { process.stderr.write(`${JSON.stringify(ev)}\n`); return; }
   if (ev.evt === 'SessionStart') await restartStaleHub({ host: hubHost(env) });       // a plugin update leaves an old hub running
   maybeSpawnPoller({ dir, env, cfg: pluginConfig(env), now: Date.now() / 1000 });      // plan quotas, at most once a minute, detached
   await postEvent(ev, { host: hubHost(env), timeoutMs: 1500 });

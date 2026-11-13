@@ -19,10 +19,23 @@ export function tidy(text) {
   return String(text ?? '').split(/\s+/).filter(Boolean).join(' ');
 }
 
-/** ~/.claude/agent-gadget.json as an object; {} when missing or broken. */
+// AGENTSDASH_USER_HOME replaces the OS home folder (tests use it so they never read the real one).
+const userHome = (env) => env.AGENTSDASH_USER_HOME || os.homedir();
+const exists = (p) => { try { return fs.existsSync(p); } catch { return false; } };
+
+/** The config file: AGENTSDASH_CONFIG (or the old variable), else ~/.agentsdash/config.json, else the old ~/.claude/agent-gadget.json when only that exists. */
+export function configFile(env = process.env) {
+  const explicit = envVar('CONFIG', env);
+  if (explicit) return explicit;
+  const next = path.join(env.AGENTSDASH_HOME || path.join(userHome(env), '.agentsdash'), 'config.json');
+  const legacy = path.join(userHome(env), '.claude', 'agent-gadget.json');
+  return !exists(next) && exists(legacy) ? legacy : next;
+}
+
+/** The config file as an object; {} when missing or broken. */
 export function pluginConfig(env = process.env) {
   try {
-    const file = env.CLAUDE_GADGET_CONFIG || path.join(os.homedir(), '.claude', 'agent-gadget.json');
+    const file = configFile(env);
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
     return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
   } catch {
@@ -30,9 +43,9 @@ export function pluginConfig(env = process.env) {
   }
 }
 
-/** Address of the hub: env CLAUDE_GADGET_HOST, then "host" in the config file, then 127.0.0.1:8765. */
+/** Address of the hub: env AGENTSDASH_HOST (old name CLAUDE_GADGET_HOST), then "host" in the config file, then 127.0.0.1:8765. */
 export function hubHost(env = process.env, cfg = pluginConfig(env)) {
-  return env.CLAUDE_GADGET_HOST || (typeof cfg.host === 'string' && cfg.host) || DEFAULT_HUB;
+  return envVar('HOST', env) || (typeof cfg.host === 'string' && cfg.host) || DEFAULT_HUB;
 }
 
 /** Default context window (tokens): "context_window" of the config file, else 1M. */
@@ -42,5 +55,5 @@ export function configWindow(cfg) {
 
 /** Folder for the marker files and transcript caches. */
 export function stateDir(env = process.env) {
-  return env.CLAUDE_GADGET_STATE_DIR || path.join(os.tmpdir(), 'agent-gadget-plugin');
+  return envVar('STATE_DIR', env) || path.join(os.tmpdir(), 'agentsdash');
 }

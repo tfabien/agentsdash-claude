@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { envVar } from './common.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_HUB_SCRIPT = path.resolve(HERE, '..', 'hub', 'hub.mjs');
@@ -55,10 +56,20 @@ function spawnHub(script) {
 
 const real = (f) => { try { return fs.realpathSync(f); } catch { return f; } };
 
-/** Newest change time of the files a hub runs on (hub/*.mjs and scripts/common.mjs). */
+/**
+ * The hub script to run: an explicit argument, else AGENTSDASH_CORE_DIR (a core folder, holding hub.mjs), else the old
+ * CLAUDE_GADGET_HUB_SCRIPT (a path to hub.mjs), else the hub folder next to this plugin.
+ */
+export function resolveHubScript(env = process.env, hubScript) {
+  if (hubScript) return hubScript;
+  if (env.AGENTSDASH_CORE_DIR) return path.join(env.AGENTSDASH_CORE_DIR, 'hub.mjs');
+  return envVar('HUB_SCRIPT', env) || DEFAULT_HUB_SCRIPT;
+}
+
+/** Newest change time of the files a hub runs on (hub/*.mjs). */
 function newestHubFile() {
   let newest = 0;
-  for (const dir of [path.dirname(DEFAULT_HUB_SCRIPT), HERE]) {
+  for (const dir of [path.dirname(DEFAULT_HUB_SCRIPT)]) {
     try { for (const n of fs.readdirSync(dir)) if (n.endsWith('.mjs')) newest = Math.max(newest, fs.statSync(path.join(dir, n)).mtimeMs); } catch { /* skip */ }
   }
   return newest;
@@ -79,7 +90,7 @@ export async function restartStaleHub({ host, hubScript } = {}) {
     const r = await request(host, '/health', 'GET', undefined, 300);
     if (r.status !== 200) return false;
     const info = JSON.parse(r.text);
-    const script = hubScript || process.env.CLAUDE_GADGET_HUB_SCRIPT || DEFAULT_HUB_SCRIPT;
+    const script = resolveHubScript(process.env, hubScript);
     const stale = (info.version ?? '') !== localVersion() || real(info.script ?? '') !== real(script) || (info.startedAt ?? 0) < newestHubFile();
     if (!stale) return false;
     await request(host, '/shutdown', 'POST', '{}', 300);
@@ -102,7 +113,7 @@ export async function postToHub(route, body, { host, timeoutMs = 1500, spawnHub:
     const data = JSON.stringify(body);
     let r = await tryPost(host, route, data, deadline);
     if (!r.ok && r.refused && allowSpawn && isLoopback(host)) {
-      spawnHub(hubScript || process.env.CLAUDE_GADGET_HUB_SCRIPT || DEFAULT_HUB_SCRIPT);
+      spawnHub(resolveHubScript(process.env, hubScript));
       if (await waitForHealth(host, Math.min(deadline, Date.now() + SPAWN_WAIT_MS))) r = await tryPost(host, route, data, deadline);
     }
     return r.ok;

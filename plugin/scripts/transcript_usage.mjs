@@ -75,7 +75,7 @@ export function scan(file, previous, maxRead = MAX_READ) {
 }
 
 /** Context window guess (transcripts do not record it): 1M when the context is past 200k or the model id says
- * [1m], else `dflt` (1M: desktop sessions run with a 1M window; set "context_window" in agent-gadget.json). */
+ * [1m], else `dflt` (1M: desktop sessions run with a 1M window; set "context_window" in the config file). */
 export function contextWindow(lastCtx, model, dflt = 1000000) {
   return lastCtx > 200000 || String(model).includes('[1m]') ? 1000000 : dflt;
 }

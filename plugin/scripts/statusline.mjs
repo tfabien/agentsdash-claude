@@ -14,12 +14,12 @@
  *
  * Install (manual): "statusLine": {"type": "command", "command": "node <plugin dir>/scripts/statusline.mjs",
  * "refreshInterval": 10} in ~/.claude/settings.json. The Claude desktop app does not run status lines: the hub polls
- * the quotas itself. CLAUDE_GADGET_DRY_RUN=1 writes the body to stderr instead of posting it.
+ * the quotas itself. AGENTSDASH_DRY_RUN=1 (old name CLAUDE_GADGET_DRY_RUN) writes the body to stderr instead of posting it.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { hubHost, stateDir } from './common.mjs';
+import { envVar, hubHost, stateDir } from './common.mjs';
 import { postToHub } from './hub_client.mjs';
 
 const RESEND_S = 60;
@@ -157,7 +157,7 @@ async function main() {
   const lastFile = path.join(dir, `${body.session || 'session'}.usage`);
   if (!shouldSend(body, readJson(lastFile), now)) return;
   try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(lastFile, JSON.stringify({ key: sendKey(body), at: now }), 'utf8'); } catch { /* resend next time */ }
-  if (process.env.CLAUDE_GADGET_DRY_RUN) { process.stderr.write(`${JSON.stringify(body)}\n`); return; }
+  if (envVar('DRY_RUN')) { process.stderr.write(`${JSON.stringify(body)}\n`); return; }
   await postToHub('/usage', body, { host: hubHost(), timeoutMs: 1000 });
 }
 
