@@ -20,7 +20,8 @@ const payload = (base, event, fields = {}) => ({ ...base, hook_event_name: event
 const tmp = (p = 'notify-') => fs.mkdtempSync(path.join(os.tmpdir(), p));
 
 function run(data, extraEnv = {}, input) {
-  const env = { ...process.env, CLAUDE_GADGET_DRY_RUN: '1', CLAUDE_GADGET_STATE_DIR: tmp(), ...extraEnv };
+  // Quotas off: a real run must not start the poller (it would call Anthropic with the developer's credentials).
+  const env = { ...process.env, CLAUDE_GADGET_DRY_RUN: '1', CLAUDE_GADGET_STATE_DIR: tmp(), AGENTSDASH_QUOTAS: '0', ...extraEnv };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
   return spawnSync(process.execPath, [SCRIPT], { input: input ?? JSON.stringify(data), env, encoding: 'utf8', timeout: 10000 });
 }
@@ -419,7 +420,7 @@ test('two_parallel_hooks_leave_one_hub', async () => {
   const port = await freePort();
   const pids = tmp('hubpid-');
   const stub = makeStub(pids);
-  const env = { ...process.env, CLAUDE_GADGET_HOST: `127.0.0.1:${port}`, CLAUDE_GADGET_HUB_SCRIPT: stub, CLAUDE_GADGET_STATE_DIR: tmp() };
+  const env = { ...process.env, CLAUDE_GADGET_HOST: `127.0.0.1:${port}`, CLAUDE_GADGET_HUB_SCRIPT: stub, CLAUDE_GADGET_STATE_DIR: tmp(), AGENTSDASH_QUOTAS: '0' };
   delete env.CLAUDE_GADGET_DRY_RUN;
   const one = (sid) => new Promise((resolve) => {
     const c = spawn(process.execPath, [SCRIPT], { env, stdio: ['pipe', 'ignore', 'ignore'] });
@@ -435,4 +436,14 @@ test('two_parallel_hooks_leave_one_hub', async () => {
   } finally {
     for (const f of fs.readdirSync(pids)) { try { process.kill(Number(f)); } catch { /* already gone */ } }
   }
+});
+
+test('notify_ignores_an_unwritable_state_folder_for_the_poller', async () => {
+  const blocker = path.join(tmp(), 'not-a-folder');
+  fs.writeFileSync(blocker, 'x');
+  const port = await freePort();
+  const out = run(payload(LEAD, 'Stop'), { CLAUDE_GADGET_DRY_RUN: undefined, CLAUDE_GADGET_STATE_DIR: blocker, AGENTSDASH_QUOTAS: undefined, CLAUDE_GADGET_HOST: `127.0.0.1:${port}`, CLAUDE_GADGET_HUB_SCRIPT: path.join(tmp(), 'missing.mjs') });
+  assert.equal(out.status, 0);
+  assert.equal(out.stdout, '');
+  assert.equal(out.stderr, '');
 });

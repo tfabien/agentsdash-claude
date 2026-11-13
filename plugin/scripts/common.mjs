@@ -5,6 +5,15 @@ import path from 'node:path';
 
 export const DEFAULT_HUB = '127.0.0.1:8765';
 
+/** Value of AGENTSDASH_<name>, else the old CLAUDE_GADGET_<name> (the first non-empty one), else undefined. */
+export function envVar(name, env = process.env) {
+  for (const prefix of ['AGENTSDASH_', 'CLAUDE_GADGET_']) {
+    const v = env[prefix + name];
+    if (typeof v === 'string' && v !== '') return v;
+  }
+  return undefined;
+}
+
 /** Collapse whitespace. No limit and no ASCII reduction: the hub keeps the full text, each screen adapts it (devices: relay's forDevice). */
 export function tidy(text) {
   return String(text ?? '').split(/\s+/).filter(Boolean).join(' ');

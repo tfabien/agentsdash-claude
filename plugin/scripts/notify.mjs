@@ -24,6 +24,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tidy, configWindow, hubHost, pluginConfig, stateDir } from './common.mjs';
 import { postEvent, restartStaleHub } from './hub_client.mjs';
+import { maybeSpawnPoller } from './quota_poller.mjs';
 import { update as updatePlan } from './plan_tracker.mjs';
 import { contextWindow, loadCache, saveCache, scan } from './transcript_usage.mjs';
 
@@ -271,6 +272,7 @@ async function main() {
   ev = addPlan(addUsage(ev, p, dir, Boolean(env.CLAUDE_GADGET_MASK), configWindow(pluginConfig(env))), plan);
   if (env.CLAUDE_GADGET_DRY_RUN) { process.stderr.write(`${JSON.stringify(ev)}\n`); return; }
   if (ev.evt === 'SessionStart') await restartStaleHub({ host: hubHost(env) });       // a plugin update leaves an old hub running
+  maybeSpawnPoller({ dir, env, cfg: pluginConfig(env), now: Date.now() / 1000 });      // plan quotas, at most once a minute, detached
   await postEvent(ev, { host: hubHost(env), timeoutMs: 1500 });
 }
 
