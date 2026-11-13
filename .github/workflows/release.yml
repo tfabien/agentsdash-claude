@@ -1,0 +1,34 @@
+name: release
+
+# A tag vX.Y.Z packs the core (plugin/hub without test/ and tools/) into agentsdash-core-X.Y.Z.tar.gz with its sha256 file.
+# Adapters download the tarball at first run and check the hash before unpacking.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run tests
+        run: node --test plugin/hub/test/*.test.mjs plugin/test/*.test.mjs
+      - name: Pack the core
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          CORE="$(node -p "require('./plugin/hub/package.json').version")"
+          if [ "$V" != "$CORE" ]; then echo "tag $V does not match plugin/hub/package.json $CORE"; exit 1; fi
+          FILE="agentsdash-core-$V.tar.gz"
+          git archive --format=tar.gz --prefix="agentsdash-core-$V/" -o "$FILE" "HEAD:plugin/hub" ':(exclude)test' ':(exclude)tools'
+          sha256sum "$FILE" > "$FILE.sha256"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$FILE" "$FILE.sha256" --generate-notes
