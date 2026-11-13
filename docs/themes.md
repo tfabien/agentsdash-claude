@@ -66,6 +66,7 @@ A palette variant changes the whole page and only one is active. **Looks** chang
 ```
 
 - `looks`: up to 12 entries (`a-z0-9-` keys). `label`: the chip text. `sprite`: optional integer 1 to 99, the numbered files of the pack (`1` is `lead.png`, `2` is `lead-2.png`); a role without that number draws its plain file. `accent`: optional `#rrggbb`, tints the agent through the pack's tint mode (a pack with `tint: none` ignores it). A look without `accent` uses the theme or variant accent.
+- `palette`: optional name of a palette in the pack's `pack.json` (`a-z0-9-`, up to 32 characters, see "Palette swaps" below). A look without it draws the original artwork. A name the pack does not define is accepted and draws the original artwork. A look may combine `sprite`, `palette` and `accent`.
 - `defaultLooks`: the looks active until the user chooses. Missing or empty: all of them. Unknown keys are dropped.
 - The theme card shows a chip per look when the theme has more than one. A click turns a look on or off (the last active look stays on). The choice is the hub setting `themeLooks` (`{ "<theme>": ["<look>", ...] }`), shared by all pages. **Save as theme** keeps the active looks as `looks` and `defaultLooks` of the new theme.
 - A theme without `looks` behaves as before: the hash picks among all the numbered files of each role.
@@ -83,6 +84,29 @@ An optional `icons/<pack>/pack.json` says how the theme `accent` tints the pack:
 - `tint: "hue"`: pictures (PNG, GIF, WebP, SVG) get a hue rotation from `hue` (the base hue of the artwork in degrees, default 0) to the hue of the accent. It changes every color of the picture, so it suits single-color artwork. It needs a browser with canvas `filter` (Chrome, Edge).
 - `tint: "none"` or no file: the accent is ignored.
 - The marketplace install copies `pack.json` with the icons (4 KB at most).
+
+## Palette swaps: `pack.json` `palettes`
+
+A look can recolor part of a raster icon (for example only the hair) without a second sprite. `pack.json` names exact-color maps, and a look picks one with `palette`:
+
+```json
+{ "tint": "none",
+  "palettes": {
+    "hair-blond": { "#3b241c": "#6b4b12", "#6e432b": "#b27a22", "#b77848": "#f0c45c" },
+    "hair-black": { "#3b241c": "#111218", "#6e432b": "#292b35", "#b77848": "#505462" } } }
+```
+
+```json
+{ "looks": { "brown": { "label": "Brown" }, "blond": { "label": "Blond", "palette": "hair-blond" } } }
+```
+
+- `palettes`: optional object, at most 12 names (`a-z0-9-`). Each palette is a non-empty object of at most 32 `"#rrggbb": "#rrggbb"` replacements (colors are lowercased). A bad palette is dropped and listed in the catalog errors, the rest of the pack still loads. `pack.json` stays under 4 KB.
+- Matching is exact: a pixel changes only when its RGB equals a source color. Alpha is kept, every unmapped pixel stays as drawn. The swap runs at the image's own resolution, then the image is scaled and drawn as usual.
+- Order for one agent: the look picks the numbered sprite, the palette swap applies to that image, then the `hue` tint (tint mode `hue`) applies on top.
+- Use PNG or lossless WebP. Lossy compression (JPEG, lossy WebP) shifts colors by a few units, and antialiased edges blend the source color with its neighbors, so those pixels never match. Draw the recolored areas in flat colors.
+- SVG files ignore palettes (use `currentColor` with `tint: svg`). Animated GIF and WebP are drawn unmodified. If the browser cannot read the pixels, the original artwork is drawn.
+- Compared to the other tools: `hue` rotates every color of the picture, `currentColor` tints vector files, and a numbered `sprite` is genuinely different artwork. A palette swap changes chosen colors only.
+- An uninstalled marketplace card may preview the base artwork. Installed themes draw every palette look.
 
 ## Color editor and saved themes
 
