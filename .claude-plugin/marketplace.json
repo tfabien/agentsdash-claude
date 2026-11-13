@@ -1,12 +1,12 @@
 {
-  "name": "standup-bot",
-  "owner": { "name": "standup-bot" },
-  "metadata": { "description": "standup-bot: an agent standup screen for Claude Code, in your browser." },
+  "name": "agentsdash",
+  "owner": { "name": "agentsdash" },
+  "metadata": { "description": "agentsdash: an agent dashboard for Claude Code, in your browser." },
   "plugins": [
     {
-      "name": "standup-bot",
+      "name": "agentsdash",
       "source": "./plugin",
-      "description": "Agent standup in your browser: every Claude Code session, sub-agent, plan and question on one screen (optional ESP32 devices).",
+      "description": "Agent dashboard in your browser: every Claude Code session, sub-agent, plan and question on one screen (optional ESP32 devices).",
       "version": "0.4.1"
     }
   ]

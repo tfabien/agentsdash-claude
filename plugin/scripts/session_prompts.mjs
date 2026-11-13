@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Prompts for the standup screen (SessionStart and UserPromptSubmit hooks). On by default; turn off with
+ * Prompts for the agentsdash screen (SessionStart and UserPromptSubmit hooks). On by default; turn off with
  * env CLAUDE_GADGET_PROMPTS=0 or {"prompts": false} in ~/.claude/agent-gadget.json.
  *
  * SessionStart: tells Claude to ask every question through AskUserQuestion and to keep a task list, which is the only
@@ -18,7 +18,7 @@ export const NUDGE_EVERY = 8;        // tool calls without a plan change between
 const PLAN_TOOLS = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite', 'mcp__ccd_turn__update_plan', 'mcp__ccd_turn__wrap_up']);
 
 export const RULES = [
-  'The user follows this session on the standup-bot screen, which shows questions and plan progress.',
+  'The user follows this session on the agentsdash screen, which shows questions and plan progress.',
   '1. Ask every question to the user through the AskUserQuestion tool (2 to 4 likely answers, recommended one first), never as plain text.',
   '2. Before a task with more than one step, create a task list with the task-list tool of this session, one entry per step.',
   '3. Keep the list current: mark a step in progress when you start it, completed when it is done, and rewrite the list when the plan changes.',
@@ -40,7 +40,7 @@ function nudge(payload, dir) {
   const open = tasks.filter((t) => t.status !== 'completed');
   if (!open.length) return null;
   const running = open.some((t) => t.status === 'in_progress');
-  return `standup-bot: ${calls} tool calls since the task list last changed, ${open.length} step(s) unfinished`
+  return `agentsdash: ${calls} tool calls since the task list last changed, ${open.length} step(s) unfinished`
     + `${running ? '' : ' and none marked in progress'}. Mark finished steps completed and the current one in progress now.`;
 }
 
@@ -54,7 +54,7 @@ export function contextFor(payload, { env = process.env, cfg = pluginConfig(env)
   const open = tasks.filter((t) => t.status !== 'completed').length;
   if (!open || ageMs === null || ageMs < STALE_MS) return null;
   const minutes = Math.round(ageMs / 60000);
-  return `standup-bot: the task list has ${open} unfinished step(s) and has not changed for ${minutes} minutes. `
+  return `agentsdash: the task list has ${open} unfinished step(s) and has not changed for ${minutes} minutes. `
     + 'Update it to match the work before continuing, or clear it if that work is done.';
 }
 
