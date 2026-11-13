@@ -7,7 +7,7 @@ each plan has come, and which agent waits for you. It makes the daily work with 
 2. **Follow my agents**: see every session, its sub-agents and what each one is doing, like a stand-up meeting of the agents.
 3. **Know what needs my attention**: when an agent asks a question or waits for a permission, the screen turns orange and beeps, so I can work on something else without watching the terminal.
 
-![The hub page: one tile per session](docs/images/page-grid.png)
+![The hub page: one tile per session, 2x2](docs/images/page-hub.png)
 
 It is a Claude Code plugin plus a small Node.js server that draws the screen **in your browser**. Nothing to buy, nothing to flash.
 An external screen (an ESP32 gadget, a USB display) is a bonus, see [Devices](#devices-optional).
@@ -37,67 +37,60 @@ Details, update, uninstall and troubleshooting: [INSTALL.md](INSTALL.md).
 The page is a grid with one tile per session. Each tile is drawn like the screen of the gadget, as vectors at the resolution of your display.
 The screenshots below are taken from the real page, fed with made-up sessions (`node plugin/hub/tools/page_screenshots.mjs`).
 
-### Plan: see and follow the progress
+### Sessions hub: all sessions at once
+
+![Four sessions of four projects in a 2x2 grid](docs/images/page-hub.png)
+
+Open <http://127.0.0.1:8765/> for a grid with one tile per session (Claude Code CLI or desktop app), named after its title and colored by project.
+
+- Orange tiles need you (the page beeps), red tiles have an error, and the frame of a tile pulses when something happens in its session.
+- A session waiting for you for 5 minutes turns grey and moves to the end (the hub drops it after 10). The trash icon on a grey tile hides it until it works again or asks you something.
+- A tap on a tile opens that session full screen, BACK returns. More sessions than tiles make pages: side arrows, dots (orange or red when a session on that page needs you or failed), a swipe or the left and right keys.
+- The settings menu (gear) sets the tiles per page (Auto fits the window, 1 shows one session at a time), the beeps, the pulse and the grey-out. The hub keeps them for every page.
+- The hub keeps 12 sessions by default: set `"max_sessions"` (up to 32) in `~/.claude/agent-gadget.json` to change it.
+
+### Plans: see and follow the progress
 
 ![Plan progress and context of a session](docs/images/page-plan.png)
 
 - Plan progress built from the task list of the session (`TaskCreate`/`TaskUpdate`, `TodoWrite`, the desktop `update_plan`): segmented bar, current step and next step. Steps running in parallel each pulse.
-- Context fill bar next to the plan (green under 60 %, orange 60 to 79 %, red from 80 %).
-- One lead per Claude Code session (CLI or desktop app), up to 5 sessions, with the project name or the session title.
+- Context fill ring next to the project badge (green under 60 %, orange 60 to 79 %, red from 80 %).
 
 ### Questions: display and notification
 
 ![A pending question](docs/images/page-question.png)
 
-- A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the page beeps.
+- A pending `AskUserQuestion` shows the question and its numbered options. The session turns orange and the page beeps.
 - Permission prompts turn the session orange too.
 - Click the speaker icon (bottom bar) to switch the beeps between `all`, `ask` (needs you only, the default) and `off`. The choice is kept by the hub, so every open page follows it.
 
-### Sessions hub: all sessions at once
-
-Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn like the device screen without its title and status bars. Orange tiles need you (the page beeps), red tiles have an error, the frame of a tile pulses when something happens in its session, and a session waiting for you for 5 minutes turns grey and moves to the end (the hub drops it after 10). The quotas and the clock appear once, in the bar at the bottom. The settings menu (gear) sets the tiles per page (Auto fits the window, 1 shows one session at a time), the beeps, the pulse and the grey-out; the hub keeps them for every page. A tap on a tile opens that session full screen, BACK returns. More sessions than tiles make pages: use the side arrows, the dots (orange or red when a session on that page needs you or failed), a swipe or the left and right keys. The hub keeps 12 sessions by default: set `"max_sessions"` (up to 32) in `~/.claude/agent-gadget.json` to change it.
-
-### Sub-agents: see and follow them
+### Sub-agents: see and follow them, click for the detail
 
 ![3 sub-agents](docs/images/page-subs3.png)
 
 ![6 sub-agents, compact rows](docs/images/page-compact.png)
 
-- One row per sub-agent: role robot (lead, general, explore, plan, review, test, code, generic), name, current action, age.
+- One row per sub-agent: role robot (lead, general, explore, plan, review, test, code, generic), name, current action, tokens, age.
 - 1 to 4 sub-agents get large rows, 5 to 7 compact rows, 8 or more show 6 rows and "+N more".
 - Six states with their color: working (green), needs you (orange), error (red), your turn (grey-blue), waiting on sub-agents (blue), done (faint).
 - Robots blink while working, and the state bar of an agent that needs you pulses orange.
 
-### Click: agent detail and session list
+![Detail of one sub-agent](docs/images/page-detail.png)
 
-![Agent detail](docs/images/page-detail.png)
-
-- Click a sub-agent row: the left panel shows its full command, tokens and previous command. Click the panel to go back.
-- Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state. The **trash icon** at the end of a row hides that session (finished demos, old sessions); it comes back by itself when it works again or asks you something, not when it only reports that it is idle.
-- The page shows one session at a time, chosen like this: the session that needs you first, else one that is working (so its sub-agents show), else the one that last reached "your turn". Click a dot or a row of the list to look at another session for 30 s.
+Click a sub-agent row: the panel shows its state, tokens and full command. BACK returns.
 
 ### Quotas
 
-- Bottom bar: 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset). The hub polls them for the desktop app; a terminal status line can feed them too.
-- A small clock sits at the right of the bottom bar. The page has no standby view (the big clock after 5 idle minutes): that stays on the ESP32 gadget.
+![The bottom bar: quotas, beeps, theme, settings, clock](docs/images/page-quotas.png)
 
-### Themes, looks and project rules
+- 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset). The hub polls them for the desktop app; a terminal status line can feed them too.
+- The clock sits at the right of the bar. The page has no standby view (the big clock after 5 idle minutes): that stays on the ESP32 gadget.
 
-![The theme dialog](docs/images/page-themes.png)
+### Themes
 
-The palette button of the bottom bar opens the theme dialog: one list of installed and marketplace themes with search, tags and status filter, a preview of each, and Apply, Install, Update, Preview, Delete. The choice is kept by the hub, so every open page follows.
+The palette button of the bar opens the theme dialog: install themes from the marketplace, apply one, edit its colors, tick the looks agents are drawn with, or save your own theme. Project rules (settings menu) give the sessions of some folders their own badge color or icon pack, for example a red badge on `prod-*` folders.
 
-- **Variants**: a theme can ship several color variants (for example light and dark), picked with swatches on its card.
-- **Accent**: a theme or a variant can set an icon accent that tints the agents (SVG `currentColor`, or a hue rotation for pictures).
-- **Looks**: a theme can offer several characters. Tick the looks you want and each agent takes one by a stable hash of its id, so it keeps its look. A look can pick a numbered sprite, an accent and a **palette**.
-- **Palette swaps**: an icon pack can recolor chosen colors of a PNG or lossless WebP (hair, for example) by exact match, without a second sprite. Skin, clothes, outlines and transparency stay as drawn.
-- **Color editor and Save as theme** (screenshot below): **Edit colors** changes any color of the active theme live (with a contrast warning), and **Save as theme** keeps the result, variant and ticked looks as your own theme in `~/.claude/standup-bot/themes/`.
-- **Project rules** (settings menu, second screenshot below): give the sessions of some folders their own icon pack and badge color, matched on the session's working directory with globs (`C:/work/prod-*`). First match wins. A production folder can show a red badge so it stands out in the grid.
-![The color editor](docs/images/page-editor.png)
-
-![The settings with two project rules](docs/images/page-settings.png)
-
-- standup-bot ships no theme: the hub downloads the `robot` theme (set another with `"theme": "office-modern"` in `~/.claude/agent-gadget.json`) from [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes) at its first launch when none is installed (offline, the page draws built-in robots). More themes (cat, lemmings, office, pirates, spelunky, yokai...) are in [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes). Ask Claude Code "install a standup-bot theme" (skill `install-theme`) or follow that repository's `install.md`, which also explains how to create your own. Installed marketplace themes are checked for new versions every 6 hours. Format of themes, packs, looks and palettes: [docs/format.md](https://github.com/tfabien/standup-bot-themes/blob/main/docs/format.md) in the themes repository. Folders, project rules and the marketplace on the hub side: [docs/hub-themes.md](docs/hub-themes.md).
+standup-bot ships no theme: the hub downloads one at its first launch from [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes), which holds the themes (robot, cat, lemmings, office, pirates, spelunky, yokai...), how to install them and the format to create your own. Hub side (folders, project rules, marketplace): [docs/hub-themes.md](docs/hub-themes.md).
 
 ## How it works
 
