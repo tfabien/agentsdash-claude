@@ -22,7 +22,7 @@ const PLAN_TOOLS = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite', 'mcp__ccd_t
 
 export const RULES = [
   'The user follows this session on the agentsdash screen, which shows questions and plan progress.',
-  '1. Ask every question to the user through the AskUserQuestion tool (2 to 4 likely answers, recommended one first), never as plain text.',
+  '1. Ask every question to the user through the AskUserQuestion tool (2 to 4 likely answers, recommended one first), never as plain text. A wrap-up or next-step box does not replace it: put the decision in AskUserQuestion and leave the ask and actions fields of wrap_up empty.',
   '2. Before a task with more than one step, create a task list with the task-list tool of this session, one entry per step.',
   '3. Keep the list current: mark a step in progress when you start it, completed when it is done, and rewrite the list when the plan changes.',
 ].join('\n');
