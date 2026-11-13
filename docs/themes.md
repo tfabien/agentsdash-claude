@@ -22,6 +22,16 @@ A theme is one JSON file, `themes/<name>.json`. Code: `plugin/hub/web/theme_sche
 - `description`: optional text, cut to 200 characters. `keywords`: optional list of words, at most 8, each cut to 24 characters. The marketplace shows and searches them.
 - `colors`: an object with keys among `SCREEN BAR FRAME PANEL ROW TEXT LIGHT FAINT WORKING NEEDS ERROR YOURTURN WAITING ACCENT CHIP ACCENT_DIM NEEDS_DIM`, values `#rrggbb`. A missing or invalid key keeps the built-in color.
 - `iconPack`: the name of an icon pack. A missing or malformed name gives `robot`.
+- `accent`: optional `#rrggbb`, the color that tints the icons of packs that support it (see `pack.json` below).
+- `variants`: optional object, at most 12, keyed by `a-z0-9-`. Each variant has an optional `label`, a partial `colors` object (merged over the theme colors) and an optional `accent` (falls back to the theme accent). An invalid variant, color or accent is dropped.
+
+```json
+{ "name": "cat", "iconPack": "cat", "accent": "#e8903a", "colors": { "FRAME": "#6b4630" },
+  "variants": { "light": { "label": "Light", "colors": { "SCREEN": "#f6f8fa", "TEXT": "#202020" } },
+                "blue": { "colors": {}, "accent": "#6e7bf2" } } }
+```
+
+The page shows one swatch per variant on the theme card (setting `themeVariant`). Order of application: theme colors, variant colors, then the edits of the user.
 - A file over 256 KB, invalid JSON, a bad `name` or a missing `colors` object is skipped. The hub lists the reason in `errors` of the catalog.
 
 ## Icon pack folder
@@ -42,6 +52,26 @@ icons/mypack/lead.svg      lead-blink.svg
 - Draw in `viewBox="0 0 36 42"`. The page scales the icon, so the size and the blink timing are the same for every pack.
 - A file over 256 KB is skipped. A pack with no valid file is not listed.
 - A missing role file falls back to the `robot` pack for that role.
+
+## Icon accent: `pack.json`
+
+An optional `icons/<pack>/pack.json` says how the theme `accent` tints the pack:
+
+```json
+{ "tint": "svg" }
+{ "tint": "hue", "hue": 30 }
+```
+
+- `tint: "svg"`: SVG files marked with `currentColor` take the accent (strokes, fills). Use it for minimal or line packs.
+- `tint: "hue"`: pictures (PNG, GIF, WebP, SVG) get a hue rotation from `hue` (the base hue of the artwork in degrees, default 0) to the hue of the accent. It changes every color of the picture, so it suits single-color artwork. It needs a browser with canvas `filter` (Chrome, Edge).
+- `tint: "none"` or no file: the accent is ignored.
+- The marketplace install copies `pack.json` with the icons (4 KB at most).
+
+## Color editor and saved themes
+
+The **Edit colors** button of the active theme card opens an editor: one color input per color key, one for the icon accent, a live preview and a warning when the text contrast against the panel or screen background is under 4.5. Edits are stored in the hub setting `themeOverrides` (key `<theme>` or `<theme>/<variant>`), so every page follows. **Reset edits** drops them.
+
+**Save as theme** writes the look (theme, variant and edits, flattened, without variants) to `~/.claude/standup-bot/themes/<name>.json` through `POST /themes` (`{ name, label?, theme, variant?, override?, overwrite? }`). A built-in name and a name installed from the marketplace are refused (an update would revert it). An existing user theme needs `overwrite: true` (the page asks first, the route answers 409 otherwise). The saved theme is applied and can be deleted with the Delete button.
 
 ## Drop-in folders
 
