@@ -64,7 +64,7 @@ The core lives in `~/.agentsdash/core/<version>/`; to start one by hand: `node ~
 
 If `/health` answered in step 4, ask the user through AskUserQuestion whether they also want agentsdash on their phone (a second screen on the same Wi-Fi, read-only; needs core 0.5.0 or later). If `/health` did not answer yet, skip this step and tell the user to ask for it in the new session ("show agentsdash on my phone").
 
-- Yes: run `node "$(ls -d ~/.agentsdash/core/*/ | sort -V | tail -1)pair.mjs"` (without a POSIX shell, run `pair.mjs` from the highest version folder of `~/.agentsdash/core/`). It turns phone access on (`lan.enabled` in `~/.agentsdash/config.json`), restarts the hub, and prints a QR code and an address. Say that it did so, show the QR code and the address exactly as printed, in a code block, and ask the user to scan it with the phone camera.
+- Yes: run `node "$(ls -d ~/.agentsdash/core/*/ | sort -V | tail -1)pair.mjs"` (without a POSIX shell, run `pair.mjs` from the highest version folder of `~/.agentsdash/core/`). It turns phone access on (`lan.enabled` in `~/.agentsdash/config.json`, no restart on a running core 0.5.1 or later) and prints a QR code and an address. Say that it did so, show the QR code and the address exactly as printed, in a code block, and ask the user to scan it with the phone camera.
 - No: say they can ask later ("show agentsdash on my phone", the `pair-phone` skill does it).
 
 ## 6. What to tell the user
