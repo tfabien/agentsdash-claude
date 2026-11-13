@@ -100,6 +100,21 @@ function clearMarker(file) {
   try { fs.unlinkSync(file); return true; } catch { return false; }       // true when a marker existed
 }
 
+const EXCERPT_MAX = 300;
+
+/**
+ * First and last paragraph of the last reply (blank-line separated), markdown marks removed, each cut to EXCERPT_MAX characters.
+ * Fields are left out when the reply is empty.
+ */
+export function replyExcerpts(message) {
+  const paras = String(message ?? '').split(/\n\s*\n/)
+    .map((x) => tidy(x.replace(/^\s*(#{1,6}|[-*>]|\d+\.)\s+/gm, '').replace(/[*`]/g, '')))
+    .filter(Boolean);
+  if (!paras.length) return {};
+  const cut = (x) => (x.length > EXCERPT_MAX ? `${x.slice(0, EXCERPT_MAX - 3)}...` : x);
+  return { reply_first: cut(paras[0]), reply_last: cut(paras[paras.length - 1]) };
+}
+
 /** Map one hook payload to a v2 event object, or null when nothing should be sent. */
 export function buildEvent(p, env = process.env, dir = stateDir(env)) {
   const hook = p.hook_event_name ?? '';
@@ -180,7 +195,12 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
     // would bring back a session the hub dropped after 10 quiet minutes, or that the user hid.
     return null;
   }
-  if (hook === 'Stop') { clearMarker(marker); return event('your_turn', 'Done, waiting for you'); }
+  if (hook === 'Stop') {
+    clearMarker(marker);
+    const ev = event('your_turn', 'Done, waiting for you');
+    if (!mask) Object.assign(ev, replyExcerpts(p.last_assistant_message));      // the hub page shows the one the user picked
+    return ev;
+  }
   if (hook === 'SessionEnd') { clearMarker(marker); return event('done', 'Session ended'); }
   return null;
 }
