@@ -6,7 +6,7 @@ Themes and icon packs are files. The hub reads the built-in ones from `plugin/hu
 
 ## Built-in theme and more themes
 
-standup-bot ships no theme file. At the first launch of the hub, when no theme is installed, it downloads the `robot` theme (else the first one listed) from the first marketplace source and applies it; it retries every 10 minutes while that fails (offline). Until then the page draws the built-in vector robots in the firmware colors. The themes live in https://github.com/tfabien/standup-bot-themes (cat, lemmings, office, pirates, spelunky and more). Install them with the `install-theme` skill of the plugin, or follow `install.md` of that repository, which also lists the constraints to create a theme.
+standup-bot ships no theme file. At the first launch of the hub, when no theme is installed, it downloads the theme named by `"theme"` in `~/.claude/agent-gadget.json` or the env `CLAUDE_GADGET_THEME` (default `robot`; else the first one listed) from the first marketplace source and applies it; it retries every 10 minutes while that fails (offline). Until then the page draws the built-in vector robots in the firmware colors. The themes live in https://github.com/tfabien/standup-bot-themes (cat, lemmings, office, pirates, spelunky and more). Install them with the `install-theme` skill of the plugin, or follow `install.md` of that repository, which also lists the constraints to create a theme.
 
 ## Theme file
 
