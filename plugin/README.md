@@ -65,6 +65,22 @@ Quotas are only reported to Pro/Max subscribers.
 The context estimate from transcripts assumes a 1M window (desktop sessions); set `"context_window": 200000` in
 `~/.agentsdash/config.json` for 200k sessions.
 
+## Where the hub comes from
+
+The hooks start the hub (the core) themselves. They look for it in this order (first match wins):
+
+1. `AGENTSDASH_CORE_DIR=<folder holding hub.mjs>` (a checkout or your own build; the old `CLAUDE_GADGET_HUB_SCRIPT=<path to hub.mjs>` still works as a fallback).
+2. The `hub/` folder next to `scripts/` (only in this repository's checkout).
+3. The highest core in `~/.agentsdash/core/<version>/` that speaks protocol 2 and is at least version 0.4.1.
+4. None: `scripts/core_install.mjs` starts detached and downloads the newest release of `tfabien/agentsdash` that speaks protocol 2
+   (the `core_repo` key of the config file, or the variable `AGENTSDASH_CORE_REPO`, names another repository), checks its sha256 and unpacks it
+   into `~/.agentsdash/core/<version>/`. The event that triggered it is dropped; the next one finds the core. Offline, nothing is printed and the
+   download is tried again after 10 minutes.
+
+A running hub is left alone unless it is the wrong one. With a core from steps 1 or 2 it is replaced when it runs another script or started before
+its files changed. With an installed core it is replaced only when its `/health` has no `core`, a different `protocol`, or a `core` below the minimum
+(a newer core is never replaced).
+
 ## Setup
 
 1. Tell the plugin where to send events (first match wins): env var `AGENTSDASH_HOST=127.0.0.1:8765`, or

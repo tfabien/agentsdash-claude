@@ -81,6 +81,7 @@ node <plugin folder>/hub/hub.mjs
 |---|---|
 | Update | `claude plugin marketplace update agentsdash`, then `claude plugin update agentsdash@agentsdash`, then open a new session. Stop the old hub so the new one starts: close the process listening on port 8765. |
 | Uninstall | `claude plugin uninstall agentsdash@agentsdash` and `claude plugin marketplace remove agentsdash` |
+| No page just after the install | The first hook downloads the hub (the core) from GitHub into `~/.agentsdash/core/<version>/`; the first event is dropped, the next one starts it. Wait a minute, send another message, check that the folder exists. Offline: the download is retried every 10 minutes. |
 | Page empty | The session was opened before the install: open a new one. Check `claude plugin list` (enabled). |
 | Port 8765 busy | Another program uses it. Set `{"host": "127.0.0.1:8777"}` in `~/.agentsdash/config.json` (or the environment variable `AGENTSDASH_HOST=127.0.0.1:8777`), then open that address. |
 | `node` not found by hooks | Claude Code must find `node` in its `PATH`: restart it after installing Node.js. |

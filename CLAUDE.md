@@ -45,6 +45,8 @@ The page redraws the device screen as vectors: `web/screen.js` is a port of the 
 
 ## Pitfalls
 
+- The hooks never download inside a hook: `core_install.mjs` and `quota_poller.mjs` run detached, started by `notify.mjs` / `hub_client.mjs` and throttled by stamp files in the state folder (`core_install.stamp` 10 min, `quota_poll.stamp` 1 min).
+- `plugin/hub/test/fixtures/events.jsonl` is recorded from the hooks (`node plugin/test/tools/record_events.mjs`); after changing what `notify.mjs` sends, rerun it, the hub contract test replays the file.
 - Windows: `process.exit` right after spawning the detached hub crashes Node (libuv assertion): hooks set `process.exitCode`.
 - A shell here-document or `sed` turns `\n` in a replacement into a real newline: edit code with an editor tool or a Python script file.
 - `sleep` of more than a few seconds is blocked in the shell tool: wait with a loop on a condition.
