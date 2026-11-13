@@ -4,10 +4,14 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { envVar } from './common.mjs';
+import { MIN_CORE, PROTOCOL, compareVersions, coresDir, envVar, stateDir } from './common.mjs';
+
+export { MIN_CORE, PROTOCOL };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_HUB_SCRIPT = path.resolve(HERE, '..', 'hub', 'hub.mjs');
+const DEFAULT_HUB_SCRIPT = path.resolve(HERE, '..', 'hub', 'hub.mjs');         // the hub folder next to the scripts: only in the checkout
+const INSTALLER = path.join(HERE, 'core_install.mjs');
+const INSTALL_EVERY_S = 600;
 const SPAWN_WAIT_MS = 400;
 
 const isLoopback = (host) => /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host);
@@ -57,13 +61,44 @@ function spawnHub(script) {
 const real = (f) => { try { return fs.realpathSync(f); } catch { return f; } };
 
 /**
- * The hub script to run: an explicit argument, else AGENTSDASH_CORE_DIR (a core folder, holding hub.mjs), else the old
- * CLAUDE_GADGET_HUB_SCRIPT (a path to hub.mjs), else the hub folder next to this plugin.
+ * The hub to run. Mode `local`: a script the user or the checkout names (an explicit argument, AGENTSDASH_CORE_DIR, the old
+ * CLAUDE_GADGET_HUB_SCRIPT, the hub folder next to the scripts); the version rule does not apply. Mode `installed`: the highest
+ * ~/.agentsdash/core/<version>/ whose package.json speaks PROTOCOL and whose version is at least MIN_CORE. null when there is none.
+ * `siblingScript: null` turns the checkout lookup off (tests, and the adapter repo where no hub folder exists). Never throws.
  */
-export function resolveHubScript(env = process.env, hubScript) {
-  if (hubScript) return hubScript;
-  if (env.AGENTSDASH_CORE_DIR) return path.join(env.AGENTSDASH_CORE_DIR, 'hub.mjs');
-  return envVar('HUB_SCRIPT', env) || DEFAULT_HUB_SCRIPT;
+export function findCore({ env = process.env, hubScript, siblingScript = DEFAULT_HUB_SCRIPT } = {}) {
+  if (hubScript) return { script: hubScript, mode: 'local' };
+  if (env.AGENTSDASH_CORE_DIR) return { script: path.join(env.AGENTSDASH_CORE_DIR, 'hub.mjs'), mode: 'local' };
+  const old = envVar('HUB_SCRIPT', env);
+  if (old) return { script: old, mode: 'local' };
+  try { if (siblingScript && fs.existsSync(siblingScript)) return { script: siblingScript, mode: 'local' }; } catch { /* look at the installed cores */ }
+  try {
+    const base = coresDir(env);
+    const versions = fs.readdirSync(base).filter((n) => /^\d+\.\d+\.\d+$/.test(n)).sort((a, b) => compareVersions(b, a));
+    for (const version of versions) {
+      if (compareVersions(version, MIN_CORE) < 0) continue;
+      try {
+        const script = path.join(base, version, 'hub.mjs');
+        const meta = JSON.parse(fs.readFileSync(path.join(base, version, 'package.json'), 'utf8'));
+        if (meta.protocol === PROTOCOL && fs.existsSync(script)) return { script, mode: 'installed', version };
+      } catch { /* a half-installed or foreign folder: skip it */ }
+    }
+  } catch { /* no cores folder yet */ }
+  return null;
+}
+
+/** Starts core_install.mjs detached, at most once every 10 minutes (stamp file in `dir`). Never throws, never waits. @returns {boolean} true when it started one. */
+export function maybeStartInstaller({ dir, now, spawnFn = spawn, script = INSTALLER, env = process.env }) {
+  try {
+    const stamp = path.join(dir, 'core_install.stamp');
+    try { if (now - fs.statSync(stamp).mtimeMs / 1000 < INSTALL_EVERY_S) return false; } catch { /* no stamp yet */ }
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(stamp, String(now));
+    const child = spawnFn(process.execPath, [script], { detached: true, stdio: 'ignore', windowsHide: true, env });
+    child.on?.('error', () => {});
+    child.unref?.();
+    return true;
+  } catch { return false; }
 }
 
 /** Newest change time of the files a hub runs on (hub/*.mjs). */
@@ -90,7 +125,7 @@ export async function restartStaleHub({ host, hubScript } = {}) {
     const r = await request(host, '/health', 'GET', undefined, 300);
     if (r.status !== 200) return false;
     const info = JSON.parse(r.text);
-    const script = resolveHubScript(process.env, hubScript);
+    const script = findCore({ hubScript })?.script ?? '';
     const stale = (info.version ?? '') !== localVersion() || real(info.script ?? '') !== real(script) || (info.startedAt ?? 0) < newestHubFile();
     if (!stale) return false;
     await request(host, '/shutdown', 'POST', '{}', 300);
@@ -107,14 +142,17 @@ export async function restartStaleHub({ host, hubScript } = {}) {
  * this machine, start it detached, wait up to 400 ms for /health and retry once.
  * @returns {Promise<boolean>} true when the hub accepted it.
  */
-export async function postToHub(route, body, { host, timeoutMs = 1500, spawnHub: allowSpawn = true, hubScript } = {}) {
+export async function postToHub(route, body, { host, timeoutMs = 1500, spawnHub: allowSpawn = true, hubScript, env = process.env, siblingScript, spawnFn } = {}) {
   try {
     const deadline = Date.now() + timeoutMs;
     const data = JSON.stringify(body);
     let r = await tryPost(host, route, data, deadline);
     if (!r.ok && r.refused && allowSpawn && isLoopback(host)) {
-      spawnHub(resolveHubScript(process.env, hubScript));
-      if (await waitForHealth(host, Math.min(deadline, Date.now() + SPAWN_WAIT_MS))) r = await tryPost(host, route, data, deadline);
+      const core = findCore({ env, hubScript, ...(siblingScript === undefined ? {} : { siblingScript }) });
+      if (core) {
+        spawnHub(core.script);
+        if (await waitForHealth(host, Math.min(deadline, Date.now() + SPAWN_WAIT_MS))) r = await tryPost(host, route, data, deadline);
+      } else maybeStartInstaller({ dir: stateDir(env), now: Date.now() / 1000, env, ...(spawnFn ? { spawnFn } : {}) });   // no core yet: download one, this event is dropped
     }
     return r.ok;
   } catch {

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { hubHost, pluginConfig, stateDir } from '../scripts/common.mjs';
-import { resolveHubScript } from '../scripts/hub_client.mjs';
+import { findCore } from '../scripts/hub_client.mjs';
 import { promptsEnabled } from '../scripts/session_prompts.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -52,11 +52,11 @@ test('state_dir_default_is_shared_with_the_hub', () => {
 });
 
 test('core_dir_selects_the_hub', () => {
-  assert.equal(resolveHubScript({ AGENTSDASH_CORE_DIR: path.join('x', 'core') }), path.join('x', 'core', 'hub.mjs'));
-  assert.equal(resolveHubScript({ CLAUDE_GADGET_HUB_SCRIPT: path.join('y', 'hub.mjs') }), path.join('y', 'hub.mjs'));
-  assert.equal(resolveHubScript({ AGENTSDASH_CORE_DIR: 'c', CLAUDE_GADGET_HUB_SCRIPT: 'y/hub.mjs' }), path.join('c', 'hub.mjs'));
-  assert.equal(path.basename(resolveHubScript({})), 'hub.mjs');
-  assert.equal(resolveHubScript({}, 'explicit.mjs'), 'explicit.mjs');
+  assert.equal(findCore({ env: { AGENTSDASH_CORE_DIR: path.join('x', 'core') } }).script, path.join('x', 'core', 'hub.mjs'));
+  assert.equal(findCore({ env: { CLAUDE_GADGET_HUB_SCRIPT: path.join('y', 'hub.mjs') } }).script, path.join('y', 'hub.mjs'));
+  assert.equal(findCore({ env: { AGENTSDASH_CORE_DIR: 'c', CLAUDE_GADGET_HUB_SCRIPT: 'y/hub.mjs' } }).script, path.join('c', 'hub.mjs'));
+  assert.equal(path.basename(findCore({ env: {} }).script), 'hub.mjs');
+  assert.equal(findCore({ env: {}, hubScript: 'explicit.mjs' }).script, 'explicit.mjs');
 });
 
 test('prompts_variable_old_and_new', () => {
