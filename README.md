@@ -55,7 +55,7 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 
 ### Sessions hub: all sessions at once
 
-Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn like the device screen without its title and status bars. Orange tiles need you (the page beeps), red tiles have an error, the frame of a tile pulses when something happens in its session, and a session waiting for you for 5 minutes turns grey and moves to the end (the hub drops it after 10). The quotas and the clock appear once, in the bar at the bottom. The settings menu (gear) sets the tiles per page (Auto fits the window, 1 shows one session at a time), the beeps, the pulse and the grey-out; the hub keeps them for every page. More sessions than tiles make pages: use the side arrows, the dots (orange or red when a session on that page needs you or failed), a swipe or the left and right keys. The hub keeps 12 sessions by default: set `"max_sessions"` (up to 32) in `~/.claude/agent-gadget.json` to change it.
+Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn like the device screen without its title and status bars. Orange tiles need you (the page beeps), red tiles have an error, the frame of a tile pulses when something happens in its session, and a session waiting for you for 5 minutes turns grey and moves to the end (the hub drops it after 10). The quotas and the clock appear once, in the bar at the bottom. The settings menu (gear) sets the tiles per page (Auto fits the window, 1 shows one session at a time), the beeps, the pulse and the grey-out; the hub keeps them for every page. A tap on a tile opens that session full screen, BACK returns. More sessions than tiles make pages: use the side arrows, the dots (orange or red when a session on that page needs you or failed), a swipe or the left and right keys. The hub keeps 12 sessions by default: set `"max_sessions"` (up to 32) in `~/.claude/agent-gadget.json` to change it.
 
 ### Sub-agents: see and follow them
 
@@ -83,9 +83,17 @@ Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn l
 - Bottom bar: 5-hour and weekly plan usage with reset time, colored by pace projection (green under 85 %, orange 85 to 100 %, red when you would run out before the reset). The hub polls them for the desktop app; a terminal status line can feed them too.
 - A small clock sits at the right of the bottom bar. The page has no standby view (the big clock after 5 idle minutes): that stays on the ESP32 gadget.
 
-### Themes
+### Themes, looks and project rules
 
-- standup-bot ships no theme: the hub downloads the `robot` theme (set another with `"theme": "office-modern"` in `~/.claude/agent-gadget.json`) from [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes) at its first launch when none is installed (offline, the page draws built-in robots). More themes (cat, lemmings, office, pirates, spelunky, yokai...) are in [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes). Ask Claude Code "install a standup-bot theme" (skill `install-theme`) or follow that repository's `install.md`, which also explains how to create your own. Details: `docs/themes.md`.
+The palette button of the bottom bar opens the theme dialog: one list of installed and marketplace themes with search, tags and status filter, a preview of each, and Apply, Install, Update, Preview, Delete. The choice is kept by the hub, so every open page follows.
+
+- **Variants**: a theme can ship several color variants (for example light and dark), picked with swatches on its card.
+- **Accent**: a theme or a variant can set an icon accent that tints the agents (SVG `currentColor`, or a hue rotation for pictures).
+- **Looks**: a theme can offer several characters. Tick the looks you want and each agent takes one by a stable hash of its id, so it keeps its look. A look can pick a numbered sprite, an accent and a **palette**.
+- **Palette swaps**: an icon pack can recolor chosen colors of a PNG or lossless WebP (hair, for example) by exact match, without a second sprite. Skin, clothes, outlines and transparency stay as drawn.
+- **Color editor and Save as theme**: **Edit colors** changes any color of the active theme live (with a contrast warning), and **Save as theme** keeps the result, variant and ticked looks as your own theme in `~/.claude/standup-bot/themes/`.
+- **Project rules** (settings menu): give the sessions of some folders their own icon pack and badge color, matched on the session's working directory with globs (`C:/work/prod-*`). First match wins. A production folder can show a red badge so it stands out in the grid.
+- standup-bot ships no theme: the hub downloads the `robot` theme (set another with `"theme": "office-modern"` in `~/.claude/agent-gadget.json`) from [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes) at its first launch when none is installed (offline, the page draws built-in robots). More themes (cat, lemmings, office, pirates, spelunky, yokai...) are in [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes). Ask Claude Code "install a standup-bot theme" (skill `install-theme`) or follow that repository's `install.md`, which also explains how to create your own. Installed marketplace themes are checked for new versions every 6 hours. Formats and rules for themes, packs, looks, palettes and project rules: [docs/themes.md](docs/themes.md).
 
 ## How it works
 
