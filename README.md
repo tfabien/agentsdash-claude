@@ -39,7 +39,7 @@ The screenshots below are taken from the real page, fed with made-up sessions (`
 
 ### Plan: see and follow the progress
 
-![A session full screen: plan, context and sub-agents](docs/images/page-fullscreen.png)
+![Plan progress and context of a session](docs/images/page-plan.png)
 
 - Plan progress built from the task list of the session (`TaskCreate`/`TaskUpdate`, `TodoWrite`, the desktop `update_plan`): segmented bar, current step and next step. Steps running in parallel each pulse.
 - Context fill bar next to the plan (green under 60 %, orange 60 to 79 %, red from 80 %).
@@ -47,7 +47,7 @@ The screenshots below are taken from the real page, fed with made-up sessions (`
 
 ### Questions: display and notification
 
-The top tile of the first screenshot is a pending question.
+![A pending question](docs/images/page-question.png)
 
 - A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the page beeps.
 - Permission prompts turn the session orange too.
@@ -59,12 +59,18 @@ Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn l
 
 ### Sub-agents: see and follow them
 
+![3 sub-agents](docs/images/page-subs3.png)
+
+![6 sub-agents, compact rows](docs/images/page-compact.png)
+
 - One row per sub-agent: role robot (lead, general, explore, plan, review, test, code, generic), name, current action, age.
 - 1 to 4 sub-agents get large rows, 5 to 7 compact rows, 8 or more show 6 rows and "+N more".
 - Six states with their color: working (green), needs you (orange), error (red), your turn (grey-blue), waiting on sub-agents (blue), done (faint).
 - Robots blink while working, and the state bar of an agent that needs you pulses orange.
 
 ### Click: agent detail and session list
+
+![Agent detail](docs/images/page-detail.png)
 
 - Click a sub-agent row: the left panel shows its full command, tokens and previous command. Click the panel to go back.
 - Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state. The **trash icon** at the end of a row hides that session (finished demos, old sessions); it comes back by itself when it works again or asks you something, not when it only reports that it is idle.
