@@ -58,6 +58,29 @@ export function bumpCalls(dir, sessionId) {
   });
 }
 
+/** Tool calls of the current turn made without any task list, kept in <stateDir>/idle-<session12>.txt (for the "no task list" reminder and guard). */
+const idlePath = (dir, sessionId) => statePath(dir, sessionId).replace(/plan-([^\\/]*)\.json$/, 'idle-$1.txt');
+
+export function readIdle(dir, sessionId) {
+  try { return Number.parseInt(fs.readFileSync(idlePath(dir, sessionId), 'utf8'), 10) || 0; } catch { return 0; }
+}
+
+/** Count one tool call made without a task list; returns the new count. */
+export function bumpIdle(dir, sessionId) {
+  const file = idlePath(dir, sessionId);
+  fs.mkdirSync(dir, { recursive: true });
+  return withLock(file, () => {
+    const calls = readIdle(dir, sessionId) + 1;
+    fs.writeFileSync(file, String(calls), 'utf8');
+    return calls;
+  });
+}
+
+/** Start the count again (a new prompt or a new session). */
+export function resetIdle(dir, sessionId) {
+  try { fs.unlinkSync(idlePath(dir, sessionId)); } catch { /* no count yet */ }
+}
+
 /** On Windows a rename onto a file that another process (or a scanner) holds open fails with EPERM/EBUSY/EACCES for a few ms: retry. */
 function renameWithRetry(from, to) {
   for (let i = 0; ; i++) {

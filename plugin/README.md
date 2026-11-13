@@ -41,7 +41,17 @@ The screen can only show questions that go through `AskUserQuestion` and plans b
 session. It is on by default; turn it off with `AGENTSDASH_PROMPTS=0` or `{"prompts": false}` in `~/.agentsdash/config.json`
 (the variable wins over the file). `SessionStart` adds three rules (ask through `AskUserQuestion`, create a task list
 for multi-step work, keep it current). `UserPromptSubmit` adds a reminder when the task list has unfinished steps and has not
-changed for 10 minutes. Sub-agents get nothing. Open a new session after changing the setting.
+changed for 10 minutes. `PostToolUse` adds a reminder after 3 tool calls of a turn without any task list, and every 8 calls
+while a list has open steps that did not change. Sub-agents get nothing. Open a new session after changing the setting.
+
+#### Guard (off by default)
+
+A reminder can be ignored. The guard (hook `PreToolUse` of the same script) denies a tool call once a turn has made 4 tool calls
+without any task list, with a message asking Claude to create one and retry. Task-list tools, `ToolSearch` (loads a deferred
+task-list tool) and `AskUserQuestion` always pass, and so do sub-agents. Turn it on with `AGENTSDASH_GUARD=1` or
+`{"guard": true}` in `~/.agentsdash/config.json` (the variable wins over the file). Cost: a one-step task also gets a
+list after its 4th call, and the script starts one more Node process per tool call even when the guard is off (about 50 ms).
+The guard does nothing when prompts are off.
 
 ## Status line (context and plan quotas)
 
