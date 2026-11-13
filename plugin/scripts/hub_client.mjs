@@ -101,32 +101,30 @@ export function maybeStartInstaller({ dir, now, spawnFn = spawn, script = INSTAL
   } catch { return false; }
 }
 
-/** Newest change time of the files a hub runs on (hub/*.mjs). */
-function newestHubFile() {
+/** Newest change time of the *.mjs files next to the hub script (a hub started before that runs old code). */
+function newestHubFile(script) {
   let newest = 0;
-  for (const dir of [path.dirname(DEFAULT_HUB_SCRIPT)]) {
-    try { for (const n of fs.readdirSync(dir)) if (n.endsWith('.mjs')) newest = Math.max(newest, fs.statSync(path.join(dir, n)).mtimeMs); } catch { /* skip */ }
-  }
+  try { for (const n of fs.readdirSync(path.dirname(script))) if (n.endsWith('.mjs')) newest = Math.max(newest, fs.statSync(path.join(path.dirname(script), n)).mtimeMs); } catch { /* skip */ }
   return newest;
 }
 
-function localVersion() {
-  try { return JSON.parse(fs.readFileSync(path.resolve(HERE, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version ?? ''; } catch { return ''; }
-}
-
 /**
- * A hub left over from an older plugin version (other version or script, or started before its files changed) is asked to leave;
- * the next post starts a fresh one. Only for a hub on this machine. Never throws.
- * @returns {Promise<boolean>} true when an old hub was told to stop.
+ * Asks a running hub on this machine to leave when it is the wrong one; the next post starts the right one. Never throws.
+ * Local hub (a script the user or the checkout names): wrong when it runs another script or started before its files changed.
+ * Installed core: the version rule, wrong only when `core` is missing, `protocol` is not PROTOCOL or `core` is below MIN_CORE;
+ * a newer core is never replaced.
+ * @returns {Promise<boolean>} true when a hub was told to stop.
  */
-export async function restartStaleHub({ host, hubScript } = {}) {
+export async function restartStaleHub({ host, env = process.env, hubScript, siblingScript } = {}) {
   try {
     if (!isLoopback(host)) return false;
     const r = await request(host, '/health', 'GET', undefined, 300);
     if (r.status !== 200) return false;
     const info = JSON.parse(r.text);
-    const script = findCore({ hubScript })?.script ?? '';
-    const stale = (info.version ?? '') !== localVersion() || real(info.script ?? '') !== real(script) || (info.startedAt ?? 0) < newestHubFile();
+    const core = findCore({ env, hubScript, ...(siblingScript === undefined ? {} : { siblingScript }) });
+    const stale = core?.mode === 'local'
+      ? real(info.script ?? '') !== real(core.script) || (info.startedAt ?? 0) < newestHubFile(core.script)
+      : typeof info.core !== 'string' || info.protocol !== PROTOCOL || compareVersions(info.core, MIN_CORE) < 0;
     if (!stale) return false;
     await request(host, '/shutdown', 'POST', '{}', 300);
     for (const until = Date.now() + 700; Date.now() < until;) {            // wait for the port to be free

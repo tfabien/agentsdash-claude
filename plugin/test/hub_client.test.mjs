@@ -78,3 +78,65 @@ test('post_without_core_drops_the_event_and_starts_the_installer', async () => {
   assert.equal(started.length, 1);
   assert.match(String(started[0][1][0]), /core_install\.mjs$/);
 });
+
+// ---------- the version rule ----------
+import http from 'node:http';
+import { restartStaleHub } from '../scripts/hub_client.mjs';
+
+/** A fake hub: answers /health with `health`, counts POST /shutdown (and goes away on it). */
+async function fakeHub(health) {
+  const state = { shutdowns: 0 };
+  const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/shutdown') {
+      state.shutdowns++;
+      res.end('bye');
+      setTimeout(() => { server.close(); server.closeAllConnections?.(); }, 10);
+    } else res.end(JSON.stringify({ ok: true, ...health }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  state.host = `127.0.0.1:${server.address().port}`;
+  state.close = () => { server.close(); server.closeAllConnections?.(); };
+  return state;
+}
+
+test('rule_keeps_a_newer_core', async () => {
+  const hub = await fakeHub({ core: '9.0.0', protocol: PROTOCOL });
+  try {
+    assert.equal(await restartStaleHub({ host: hub.host, env: { AGENTSDASH_USER_HOME: tmp() }, siblingScript: null }), false);
+    assert.equal(hub.shutdowns, 0);
+  } finally { hub.close(); }
+});
+
+test('rule_replaces_old_or_foreign_hubs', async () => {
+  for (const health of [{ version: '0.4.1' }, { core: '0.1.0', protocol: PROTOCOL }, { core: '9.0.0', protocol: 3 }]) {
+    const hub = await fakeHub(health);
+    try {
+      assert.equal(await restartStaleHub({ host: hub.host, env: { AGENTSDASH_USER_HOME: tmp() }, siblingScript: null }), true, JSON.stringify(health));
+      assert.equal(hub.shutdowns, 1);
+    } finally { hub.close(); }
+  }
+});
+
+test('local_mode_replaces_a_hub_from_another_script', async () => {
+  const dir = tmp();
+  const script = path.join(dir, 'hub.mjs');
+  fs.writeFileSync(script, '// hub');
+  const other = await fakeHub({ core: '9.0.0', protocol: PROTOCOL, script: path.join(tmp(), 'hub.mjs'), startedAt: Date.now() + 5000 });
+  try {
+    assert.equal(await restartStaleHub({ host: other.host, hubScript: script }), true);
+    assert.equal(other.shutdowns, 1);
+  } finally { other.close(); }
+  const same = await fakeHub({ core: '0.0.1', script, startedAt: Date.now() + 5000 });
+  try {
+    assert.equal(await restartStaleHub({ host: same.host, hubScript: script }), false, 'local mode ignores the version');
+    assert.equal(same.shutdowns, 0);
+  } finally { same.close(); }
+  const old = await fakeHub({ script, startedAt: 1000 });
+  try {
+    assert.equal(await restartStaleHub({ host: old.host, hubScript: script }), true, 'started before the files changed');
+  } finally { old.close(); }
+});
+
+test('non_loopback_host_is_never_touched', async () => {
+  assert.equal(await restartStaleHub({ host: '192.168.1.5:8765', env: {}, siblingScript: null }), false);
+});
