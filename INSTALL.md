@@ -1,10 +1,10 @@
-# Install standup-bot
+# Install agentsdash
 
-> **For Claude Code.** A user asked you to install standup-bot and pointed you to this file. Follow the steps in order, run
+> **For Claude Code.** A user asked you to install agentsdash and pointed you to this file. Follow the steps in order, run
 > the commands yourself, check each result, and report at the end. Do not edit the user's settings files. Stop and tell the
 > user when a step fails.
 
-standup-bot shows every Claude Code session, its sub-agents, its plan and its pending questions on one screen in the browser.
+agentsdash shows every Claude Code session, its sub-agents, its plan and its pending questions on one screen in the browser.
 It is a Claude Code plugin: its hooks send events to a small local Node.js server (the hub) that draws the page.
 
 ## 1. Check the requirements
@@ -19,24 +19,24 @@ If Node.js is missing or older than 18, ask the user to install it from https://
 ## 2. Install the plugin
 
 ```bash
-claude plugin marketplace add tfabien/standup-bot
-claude plugin install standup-bot@standup-bot --scope user
+claude plugin marketplace add tfabien/agentsdash
+claude plugin install agentsdash@agentsdash --scope user
 ```
 
-Inside a Claude Code session, the same two steps are `/plugin marketplace add tfabien/standup-bot` and
-`/plugin install standup-bot@standup-bot`. On Claude Code 2.1.275 or later, one line does both:
-`/plugin install standup-bot --marketplace tfabien/standup-bot`.
+Inside a Claude Code session, the same two steps are `/plugin marketplace add tfabien/agentsdash` and
+`/plugin install agentsdash@agentsdash`. On Claude Code 2.1.275 or later, one line does both:
+`/plugin install agentsdash --marketplace tfabien/agentsdash`.
 
 Check it:
 
 ```bash
-claude plugin list      # standup-bot must be listed, Status: enabled, Version 0.4.0 or later
+claude plugin list      # agentsdash must be listed, Status: enabled, Version 0.4.0 or later
 ```
 
 ## 3. Start a new session
 
 Claude Code loads hooks when a session starts. Tell the user to **open a new Claude Code session** (or restart the desktop
-app); the sessions that were already open do not report to standup-bot.
+app); the sessions that were already open do not report to agentsdash.
 
 The first hook of the new session starts the hub by itself, in the background, on `127.0.0.1:8765`.
 
@@ -72,15 +72,15 @@ node <plugin folder>/hub/hub.mjs
   `CLAUDE_GADGET_MASK=1` in the environment of Claude Code hides them (only tool names are sent).
 - Plan quotas (5 hours, week) appear by themselves; they come from the Claude account of the user (OAuth token, never printed).
   `CLAUDE_GADGET_QUOTAS=0` turns the polling off.
-- Optional themes (cat, lemmings, pirates...) are in https://github.com/tfabien/standup-bot-themes ; to install them, follow its `install.md`.
+- Optional themes (cat, lemmings, pirates...) are in https://github.com/tfabien/agentsdash-themes ; to install them, follow its `install.md`.
 - An external screen (ESP32 gadget, USB display) is optional: see `devices/README.md`.
 
 ## Update, uninstall, troubleshooting
 
 | Need | Command or cause |
 |---|---|
-| Update | `claude plugin marketplace update standup-bot`, then `claude plugin update standup-bot@standup-bot`, then open a new session. Stop the old hub so the new one starts: close the process listening on port 8765. |
-| Uninstall | `claude plugin uninstall standup-bot@standup-bot` and `claude plugin marketplace remove standup-bot` |
+| Update | `claude plugin marketplace update agentsdash`, then `claude plugin update agentsdash@agentsdash`, then open a new session. Stop the old hub so the new one starts: close the process listening on port 8765. |
+| Uninstall | `claude plugin uninstall agentsdash@agentsdash` and `claude plugin marketplace remove agentsdash` |
 | Page empty | The session was opened before the install: open a new one. Check `claude plugin list` (enabled). |
 | Port 8765 busy | Another program uses it. Set `{"host": "127.0.0.1:8777"}` in `~/.claude/agent-gadget.json` (or the environment variable `CLAUDE_GADGET_HOST=127.0.0.1:8777`), then open that address. |
 | `node` not found by hooks | Claude Code must find `node` in its `PATH`: restart it after installing Node.js. |

@@ -1,6 +1,6 @@
-# standup-bot
+# agentsdash
 
-Goal: an "agent standup" screen for Claude Code. **The browser page is the main product**: a Claude Code plugin sends events to a local
+Goal: an agent dashboard for Claude Code. **The browser page is the main product**: a Claude Code plugin sends events to a local
 Node.js hub that draws the screen in a web page. External devices (an ESP32 with the screen of an Artillery X3 printer, others later)
 are an optional bonus, fed by the same hub. Install instructions are in `INSTALL.md` (written for Claude Code to follow).
 
@@ -8,11 +8,11 @@ Language: chat with the user in French. **Code comments, documentation and on-sc
 
 ## Layout of the repo
 
-- `plugin/` - the Claude Code plugin `standup-bot` (what users install; the marketplace file is `.claude-plugin/marketplace.json`, source `./plugin`).
+- `plugin/` - the Claude Code plugin `agentsdash` (what users install; the marketplace file is `.claude-plugin/marketplace.json`, source `./plugin`).
   - `hooks/hooks.json`, `scripts/` - hooks -> `notify.mjs` -> `POST /event` v2; `statusline.mjs`, `transcript_usage.mjs`, `plan_tracker.mjs`, `session_prompts.mjs` (rules and stale-plan reminder, on by default), `hub_client.mjs`, `common.mjs`. Node >= 18, stdlib only.
   - `hub/` - the hub: `hub.mjs` (HTTP + SSE), `model.mjs` (port of `devices/artillery-x3-esp32/firmware/model.cpp`), `web/` (the page: `screen.js` decides, `vector_screen.js` draws, `hub_page.js` wires the one page (tiles, pages), `scenes.js` fixed scenes),
     `quotas.mjs`, `relay_http.mjs`, `relay_serial.mjs`, `tui.mjs`, `tools/screenshots.mjs`, `test/`.
-    Themes and packs as files: `themes/*.json`, `icons/<pack>/*.svg`, `themes_loader.mjs` (scans the built-in and user folders), `web/theme_schema.js`, `tools/export_builtin.mjs` (regenerates the built-ins). Per-project rules: `rules.mjs` (hub validation), `web/rules.js` (matching). Marketplace of GitHub theme repositories: `market_source.mjs` (list), `market_install.mjs` (install and remove, `market.json` log), `market_update.mjs` (versions, 6 hour timer), `market_bootstrap.mjs` (downloads a first theme when none is installed; no theme ships in `plugin/`), routes `/market*` in `hub.mjs`, tab in `web/market.js`. Hub side: `docs/hub-themes.md`; format of themes and packs: `docs/format.md` of the standup-bot-themes repository.
+    Themes and packs as files: `themes/*.json`, `icons/<pack>/*.svg`, `themes_loader.mjs` (scans the built-in and user folders), `web/theme_schema.js`, `tools/export_builtin.mjs` (regenerates the built-ins). Per-project rules: `rules.mjs` (hub validation), `web/rules.js` (matching). Marketplace of GitHub theme repositories: `market_source.mjs` (list), `market_install.mjs` (install and remove, `market.json` log), `market_update.mjs` (versions, 6 hour timer), `market_bootstrap.mjs` (downloads a first theme when none is installed; no theme ships in `plugin/`), routes `/market*` in `hub.mjs`, tab in `web/market.js`. Hub side: `docs/hub-themes.md`; format of themes and packs: `docs/format.md` of the agentsdash-themes repository.
   - `test/` - tests of the hooks. Everything the plugin needs at run time is inside `plugin/` (a marketplace install copies only that folder).
 - `devices/` - optional external screens, one folder each, with its own README. `devices/artillery-x3-esp32/` is the ESP32 gadget (firmware, screen project, tests); it has its own `CLAUDE.md` with the hardware and screen protocol notes.
 - `docs/` - `superpowers/` specs and plans, `hook-payloads.md` (captured hook payloads), `images/` (README screenshots, made by `plugin/hub/tools/screenshots.mjs`).
@@ -25,7 +25,9 @@ Tests (no hardware): `node --test plugin/hub/test/*.test.mjs plugin/test/*.test.
 `plugin/hooks/hooks.json`: hooks `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse(Failure)`, `PermissionRequest`, `PermissionDenied`,
 `Notification`, `SubagentStart`, `SubagentStop`, `Stop`, `SessionEnd` -> `scripts/notify.mjs` (never blocks, never prints, exits 0, gives up after 1.5 s).
 Claude Code loads hooks when a session starts: after installing or moving the plugin, open a **new** session.
-The plugin installed at user level is `standup-bot@standup-bot`; with a local marketplace (`claude plugin marketplace add <this checkout>`) it is read **live from this working tree**,
+The project was renamed from standup-bot to agentsdash (step 1 of `docs/superpowers/specs/2026-11-13-multi-repo-split-and-rename-design.md`); the config file `~/.claude/agent-gadget.json`, the `CLAUDE_GADGET_*` variables and the user folder `~/.claude/standup-bot/` keep the old names until step 2 of that split.
+The wire contract is `docs/protocol.md` and `docs/device-protocol.md`, checked against the code by `plugin/hub/test/protocol_doc.test.mjs`.
+The plugin installed at user level is `agentsdash@agentsdash`; with a local marketplace (`claude plugin marketplace add <this checkout>`) it is read **live from this working tree**,
 so a broken `notify.mjs` breaks every session's hooks.
 Host (where events go): env `CLAUDE_GADGET_HOST`, or `~/.claude/agent-gadget.json` `{"host": "...", "relay": {...}}`, default `127.0.0.1:8765` (the hub: the first hook starts it detached when the host is this machine).
 Every event carries the session's `cwd` (full path, for the per-project rules); `CLAUDE_GADGET_MASK=1` drops it, and it is never sent to devices.
@@ -38,7 +40,7 @@ The hub binds `127.0.0.1`, answers only requests whose Host is the hub and rejec
 `scripts/statusline.mjs` is a status line (manual install in `~/.claude/settings.json`, see `plugin/README.md`) that posts context and quotas to `/usage`. The **desktop app does not run status lines**:
 the hub polls the quotas itself (`plugin/hub/quotas.mjs`, at most once a minute while a session exists; OAuth token of `~/.claude/.credentials.json`, never printed; `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers).
 Off: `CLAUDE_GADGET_QUOTAS=0` or `"quotas": false`. Hooks add tokens, a context estimate and the session title read from the transcripts.
-Themes (`themes/*.json`) and icon packs (`icons/<pack>/*.svg`) are read from `plugin/hub/` and `~/.claude/standup-bot/` (the user folder wins), published as `catalog` in the state; `GET /icons/<pack>/<file>` serves only listed files (sandboxed SVG) and `POST /reload` rescans. A theme may carry `accent`, `variants` and `looks` (several active characters, hash per agent, setting `themeLooks`), a pack an optional `pack.json` tint mode; the user's color edits are the settings `themeVariant` and `themeOverrides`, and `POST /themes` saves a look as a user theme (format: `docs/format.md` of the standup-bot-themes repository).
+Themes (`themes/*.json`) and icon packs (`icons/<pack>/*.svg`) are read from `plugin/hub/` and `~/.claude/standup-bot/` (the user folder wins), published as `catalog` in the state; `GET /icons/<pack>/<file>` serves only listed files (sandboxed SVG) and `POST /reload` rescans. A theme may carry `accent`, `variants` and `looks` (several active characters, hash per agent, setting `themeLooks`), a pack an optional `pack.json` tint mode; the user's color edits are the settings `themeVariant` and `themeOverrides`, and `POST /themes` saves a look as a user theme (format: `docs/format.md` of the agentsdash-themes repository).
 The page redraws the device screen as vectors: `web/screen.js` is a port of the firmware's `display_hmi.cpp`, `layout.cpp`, `ui_state.cpp` (same 480x272 units); keep them in step when the firmware UI changes.
 
 ## Pitfalls

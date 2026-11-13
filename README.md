@@ -1,6 +1,8 @@
-# standup-bot
+# agentsdash
 
-Agent standup on a screen, for Claude Code. One page shows every session, every sub-agent and what each one is doing, how far
+(Formerly called standup-bot.)
+
+An agent dashboard for Claude Code. One page shows every session, every sub-agent and what each one is doing, how far
 each plan has come, and which agent waits for you. It makes the daily work with Claude Code easier. It has three goals:
 
 1. **Follow my plans**: see at a glance how far each session is in its plan, and which step runs now.
@@ -17,7 +19,7 @@ An external screen (an ESP32 gadget, a USB display) is a bonus, see [Devices](#d
 Paste this to Claude Code, in any session:
 
 ```text
-Install standup-bot by following https://raw.githubusercontent.com/tfabien/standup-bot/main/INSTALL.md
+Install agentsdash by following https://raw.githubusercontent.com/tfabien/agentsdash/main/INSTALL.md
 ```
 
 Claude checks Node.js, installs the plugin and tells you what to open. Then **start a new Claude Code session** (hooks load when a
@@ -26,8 +28,8 @@ session starts) and open **<http://127.0.0.1:8765/>**.
 By hand, it is two commands and Node.js 18 or later:
 
 ```bash
-claude plugin marketplace add tfabien/standup-bot
-claude plugin install standup-bot@standup-bot --scope user
+claude plugin marketplace add tfabien/agentsdash
+claude plugin install agentsdash@agentsdash --scope user
 ```
 
 Details, update, uninstall and troubleshooting: [INSTALL.md](INSTALL.md).
@@ -90,7 +92,7 @@ Click a sub-agent row: the panel shows its state, tokens and full command. BACK 
 
 The palette button of the bar opens the theme dialog: install themes from the marketplace, apply one, edit its colors, tick the looks agents are drawn with, or save your own theme. Project rules (settings menu) give the sessions of some folders their own badge color or icon pack, for example a red badge on `prod-*` folders.
 
-standup-bot ships no theme: the hub downloads one at its first launch from [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes), which holds the themes (robot, cat, lemmings, office, pirates, spelunky, yokai...), how to install them and the format to create your own. Hub side (folders, project rules, marketplace): [docs/hub-themes.md](docs/hub-themes.md).
+agentsdash ships no theme: the hub downloads one at its first launch from [tfabien/agentsdash-themes](https://github.com/tfabien/agentsdash-themes), which holds the themes (robot, cat, lemmings, office, pirates, spelunky, yokai...), how to install them and the format to create your own. Hub side (folders, project rules, marketplace): [docs/hub-themes.md](docs/hub-themes.md).
 
 ## How it works
 
@@ -108,7 +110,7 @@ Privacy: prompts, commands and file paths are shown on the page, on your compute
 
 ## Devices (optional)
 
-The browser is the main way to use standup-bot. A device is a bonus: a physical screen next to the keyboard that shows the same
+The browser is the main way to use agentsdash. A device is a bonus: a physical screen next to the keyboard that shows the same
 thing, with its own buzzer. The hub forwards every event to it (`relay` in `~/.claude/agent-gadget.json`), so page and device always agree.
 
 | Device | State | Link |
@@ -126,8 +128,8 @@ plugin/                    the Claude Code plugin (what users install)
   test/                    tests of the hooks (node --test)
 devices/                   optional external screens
   artillery-x3-esp32/      ESP32 firmware, screen project, hardware notes, tests
-.claude-plugin/            marketplace file (standup-bot)
-docs/                      specs, plans, captured hook payloads, README images
+.claude-plugin/            marketplace file (agentsdash)
+docs/                      protocol and device protocol ([protocol.md](docs/protocol.md), [device-protocol.md](docs/device-protocol.md)), specs, plans, captured hook payloads, README images
 INSTALL.md                 install instructions, written for Claude Code to follow
 ```
 
@@ -136,13 +138,13 @@ Tests (no hardware): `node --test plugin/hub/test/*.test.mjs plugin/test/*.test.
 ## TODO (known and not fixed)
 
 - **Share the screen component with the hub page.** The sessions hub tiles are HTML (`hub_page.js`, logic in `hub_view.js`), the full page is still one canvas (`screen.js`). Issue #2 asks for one component used by both. Also open: raise the default of `max_sessions` once the session list of the full page scrolls (12 rows overflow it today).
-- **Rename the configuration.** The file is still `~/.claude/agent-gadget.json` and the variables `CLAUDE_GADGET_*`, from the first version. Accept `standup-bot.json` and `STANDUP_BOT_*` and keep the old names as fallback.
+- **Rename the configuration.** The file is still `~/.claude/agent-gadget.json` and the variables `CLAUDE_GADGET_*`, from the first version. Accept `agentsdash.json` and `AGENTSDASH_*` and keep the old names as fallback.
 - **Restart the hub after a plugin update.** A hub started by the old version keeps running; the hook could compare versions and replace it.
 - **Show the model used by each session and agent** (Opus, Sonnet, Haiku) in the lead panel and the agent detail. To check: which hook payloads carry the model, then add a short `model` field to `/event`.
 - **Tap a step of the plan bar to preview it.** Needs the titles of all steps (today the plan fields carry only `done`, `total`, the current and the next step).
 - **Answer a question from the screen?** The hooks only send events: no hook can inject an answer into a running `AskUserQuestion`. A `PermissionRequest` hook can allow or deny, so Allow/Deny buttons are feasible by making the hook wait for the hub; a free choice among options needs another channel.
 - **The page does not follow the session that has the focus in Claude Code.** Today it picks the session itself (needs-you first) or by click.
-- **Prompts (first version done, on by default).** The plugin adds the rules at session start and a stale-plan reminder, see [plugin/README.md](plugin/README.md#prompts); `CLAUDE_GADGET_PROMPTS=0` turns it off. Left: a staleness hint on the screen itself, and a way to see how well sessions follow the rules ([issue #5](https://github.com/tfabien/standup-bot/issues/5)).
+- **Prompts (first version done, on by default).** The plugin adds the rules at session start and a stale-plan reminder, see [plugin/README.md](plugin/README.md#prompts); `CLAUDE_GADGET_PROMPTS=0` turns it off. Left: a staleness hint on the screen itself, and a way to see how well sessions follow the rules ([issue #5](https://github.com/tfabien/agentsdash/issues/5)).
 - **Usage and quotas stay problematic.** The usage endpoint returns 429 (backoff 15 minutes), numbers can be stale, and the context estimate from transcripts assumes a 1M window.
 - Show the context fill as a circle with the percentage in the middle; show the tokens of each agent in its row.
 - Minor items of the hub review, postponed: `"constructor"` accepted as a state, 400 ms per hook when the hub cannot start (no backoff), the plan file lock can wait 2 s, the hub ignores `CLAUDE_GADGET_CONFIG`, the hub does not replay its state to a device that rebooted.

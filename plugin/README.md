@@ -1,4 +1,4 @@
-# standup-bot (Claude Code plugin)
+# agentsdash (Claude Code plugin)
 
 Claude Code hooks that send what each session and sub-agent is doing to the **hub** (a local Node.js server with a browser page, in `hub/`),
 which shows it and can relay it to an optional device such as the ESP32 gadget (see `../devices/`). Node.js only, no Python.
@@ -72,9 +72,9 @@ The context estimate from transcripts assumes a 1M window (desktop sessions); se
    machine and the hub is not running, the first hook starts it (detached). A gadget IP (`192.168.1.100`) still works
    as a host: events go straight to the gadget, with no hub page and no quota polling. To use both, keep the hub as the
    host and set `"relay": {"mode": "http", "host": "192.168.1.100"}` (see `hub/README.md`).
-2. Install it: `claude plugin marketplace add tfabien/standup-bot`, then `claude plugin install standup-bot@standup-bot --scope user`.
+2. Install it: `claude plugin marketplace add tfabien/agentsdash`, then `claude plugin install agentsdash@agentsdash --scope user`.
    Open a new Claude Code session afterwards (hooks load when a session starts).
-   From a checkout: `claude plugin marketplace add <path of the checkout>` instead of `tfabien/standup-bot`, or try it without installing
+   From a checkout: `claude plugin marketplace add <path of the checkout>` instead of `tfabien/agentsdash`, or try it without installing
    with `claude --plugin-dir <path>/plugin`. Check with `claude plugin validate <path>/plugin`.
 
 Requires Node.js >= 18 on the PATH (`node`), standard library only.
