@@ -18,7 +18,8 @@ A theme is one JSON file, `themes/<name>.json`. Code: `plugin/hub/web/theme_sche
 ```
 
 - `name`: 1 to 32 characters among `a-z`, `0-9`, `-`.
-- `label`, `author`, `version`: optional text. `label` defaults to `name`.
+- `label` (the title), `author`, `version`: optional text. `label` defaults to `name`.
+- `description`: optional text, cut to 200 characters. `keywords`: optional list of words, at most 8, each cut to 24 characters. The marketplace shows and searches them.
 - `colors`: an object with keys among `SCREEN BAR FRAME PANEL ROW TEXT LIGHT FAINT WORKING NEEDS ERROR YOURTURN WAITING ACCENT CHIP ACCENT_DIM NEEDS_DIM`, values `#rrggbb`. A missing or invalid key keeps the built-in color.
 - `iconPack`: the name of an icon pack. A missing or malformed name gives `robot`.
 - A file over 256 KB, invalid JSON, a bad `name` or a missing `colors` object is skipped. The hub lists the reason in `errors` of the catalog.
@@ -91,3 +92,29 @@ node plugin/hub/tools/export_builtin.mjs
 ```
 
 It rewrites `plugin/hub/themes/*.json` and `plugin/hub/icons/<pack>/*.svg`. To start a pack of your own, copy one of those folders to `~/.claude/standup-bot/icons/<new-name>/` and edit the SVGs.
+
+## Marketplace
+
+The theme dialog has two tabs: **Installed** (the catalog, with a Remove button on themes that came from a marketplace) and **Marketplace** (themes of GitHub repositories, with search, Install, Update and Remove). The default source is `tfabien/standup-bot-themes`; add others with the "Add a source" field (`owner/repo` or a GitHub URL, at most 10). Sources are the hub setting `marketSources`, shared by all pages.
+
+The hub does the work: it reads the repository from `api.github.com` and downloads from `raw.githubusercontent.com`, then writes `~/.claude/standup-bot/themes/<name>.json` (with `iconPack` set to the theme name) and `icons/<name>/`. A download that fails, a file over the size limits (256 KB json and svg, 1 MB raster, 100 files, 20 MB total) or a theme named like a built-in one leaves everything as it was. `~/.claude/standup-bot/market.json` records `{ source, version, installedAt }` for each installed theme; only those themes are updated or removable.
+
+### Source layout
+
+One folder per theme at the root of the repository:
+
+```
+<name>/theme.json         name equal to the folder name; label, description, keywords, author, version, colors
+<name>/preview.png        optional (png, webp, jpg or gif)
+<name>/icons/<role>[-N][-blink].<png|webp|gif|jpg|svg>
+```
+
+`iconPack` is not written in the source: the pack is the theme's own `icons/` folder. A theme that shares images with another duplicates them. `version` is dotted numbers (`1.2.0`).
+
+### Updates
+
+The hub checks the sources of installed themes at start and every 6 hours while a page is open or a session exists, and installs a newer `version`. Turn this off with the **Auto-update** switch (setting `themeAutoUpdate`). **Check for updates** installs every newer version now. A listing is cached for 10 minutes; a check costs 2 GitHub calls per source (the anonymous limit is 60 calls per hour).
+
+### Routes
+
+`GET /market` (sources, installed log, themes with `installed`, `installedVersion`, `updatable`, errors, `lastCheck`), `POST /market/sources` `{add}` or `{remove}`, `POST /market/install` `{source, name}`, `POST /market/remove` `{name}`, `POST /market/update` `{}` or `{name}`. The Host and Origin checks of the hub apply.
