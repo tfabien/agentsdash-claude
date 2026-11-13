@@ -2,11 +2,11 @@
 
 The page has one global theme, chosen with the palette button of the bottom bar (a dialog with a preview of each theme). The hub keeps the choice (`theme` in `hub-settings.json`), so every page and browser follows without a restart. The physical screen is not affected.
 
-Themes and icon packs are files. The hub reads the built-in ones (`default`, `robot`) from `plugin/hub/` and yours from `~/.claude/standup-bot/`, and publishes them as `catalog` in `GET /state`.
+Themes and icon packs are files. The hub reads the built-in ones from `plugin/hub/` (none ship today) and yours from `~/.claude/standup-bot/`, and publishes them as `catalog` in `GET /state`.
 
 ## Built-in theme and more themes
 
-standup-bot ships with one theme, `default` (colors of the firmware, `ui_theme.h`), and one icon pack, `robot` (the 8 role robots). Every other theme lives in https://github.com/tfabien/standup-bot-themes (cat, lemmings, office, pirates, spelunky and more). Install them with the `install-theme` skill of the plugin, or follow `install.md` of that repository, which also lists the constraints to create a theme.
+standup-bot ships no theme file. At the first launch of the hub, when no theme is installed, it downloads the `robot` theme (else the first one listed) from the first marketplace source and applies it; it retries every 10 minutes while that fails (offline). Until then the page draws the built-in vector robots in the firmware colors. The themes live in https://github.com/tfabien/standup-bot-themes (cat, lemmings, office, pirates, spelunky and more). Install them with the `install-theme` skill of the plugin, or follow `install.md` of that repository, which also lists the constraints to create a theme.
 
 ## Theme file
 

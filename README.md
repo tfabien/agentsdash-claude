@@ -85,7 +85,7 @@ Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn l
 
 ### Themes
 
-- standup-bot ships with the `default` theme and the `robot` icon pack. More themes (cat, lemmings, office, pirates, spelunky, yokai...) are in [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes). Ask Claude Code "install a standup-bot theme" (skill `install-theme`) or follow that repository's `install.md`, which also explains how to create your own. Details: `docs/themes.md`.
+- standup-bot ships no theme: the hub downloads the `robot` theme from [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes) at its first launch when none is installed (offline, the page draws built-in robots). More themes (cat, lemmings, office, pirates, spelunky, yokai...) are in [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes). Ask Claude Code "install a standup-bot theme" (skill `install-theme`) or follow that repository's `install.md`, which also explains how to create your own. Details: `docs/themes.md`.
 
 ## How it works
 
