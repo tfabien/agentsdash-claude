@@ -7,7 +7,7 @@ each plan has come, and which agent waits for you. It makes the daily work with 
 2. **Follow my agents**: see every session, its sub-agents and what each one is doing, like a stand-up meeting of the agents.
 3. **Know what needs my attention**: when an agent asks a question or waits for a permission, the screen turns orange and beeps, so I can work on something else without watching the terminal.
 
-![Main view](docs/images/screen-main.png)
+![The hub page: one tile per session](docs/images/page-grid.png)
 
 It is a Claude Code plugin plus a small Node.js server that draws the screen **in your browser**. Nothing to buy, nothing to flash.
 An external screen (an ESP32 gadget, a USB display) is a bonus, see [Devices](#devices-optional).
@@ -34,12 +34,12 @@ Details, update, uninstall and troubleshooting: [INSTALL.md](INSTALL.md).
 
 ## What you see
 
-The page is the screen of the gadget, drawn as vectors at the resolution of your display, with the same layout, colors and wording.
-The screenshots below are taken from the page itself (`node plugin/hub/tools/screenshots.mjs`).
+The page is a grid with one tile per session. Each tile is drawn like the screen of the gadget, as vectors at the resolution of your display.
+The screenshots below are taken from the real page, fed with made-up sessions (`node plugin/hub/tools/page_screenshots.mjs`).
 
 ### Plan: see and follow the progress
 
-![Plan](docs/images/screen-plan.png)
+![A session full screen: plan, context and sub-agents](docs/images/page-fullscreen.png)
 
 - Plan progress built from the task list of the session (`TaskCreate`/`TaskUpdate`, `TodoWrite`, the desktop `update_plan`): segmented bar, current step and next step. Steps running in parallel each pulse.
 - Context fill bar next to the plan (green under 60 %, orange 60 to 79 %, red from 80 %).
@@ -47,7 +47,7 @@ The screenshots below are taken from the page itself (`node plugin/hub/tools/scr
 
 ### Questions: display and notification
 
-![Question](docs/images/screen-question.png)
+The top tile of the first screenshot is a pending question.
 
 - A pending `AskUserQuestion` takes the full width with the question and its numbered options. The session turns orange and the page beeps.
 - Permission prompts turn the session orange too.
@@ -59,20 +59,12 @@ Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn l
 
 ### Sub-agents: see and follow them
 
-![3 sub-agents](docs/images/screen-subs3.png)
-
-![7 sub-agents](docs/images/screen-subs7.png)
-
 - One row per sub-agent: role robot (lead, general, explore, plan, review, test, code, generic), name, current action, age.
 - 1 to 4 sub-agents get large rows, 5 to 7 compact rows, 8 or more show 6 rows and "+N more".
 - Six states with their color: working (green), needs you (orange), error (red), your turn (grey-blue), waiting on sub-agents (blue), done (faint).
 - Robots blink while working, and the state bar of an agent that needs you pulses orange.
 
 ### Click: agent detail and session list
-
-![Detail](docs/images/screen-detail.png)
-
-![Menu](docs/images/screen-menu.png)
 
 - Click a sub-agent row: the left panel shows its full command, tokens and previous command. Click the panel to go back.
 - Click the title bar: one row per session, closes by itself after 8 s. The dots in the title bar show every session state. The **trash icon** at the end of a row hides that session (finished demos, old sessions); it comes back by itself when it works again or asks you something, not when it only reports that it is idle.
@@ -85,14 +77,20 @@ Open <http://127.0.0.1:8765/> for a grid with one tile per session, each drawn l
 
 ### Themes, looks and project rules
 
+![The theme dialog](docs/images/page-themes.png)
+
 The palette button of the bottom bar opens the theme dialog: one list of installed and marketplace themes with search, tags and status filter, a preview of each, and Apply, Install, Update, Preview, Delete. The choice is kept by the hub, so every open page follows.
 
 - **Variants**: a theme can ship several color variants (for example light and dark), picked with swatches on its card.
 - **Accent**: a theme or a variant can set an icon accent that tints the agents (SVG `currentColor`, or a hue rotation for pictures).
 - **Looks**: a theme can offer several characters. Tick the looks you want and each agent takes one by a stable hash of its id, so it keeps its look. A look can pick a numbered sprite, an accent and a **palette**.
 - **Palette swaps**: an icon pack can recolor chosen colors of a PNG or lossless WebP (hair, for example) by exact match, without a second sprite. Skin, clothes, outlines and transparency stay as drawn.
-- **Color editor and Save as theme**: **Edit colors** changes any color of the active theme live (with a contrast warning), and **Save as theme** keeps the result, variant and ticked looks as your own theme in `~/.claude/standup-bot/themes/`.
-- **Project rules** (settings menu): give the sessions of some folders their own icon pack and badge color, matched on the session's working directory with globs (`C:/work/prod-*`). First match wins. A production folder can show a red badge so it stands out in the grid.
+- **Color editor and Save as theme** (screenshot below): **Edit colors** changes any color of the active theme live (with a contrast warning), and **Save as theme** keeps the result, variant and ticked looks as your own theme in `~/.claude/standup-bot/themes/`.
+- **Project rules** (settings menu, second screenshot below): give the sessions of some folders their own icon pack and badge color, matched on the session's working directory with globs (`C:/work/prod-*`). First match wins. A production folder can show a red badge so it stands out in the grid.
+![The color editor](docs/images/page-editor.png)
+
+![The settings with two project rules](docs/images/page-settings.png)
+
 - standup-bot ships no theme: the hub downloads the `robot` theme (set another with `"theme": "office-modern"` in `~/.claude/agent-gadget.json`) from [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes) at its first launch when none is installed (offline, the page draws built-in robots). More themes (cat, lemmings, office, pirates, spelunky, yokai...) are in [tfabien/standup-bot-themes](https://github.com/tfabien/standup-bot-themes). Ask Claude Code "install a standup-bot theme" (skill `install-theme`) or follow that repository's `install.md`, which also explains how to create your own. Installed marketplace themes are checked for new versions every 6 hours. Formats and rules for themes, packs, looks, palettes and project rules: [docs/themes.md](docs/themes.md).
 
 ## How it works
