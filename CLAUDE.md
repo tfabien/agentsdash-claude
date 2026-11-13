@@ -46,5 +46,5 @@ The page redraws the device screen as vectors: `web/screen.js` is a port of the 
 - Windows: `process.exit` right after spawning the detached hub crashes Node (libuv assertion): hooks set `process.exitCode`.
 - A shell here-document or `sed` turns `\n` in a replacement into a real newline: edit code with an editor tool or a Python script file.
 - `sleep` of more than a few seconds is blocked in the shell tool: wait with a loop on a condition.
-- README screenshots are the real page: `plugin/hub/tools/page_screenshots.mjs` (demo hub from `demo_seed.mjs`, built-in `line` theme (variants and looks, no network; marketplace themes through `DEMO_THEMES`), 4 tiles per page, needs Edge or Chrome). `screenshots.mjs` draws the device screen scenes only (30 s per scene).
+- README screenshots are the real page: `plugin/hub/tools/page_screenshots.mjs` (demo hub from `demo_seed.mjs`, built-in `line` theme (variants and looks, no network; marketplace themes through `DEMO_THEMES`), 4 tiles per page, needs Edge or Chrome). `page_gif.mjs` records the guided tour GIF at the top of the README (live events and clicks, frames assembled by `frames_to_gif.py`, needs Python with Pillow). `screenshots.mjs` draws the device screen scenes only (30 s per scene).
 - Work PC (Windows 10 Enterprise, Fortinet VPN, Dell dock); prefer a personal PC to install new tools.

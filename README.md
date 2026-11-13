@@ -7,7 +7,7 @@ each plan has come, and which agent waits for you. It makes the daily work with 
 2. **Follow my agents**: see every session, its sub-agents and what each one is doing, like a stand-up meeting of the agents.
 3. **Know what needs my attention**: when an agent asks a question or waits for a permission, the screen turns orange and beeps, so I can work on something else without watching the terminal.
 
-![The hub page: one tile per session, 2x2](docs/images/page-hub.png)
+![Tour of the page: a question arrives, a plan moves, sub-agents join, a tap opens the detail, pages, a theme variant](docs/images/tour.gif)
 
 It is a Claude Code plugin plus a small Node.js server that draws the screen **in your browser**. Nothing to buy, nothing to flash.
 An external screen (an ESP32 gadget, a USB display) is a bonus, see [Devices](#devices-optional).
