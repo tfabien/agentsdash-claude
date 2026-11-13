@@ -16,7 +16,7 @@ One `POST http://<hub>/event` per hook (wire format v2, JSON):
 | `PreToolUse` | `working` | `Edit app.py`, `Bash git status`, ... (`detail` = path or command) |
 | `PermissionRequest`, `Notification` (`permission_prompt`, `elicitation_*`, `agent_needs_input`) | `needs_you` | `Approve? Bash ...` / the message |
 | `PostToolUse`, `PostToolUseFailure`, `PermissionDenied` | `working` | `Resumed` / `Denied, continuing` (sent only when they clear a "needs you") |
-| `Stop` | `your_turn` | `Done, waiting for you` |
+| `Stop` | `your_turn` | `Done, waiting for you` (plus `reply_first` and `reply_last`, the first and last paragraph of the reply, up to 300 characters; the hub page shows the one chosen in Settings, "Reply when it is your turn") |
 | `SubagentStart` / `SubagentStop` | `working` / `done` | `Started` / the sub-agent's last message |
 | `SessionEnd` | `done` | `Session ended` |
 

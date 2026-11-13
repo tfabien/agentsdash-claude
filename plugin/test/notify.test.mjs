@@ -180,6 +180,21 @@ test('stop_is_your_turn_and_session_end_is_done', () => {
   assert.deepEqual([end.state, end.cmd], ['done', 'Session ended']);
 });
 
+test('stop_carries_first_and_last_paragraph_of_the_reply', () => {
+  const { build } = builder();
+  const msg = '## Result\nAll **tests** pass.\n\n- detail one\n- detail two\n\nNext: `merge` the branch.';
+  const stop = build(payload(LEAD, 'Stop', { last_assistant_message: msg }));
+  assert.deepEqual([stop.reply_first, stop.reply_last], ['Result All tests pass.', 'Next: merge the branch.']);
+  assert.equal(build(payload(LEAD, 'Stop')).reply_first, undefined, 'no reply, no field');
+  const long = build(payload(LEAD, 'Stop', { last_assistant_message: 'x'.repeat(500) }));
+  assert.equal(long.reply_first.length, 300);
+});
+
+test('stop_reply_is_not_sent_when_masked', () => {
+  const { build } = builder();
+  assert.equal(build(payload(LEAD, 'Stop', { last_assistant_message: 'secret' }), { CLAUDE_GADGET_MASK: '1' }).reply_first, undefined);
+});
+
 test('unknown_event_returns_null', () => {
   const { build } = builder();
   assert.equal(build(payload(LEAD, 'PreCompact')), null);
