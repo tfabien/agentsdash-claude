@@ -11,10 +11,13 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { envVar, pluginConfig, stateDir } from './common.mjs';
-import { bumpCalls, readPlan } from './plan_tracker.mjs';
+import { bumpCalls, bumpIdle, readIdle, readPlan, resetIdle } from './plan_tracker.mjs';
 
 export const STALE_MS = 10 * 60 * 1000;
 export const NUDGE_EVERY = 8;        // tool calls without a plan change between two reminders (first one at the same count)
+export const IDLE_NUDGE_AT = 3;      // tool calls of a turn without any task list before the "create one" reminder
+export const GUARD_AFTER = 4;        // tool calls of a turn without any task list before the guard denies the next one
+const GUARD_FREE = new Set(['ToolSearch', 'AskUserQuestion']);   // always allowed: ToolSearch loads the task-list tool when it is deferred
 const PLAN_TOOLS = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite', 'mcp__ccd_turn__update_plan', 'mcp__ccd_turn__wrap_up']);
 
 export const RULES = [
@@ -30,10 +33,35 @@ export const promptsEnabled = (env = process.env, cfg = pluginConfig(env)) => {
   return cfg.prompts !== false;
 };
 
-/** Mid-turn reminder: a plan with open steps that did not change for NUDGE_EVERY tool calls (a step skipped, or none marked in progress). */
+/** Off by default. When on, a PreToolUse call is denied after GUARD_AFTER tool calls of a turn without any task list. */
+export const guardEnabled = (env = process.env, cfg = pluginConfig(env)) => {
+  const v = envVar('GUARD', env);
+  if (v !== undefined && v !== '') return v !== '0' && v.toLowerCase() !== 'false';
+  return cfg.guard === true;
+};
+
+/** The deny reason for this PreToolUse payload, or null to let the call through. */
+export function decisionFor(payload, { env = process.env, cfg = pluginConfig(env), dir = stateDir(env) } = {}) {
+  if (!promptsEnabled(env, cfg) || !guardEnabled(env, cfg) || payload.agent_id) return null;
+  if (payload.hook_event_name !== 'PreToolUse') return null;
+  const tool = String(payload.tool_name || '');
+  if (!tool || PLAN_TOOLS.has(tool) || GUARD_FREE.has(tool)) return null;
+  if (readPlan(dir, payload.session_id).tasks.length) return null;
+  if (readIdle(dir, payload.session_id) < GUARD_AFTER) return null;
+  return 'agentsdash: this turn has no task list. Create one now with the task-list tool of this session (one entry per step, '
+    + 'the first in progress), then retry. If ToolSearch is needed to load that tool, it is allowed.';
+}
+
+/** Mid-turn reminder: no task list after IDLE_NUDGE_AT tool calls, or a plan with open steps that did not change for NUDGE_EVERY tool calls. */
 function nudge(payload, dir) {
   const tool = String(payload.tool_name || '');
   if (!tool || PLAN_TOOLS.has(tool)) return null;
+  if (!readPlan(dir, payload.session_id).tasks.length) {
+    const idle = bumpIdle(dir, payload.session_id);
+    return idle === IDLE_NUDGE_AT
+      ? `agentsdash: ${idle} tool calls and no task list. The user follows the plan on the agentsdash screen: create the task list now, one entry per step.`
+      : null;
+  }
   const calls = bumpCalls(dir, payload.session_id);
   if (calls < NUDGE_EVERY || calls % NUDGE_EVERY !== 0) return null;
   const { tasks } = readPlan(dir, payload.session_id);
@@ -47,6 +75,7 @@ function nudge(payload, dir) {
 /** The text to add to the session for this hook payload, or null. */
 export function contextFor(payload, { env = process.env, cfg = pluginConfig(env), dir = stateDir(env), now = Date.now() } = {}) {
   if (!promptsEnabled(env, cfg) || payload.agent_id) return null;
+  if (payload.hook_event_name === 'SessionStart' || payload.hook_event_name === 'UserPromptSubmit') resetIdle(dir, payload.session_id);
   if (payload.hook_event_name === 'SessionStart') return RULES;
   if (payload.hook_event_name === 'PostToolUse') return nudge(payload, dir);
   if (payload.hook_event_name !== 'UserPromptSubmit') return null;
@@ -61,6 +90,11 @@ export function contextFor(payload, { env = process.env, cfg = pluginConfig(env)
 function main() {
   let payload = {};
   try { payload = JSON.parse(fs.readFileSync(0, 'utf8')); } catch { return; }
+  if (payload.hook_event_name === 'PreToolUse') {
+    const reason = decisionFor(payload);
+    if (reason) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } })}\n`);
+    return;
+  }
   const text = contextFor(payload);
   if (text) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext: text } })}\n`);
 }
