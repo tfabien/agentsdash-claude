@@ -55,7 +55,7 @@ test('core_dir_selects_the_hub', () => {
   assert.equal(findCore({ env: { AGENTSDASH_CORE_DIR: path.join('x', 'core') } }).script, path.join('x', 'core', 'hub.mjs'));
   assert.equal(findCore({ env: { CLAUDE_GADGET_HUB_SCRIPT: path.join('y', 'hub.mjs') } }).script, path.join('y', 'hub.mjs'));
   assert.equal(findCore({ env: { AGENTSDASH_CORE_DIR: 'c', CLAUDE_GADGET_HUB_SCRIPT: 'y/hub.mjs' } }).script, path.join('c', 'hub.mjs'));
-  assert.equal(path.basename(findCore({ env: {} }).script), 'hub.mjs');
+  assert.equal(findCore({ env: { AGENTSDASH_USER_HOME: tmp() } }), null);
   assert.equal(findCore({ env: {}, hubScript: 'explicit.mjs' }).script, 'explicit.mjs');
 });
 

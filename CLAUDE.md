@@ -1,54 +1,24 @@
-# agentsdash
+# agentsdash-claude
 
-Goal: an agent dashboard for Claude Code. **The browser page is the main product**: a Claude Code plugin sends events to a local
-Node.js hub that draws the screen in a web page. External devices (an ESP32 with the screen of an Artillery X3 printer, others later)
-are an optional bonus, fed by the same hub. Install instructions are in `INSTALL.md` (written for Claude Code to follow).
+The Claude Code plugin `agentsdash` (marketplace `agentsdash` in `.claude-plugin/marketplace.json`, source `./plugin`). The hub it feeds is the core,
+repository `tfabien/agentsdash`; devices are `agentsdash-device-*` repositories; themes are `agentsdash-themes`.
 
-Language: chat with the user in French. **Code comments, documentation and on-screen text are in English by default.**
+Language: chat with the user in French. Code comments, documentation and on-screen text are in English.
 
-## Layout of the repo
+## Layout
 
-- `plugin/` - the Claude Code plugin `agentsdash` (what users install; the marketplace file is `.claude-plugin/marketplace.json`, source `./plugin`).
-  - `hooks/hooks.json`, `scripts/` - hooks -> `notify.mjs` -> `POST /event` v2; `statusline.mjs`, `transcript_usage.mjs`, `plan_tracker.mjs`, `session_prompts.mjs` (rules and stale-plan reminder, on by default), `hub_client.mjs`, `common.mjs`. Node >= 18, stdlib only.
-  - `hub/` - the hub: `hub.mjs` (HTTP + SSE), `model.mjs` (port of `devices/artillery-x3-esp32/firmware/model.cpp`), `web/` (the page: `screen.js` decides, `vector_screen.js` draws, `hub_page.js` wires the one page (tiles, pages), `scenes.js` fixed scenes),
-    `paths.mjs` (names, folders, old-name fallback), `relay_http.mjs`, `relay_serial.mjs`, `tui.mjs`, `tools/screenshots.mjs`, `test/`.
-    Themes and packs as files: `themes/*.json`, `icons/<pack>/*.svg`, `themes_loader.mjs` (scans the built-in and user folders), `web/theme_schema.js`, `tools/export_builtin.mjs` (regenerates the built-ins). Per-project rules: `rules.mjs` (hub validation), `web/rules.js` (matching). Marketplace of GitHub theme repositories: `market_source.mjs` (list), `market_install.mjs` (install and remove, `market.json` log), `market_update.mjs` (versions, 6 hour timer), `market_bootstrap.mjs` (downloads a first theme when none is installed; no theme ships in `plugin/`), routes `/market*` in `hub.mjs`, tab in `web/market.js`. Hub side: `docs/hub-themes.md`; format of themes and packs: `docs/format.md` of the agentsdash-themes repository.
-  - `test/` - tests of the hooks. Everything the plugin needs at run time is inside `plugin/` (a marketplace install copies only that folder).
-- `devices/` - optional external screens, one folder each, with its own README. `devices/artillery-x3-esp32/` is the ESP32 gadget (firmware, screen project, tests); it has its own `CLAUDE.md` with the hardware and screen protocol notes.
-- `docs/` - `superpowers/` specs and plans, `hook-payloads.md` (captured hook payloads), `images/` (README screenshots, made by `plugin/hub/tools/screenshots.mjs`).
-- `INSTALL.md`, `README.md` - install instructions and the product README.
+- `plugin/hooks/hooks.json`, `plugin/scripts/`: hooks go to `notify.mjs` (`POST /event` v2; never blocks, never prints, exits 0, gives up after 1.5 s).
+  `statusline.mjs`, `transcript_usage.mjs`, `plan_tracker.mjs`, `session_prompts.mjs`, `common.mjs` (names, folders, versions), `hub_client.mjs` (post to the hub, find the core, version rule),
+  `core_install.mjs` (download of a core release), `quota_poller.mjs` (plan quotas, posts `/usage`). Node >= 18, standard library only.
+- `plugin/test/`: tests (`node --test plugin/test/*.test.mjs`; a directory argument fails on Node 24). `fixtures/mini_hub.mjs` stands in for the core.
+- A marketplace install copies only `plugin/`: everything the plugin needs at run time is inside it.
 
-Tests (no hardware): `node --test plugin/hub/test/*.test.mjs plugin/test/*.test.mjs` (a directory argument fails on Node 24). `claude plugin validate plugin` and `claude plugin validate .` pass.
+## Rules
 
-## Plugin and hub
-
-`plugin/hooks/hooks.json`: hooks `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse(Failure)`, `PermissionRequest`, `PermissionDenied`,
-`Notification`, `SubagentStart`, `SubagentStop`, `Stop`, `SessionEnd` -> `scripts/notify.mjs` (never blocks, never prints, exits 0, gives up after 1.5 s).
-Claude Code loads hooks when a session starts: after installing or moving the plugin, open a **new** session.
-The project was renamed from standup-bot to agentsdash (steps 1 and 2 of `docs/superpowers/specs/2026-11-13-multi-repo-split-and-rename-design.md`). Config `~/.agentsdash/config.json`, variables `AGENTSDASH_*`, user folder `~/.agentsdash/`. The old `~/.claude/agent-gadget.json` and `CLAUDE_GADGET_*` names still work as a fallback for one major version. The old user folder `~/.claude/standup-bot/` is copied once on the first start of the hub. The hub (`plugin/hub/`) imports nothing from `plugin/scripts/` and runs from a copy of its own folder (test `core_standalone`); `AGENTSDASH_CORE_DIR=<folder holding hub.mjs>` makes the hooks start that core.
-The wire contract is `docs/protocol.md` and `docs/device-protocol.md`, checked against the code by `plugin/hub/test/protocol_doc.test.mjs`.
-The plugin installed at user level is `agentsdash@agentsdash`; with a local marketplace (`claude plugin marketplace add <this checkout>`) it is read **live from this working tree**,
-so a broken `notify.mjs` breaks every session's hooks.
-Host (where events go): env `AGENTSDASH_HOST`, or `~/.agentsdash/config.json` `{"host": "...", "relay": {...}}`, default `127.0.0.1:8765` (the hub: the first hook starts it detached when the host is this machine).
-Every event carries the session's `cwd` (full path, for the per-project rules); `AGENTSDASH_MASK=1` drops it, and it is never sent to devices.
-A device IP still works as host (events go straight to the device, no hub). `plugin/scripts/common.mjs` and `plugin/hub/paths.mjs` hold the same name rules (each side keeps its own copy: an adapter never imports code from a core).
-`idle_prompt` notifications are not sent (they bring back dropped or hidden sessions). The hub keeps `POST /dismiss` (hidden sessions return with a working, error or needs-you event) and `POST /settings` (beeps, shared by all pages).
-`AGENTSDASH_DUMP=<file>` appends raw payloads, `AGENTSDASH_DRY_RUN=1` prints the event instead of sending it, `AGENTSDASH_MASK=1` hides commands.
-With `defaultMode: auto` no permission prompt appears, so no orange.
-The plugin and the hub keep text whole (full Unicode, no length limit). Text sent to a device (both relays) goes through `forDevice` in `plugin/hub/ascii.mjs`: accents stripped, typographic quotes mapped, other characters become `?` (the screen fonts are ASCII only), and each field cut to the firmware buffer (project 14, title 30, cmd 63...). Each screen sets its own limits.
-The hub binds `127.0.0.1`, answers only requests whose Host is the hub and rejects foreign Origins (no CORS). Relay: `http` (device over Wi-Fi) or `serial` (USB lines, needs `npm install serialport` in `plugin/hub/`).
-`scripts/statusline.mjs` is a status line (manual install in `~/.claude/settings.json`, see `plugin/README.md`) that posts context and quotas to `/usage`. The **desktop app does not run status lines**:
-`scripts/quota_poller.mjs` polls the quotas and posts them to `/usage` (`notify.mjs` starts it detached, at most once a minute, stamp file `quota_poll.stamp`; OAuth token of `~/.claude/.credentials.json`, never printed; `api/oauth/usage`, else a 1-token Haiku call read for its rate-limit headers). The hub never polls.
-Off: `AGENTSDASH_QUOTAS=0` or `"quotas": false`. Hooks add tokens, a context estimate and the session title read from the transcripts.
-Themes (`themes/*.json`) and icon packs (`icons/<pack>/*.svg`) are read from `plugin/hub/` and `~/.agentsdash/` (the user folder wins), published as `catalog` in the state; `GET /icons/<pack>/<file>` serves only listed files (sandboxed SVG) and `POST /reload` rescans. A theme may carry `accent`, `variants` and `looks` (several active characters, hash per agent, setting `themeLooks`), a pack an optional `pack.json` tint mode; the user's color edits are the settings `themeVariant` and `themeOverrides`, and `POST /themes` saves a look as a user theme (format: `docs/format.md` of the agentsdash-themes repository).
-The page redraws the device screen as vectors: `web/screen.js` is a port of the firmware's `display_hmi.cpp`, `layout.cpp`, `ui_state.cpp` (same 480x272 units); keep them in step when the firmware UI changes.
-
-## Pitfalls
-
-- The hooks never download inside a hook: `core_install.mjs` and `quota_poller.mjs` run detached, started by `notify.mjs` / `hub_client.mjs` and throttled by stamp files in the state folder (`core_install.stamp` 10 min, `quota_poll.stamp` 1 min).
-- `plugin/hub/test/fixtures/events.jsonl` is recorded from the hooks (`node plugin/test/tools/record_events.mjs`); after changing what `notify.mjs` sends, rerun it, the hub contract test replays the file.
-- Windows: `process.exit` right after spawning the detached hub crashes Node (libuv assertion): hooks set `process.exitCode`.
-- A shell here-document or `sed` turns `\n` in a replacement into a real newline: edit code with an editor tool or a Python script file.
-- `sleep` of more than a few seconds is blocked in the shell tool: wait with a loop on a condition.
-- README screenshots are the real page: `plugin/hub/tools/page_screenshots.mjs` (demo hub from `demo_seed.mjs`, marketplace theme `office` (needs network; `DEMO_THEMES=<name>` picks another, `DEMO_THEMES=` the built-in `line`), 4 tiles per page, needs Edge or Chrome). `page_gif.mjs` records the guided tour GIF at the top of the README (live events and clicks, frames assembled by `frames_to_gif.py`, needs Python with Pillow). `screenshots.mjs` draws the device screen scenes only (30 s per scene).
-- Work PC (Windows 10 Enterprise, Fortinet VPN, Dell dock); prefer a personal PC to install new tools.
+- The plugin never imports code from a core: it only speaks the protocol (`docs/protocol.md` of the core repository). Protocol and minimum core are the constants `PROTOCOL` and `MIN_CORE` in `plugin/scripts/common.mjs`.
+- Core lookup: `AGENTSDASH_CORE_DIR`, then the old `CLAUDE_GADGET_HUB_SCRIPT`, then `~/.agentsdash/core/<version>/`, else `core_install.mjs` downloads one (detached, throttled by `core_install.stamp`).
+- Names: variables `AGENTSDASH_*` (old `CLAUDE_GADGET_*` as fallback), config `~/.agentsdash/config.json` (old `~/.claude/agent-gadget.json` as fallback).
+- Claude Code loads hooks when a session starts: after installing or moving the plugin, open a new session. With a local marketplace the plugin is read live from the checkout, so a broken `notify.mjs` breaks every session.
+- Windows: `process.exit` right after spawning a detached child crashes Node (libuv assertion): hooks set `process.exitCode`.
+- Edit code with an editor tool or a Python script file: a shell here-document or `sed` turns `\n` into a real newline.
+- Work PC: Windows 10 Enterprise, Fortinet VPN; prefer a personal PC to install new tools.

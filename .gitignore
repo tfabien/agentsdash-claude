@@ -1,12 +1,4 @@
-# installers and downloads (large, third-party)
-USARTHMIsetup_latest/
-EdtHmiStudio-*.exe
-*.exe
-# build and tooling output
-.pio/
-.superpowers/
+node_modules/
 __pycache__/
 *.pyc
-
-# Node dependencies (optional serialport of the hub)
-node_modules/
+.superpowers/

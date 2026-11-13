@@ -12,7 +12,7 @@ import { tidy, configWindow } from '../scripts/common.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, '..', 'scripts', 'notify.mjs');
-const HUB = path.join(HERE, '..', 'hub', 'hub.mjs');
+const MINI_HUB = path.join(HERE, 'fixtures', 'mini_hub.mjs');
 
 const LEAD = { session_id: 'abcd1234-0000', cwd: 'C:/work/demo' };
 const SUB = { ...LEAD, agent_id: 'aa0bc7f345def841f', agent_type: 'general-purpose' };
@@ -394,11 +394,10 @@ test('port_taken_by_other_program_gives_up_silently', async () => {
 /** A hub launcher that records its pid in `pids`, so tests can count and kill the hubs a hook started. */
 function makeStub(pids) {
   const stub = path.join(tmp(), 'stub-hub.mjs');
-  const hubUrl = JSON.stringify(`file:///${HUB.replace(/\\/g, '/')}`);
+  const hubUrl = JSON.stringify(`file:///${MINI_HUB.replace(/\\/g, '/')}`);
   fs.writeFileSync(stub, `import fs from 'node:fs'; import path from 'node:path';
 fs.writeFileSync(path.join(${JSON.stringify(pids)}, String(process.pid)), '');
-const { startHub } = await import(${hubUrl});
-await startHub().catch(() => process.exit(1));`);
+await import(${hubUrl});`);
   return stub;
 }
 

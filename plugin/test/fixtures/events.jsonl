@@ -1,0 +1,16 @@
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"SessionStart","state":"your_turn","cmd":"Session started","detail":""}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"UserPromptSubmit","state":"working","cmd":"Prompt: Fix the login bug","detail":""}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"PreToolUse","state":"working","cmd":"Edit login.js","detail":"src/login.js"}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"PreToolUse","state":"working","cmd":"Bash npm test","detail":"npm test"}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"aa0b","role":"general-purpose","evt":"SubagentStart","state":"working","cmd":"Started","detail":""}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"aa0b","role":"general-purpose","evt":"PreToolUse","state":"working","cmd":"Read auth.js","detail":"src/auth.js"}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"aa0b","role":"general-purpose","evt":"PermissionRequest","state":"needs_you","cmd":"Approve? Bash make build","detail":"make build"}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"aa0b","role":"general-purpose","evt":"PostToolUse","state":"working","cmd":"Resumed","detail":""}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"aa0b","role":"general-purpose","evt":"SubagentStop","state":"done","cmd":"Build checked, 2 warnings.","detail":""}
+{"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"SessionStart","state":"your_turn","cmd":"Session started","detail":""}
+{"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"UserPromptSubmit","state":"working","cmd":"Prompt: Plan the release","detail":""}
+{"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"PreToolUse","state":"needs_you","cmd":"Question","detail":"","question":"Which scope?","options":"Minimal|Full"}
+{"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"PostToolUse","state":"working","cmd":"Resumed","detail":""}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"Stop","state":"your_turn","cmd":"Done, waiting for you","detail":"","reply_first":"Login fixed, tests pass.","reply_last":"Next: review the diff."}
+{"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"Stop","state":"your_turn","cmd":"Done, waiting for you","detail":"","reply_first":"Release plan written.","reply_last":"Release plan written."}
+{"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"SessionEnd","state":"done","cmd":"Session ended","detail":""}

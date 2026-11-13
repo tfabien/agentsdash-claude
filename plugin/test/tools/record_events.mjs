@@ -1,6 +1,6 @@
 // Records the v2 events the hooks send for a scripted pair of sessions: `node plugin/test/tools/record_events.mjs`
-// rewrites plugin/hub/test/fixtures/events.jsonl. The hub test replays that file (the contract between adapter and core);
-// the hooks test regenerates it and compares, so the two cannot drift apart.
+// rewrites plugin/test/fixtures/events.jsonl. The hooks test regenerates it and compares. The core repository keeps a copy at
+// hub/test/fixtures/events.jsonl and replays it against the hub (the contract between adapter and core): copy the file there after rerunning this.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NOTIFY = path.join(HERE, '..', '..', 'scripts', 'notify.mjs');
-export const EVENTS_FILE = path.join(HERE, '..', '..', 'hub', 'test', 'fixtures', 'events.jsonl');
+export const EVENTS_FILE = path.join(HERE, '..', 'fixtures', 'events.jsonl');
 
 const A = { session_id: 'aaaa1111-0000', cwd: 'C:/work/demo' };
 const B = { session_id: 'bbbb2222-0000', cwd: 'C:/work/other' };

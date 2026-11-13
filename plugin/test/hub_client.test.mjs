@@ -31,9 +31,7 @@ test('find_core_order', () => {
   assert.deepEqual(findCore({ env, hubScript: 'explicit.mjs' }), { script: 'explicit.mjs', mode: 'local' });
   assert.deepEqual(findCore({ env }), { script: path.join('c', 'core', 'hub.mjs'), mode: 'local' });
   assert.deepEqual(findCore({ env: { CLAUDE_GADGET_HUB_SCRIPT: path.join('y', 'hub.mjs') } }), { script: path.join('y', 'hub.mjs'), mode: 'local' });
-  const sibling = findCore({ env: {} });
-  assert.equal(sibling.mode, 'local');
-  assert.equal(path.basename(sibling.script), 'hub.mjs');
+  assert.equal(findCore({ env: { AGENTSDASH_USER_HOME: tmp() } }), null, 'no hub folder next to the scripts in this repository, no installed core');
 });
 
 test('find_core_picks_highest_matching_installed', () => {

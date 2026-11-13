@@ -1,7 +1,7 @@
 # agentsdash (Claude Code plugin)
 
-Claude Code hooks that send what each session and sub-agent is doing to the **hub** (a local Node.js server with a browser page, in `hub/`),
-which shows it and can relay it to an optional device such as the ESP32 gadget (see `../devices/`). Node.js only, no Python.
+Claude Code hooks that send what each session and sub-agent is doing to the **hub** (a local Node.js server with a browser page, the core: https://github.com/tfabien/agentsdash),
+which shows it and can relay it to an optional device such as the ESP32 gadget. Node.js only, no Python.
 Install instructions: [`../INSTALL.md`](../INSTALL.md).
 
 ## What it sends
@@ -70,7 +70,7 @@ The context estimate from transcripts assumes a 1M window (desktop sessions); se
 The hooks start the hub (the core) themselves. They look for it in this order (first match wins):
 
 1. `AGENTSDASH_CORE_DIR=<folder holding hub.mjs>` (a checkout or your own build; the old `CLAUDE_GADGET_HUB_SCRIPT=<path to hub.mjs>` still works as a fallback).
-2. The `hub/` folder next to `scripts/` (only in this repository's checkout).
+2. A `hub/` folder next to `scripts/` (only in the old single repository).
 3. The highest core in `~/.agentsdash/core/<version>/` that speaks protocol 2 and is at least version 0.4.1.
 4. None: `scripts/core_install.mjs` starts detached and downloads the newest release of `tfabien/agentsdash` that speaks protocol 2
    (the `core_repo` key of the config file, or the variable `AGENTSDASH_CORE_REPO`, names another repository), checks its sha256 and unpacks it
@@ -87,10 +87,10 @@ its files changed. With an installed core it is replaced only when its `/health`
    `~/.agentsdash/config.json` `{ "host": "127.0.0.1:8765" }`, default `127.0.0.1:8765` (the hub). When the host is this
    machine and the hub is not running, the first hook starts it (detached). A gadget IP (`192.168.1.100`) still works
    as a host: events go straight to the gadget, with no hub page and no quota polling. To use both, keep the hub as the
-   host and set `"relay": {"mode": "http", "host": "192.168.1.100"}` (see `hub/README.md`).
-2. Install it: `claude plugin marketplace add tfabien/agentsdash`, then `claude plugin install agentsdash@agentsdash --scope user`.
+   host and set `"relay": {"mode": "http", "host": "192.168.1.100"}` (see the core's `hub/README.md`).
+2. Install it: `claude plugin marketplace add tfabien/agentsdash-claude`, then `claude plugin install agentsdash@agentsdash --scope user`.
    Open a new Claude Code session afterwards (hooks load when a session starts).
-   From a checkout: `claude plugin marketplace add <path of the checkout>` instead of `tfabien/agentsdash`, or try it without installing
+   From a checkout: `claude plugin marketplace add <path of the checkout>` instead of `tfabien/agentsdash-claude`, or try it without installing
    with `claude --plugin-dir <path>/plugin`. Check with `claude plugin validate <path>/plugin`.
 
 Requires Node.js >= 18 on the PATH (`node`), standard library only.

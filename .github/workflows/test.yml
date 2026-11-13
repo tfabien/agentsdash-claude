@@ -21,4 +21,4 @@ jobs:
       # bash expands the globs (a directory argument fails on Node 24)
       - name: Run tests
         shell: bash
-        run: node --test plugin/hub/test/*.test.mjs plugin/test/*.test.mjs
+        run: node --test plugin/test/*.test.mjs

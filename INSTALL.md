@@ -19,13 +19,13 @@ If Node.js is missing or older than 18, ask the user to install it from https://
 ## 2. Install the plugin
 
 ```bash
-claude plugin marketplace add tfabien/agentsdash
+claude plugin marketplace add tfabien/agentsdash-claude
 claude plugin install agentsdash@agentsdash --scope user
 ```
 
-Inside a Claude Code session, the same two steps are `/plugin marketplace add tfabien/agentsdash` and
+Inside a Claude Code session, the same two steps are `/plugin marketplace add tfabien/agentsdash-claude` and
 `/plugin install agentsdash@agentsdash`. On Claude Code 2.1.275 or later, one line does both:
-`/plugin install agentsdash --marketplace tfabien/agentsdash`.
+`/plugin install agentsdash --marketplace tfabien/agentsdash-claude`.
 
 Check it:
 
@@ -57,12 +57,8 @@ curl -s -X POST http://127.0.0.1:8765/event -d '{"v":2,"session":"test","project
 curl -s -X POST http://127.0.0.1:8765/reset
 ```
 
-If `/health` does not answer and no new session is open, start the hub by hand (the plugin folder is the `Read from` path of
-`claude plugin list`, or the checkout of this repository):
-
-```bash
-node <plugin folder>/hub/hub.mjs
-```
+If `/health` does not answer, the hooks have not downloaded the hub yet (the core, see below): wait a minute and send another message.
+The core lives in `~/.agentsdash/core/<version>/`; to start one by hand: `node ~/.agentsdash/core/<version>/hub.mjs`.
 
 ## 5. What to tell the user
 
@@ -73,7 +69,7 @@ node <plugin folder>/hub/hub.mjs
 - Plan quotas (5 hours, week) appear by themselves; they come from the Claude account of the user (OAuth token, never printed).
   `AGENTSDASH_QUOTAS=0` turns the polling off.
 - Optional themes (cat, lemmings, pirates...) are in https://github.com/tfabien/agentsdash-themes ; to install them, follow its `install.md`.
-- An external screen (ESP32 gadget, USB display) is optional: see `devices/README.md`.
+- An external screen (ESP32 gadget, USB display) is optional: see https://github.com/tfabien/agentsdash (devices).
 
 ## Update, uninstall, troubleshooting
 
@@ -87,4 +83,4 @@ node <plugin folder>/hub/hub.mjs
 | `node` not found by hooks | Claude Code must find `node` in its `PATH`: restart it after installing Node.js. |
 | Hooks seem to do nothing | Run a hook by hand: `echo '{"hook_event_name":"Stop","session_id":"abcd1234","cwd":"."}' \| AGENTSDASH_DRY_RUN=1 node <plugin folder>/scripts/notify.mjs` prints the event it would send. |
 
-Full documentation: [README.md](README.md), [plugin/README.md](plugin/README.md), [plugin/hub/README.md](plugin/hub/README.md).
+Full documentation: [README.md](README.md), [plugin/README.md](plugin/README.md); the hub, its page and its protocol: https://github.com/tfabien/agentsdash.
