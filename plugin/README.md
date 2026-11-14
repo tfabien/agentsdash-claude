@@ -95,6 +95,7 @@ The hooks start the hub (the core) themselves. They look for it in this order (f
    (the `core_repo` key of the config file, or the variable `AGENTSDASH_CORE_REPO`, names another repository), checks its sha256 and unpacks it
    into `~/.agentsdash/core/<version>/`. The event that triggered it is dropped; the next one finds the core. Offline, nothing is printed and the
    download is tried again after 10 minutes.
+   Behind a proxy, set `HTTPS_PROXY` (or `HTTP_PROXY`, with `NO_PROXY` for exceptions): the download goes through a CONNECT tunnel. A proxy that inspects TLS needs `NODE_EXTRA_CA_CERTS`.
 
 A running hub is left alone unless it is the wrong one. With a core from steps 1 or 2 it is replaced when it runs another script or started before
 its files changed. With an installed core it is replaced only when its `/health` has no `core`, a different `protocol`, or a `core` below the minimum
