@@ -13,4 +13,6 @@
 {"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"PostToolUse","state":"working","cmd":"Resumed","detail":""}
 {"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"Stop","state":"your_turn","cmd":"Done, waiting for you","detail":"","reply_first":"Login fixed, tests pass.","reply_last":"Next: review the diff."}
 {"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"Stop","state":"your_turn","cmd":"Done, waiting for you","detail":"","reply_first":"Release plan written.","reply_last":"Release plan written."}
+{"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"UserPromptSubmit","state":"working","cmd":"Prompt: Retry the release plan","detail":""}
+{"v":2,"session":"bbbb","project":"other","cwd":"C:/work/other","agent":"lead","role":"lead","evt":"StopFailure","state":"error","cmd":"Error: rate_limit","detail":"429 Too Many Requests"}
 {"v":2,"session":"aaaa","project":"demo","cwd":"C:/work/demo","agent":"lead","role":"lead","evt":"SessionEnd","state":"done","cmd":"Session ended","detail":""}

@@ -372,7 +372,7 @@ test('dump_appends_raw_payload', () => {
 test('hooks_json_registers_every_event_with_node', () => {
   const hooks = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'hooks', 'hooks.json'), 'utf8')).hooks;
   const expected = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
-    'PermissionDenied', 'Notification', 'SubagentStart', 'SubagentStop', 'Stop', 'SessionEnd'];
+    'PermissionDenied', 'Notification', 'SubagentStart', 'SubagentStop', 'Stop', 'StopFailure', 'SessionEnd'];
   assert.deepEqual(expected.filter((e) => !(e in hooks)), []);
   for (const [name, groups] of Object.entries(hooks)) {
     const cmd = groups[0].hooks[0].command;
@@ -457,4 +457,17 @@ test('notify_ignores_an_unwritable_state_folder_for_the_poller', async () => {
   assert.equal(out.status, 0);
   assert.equal(out.stdout, '');
   assert.equal(out.stderr, '');
+});
+
+test('stop_failure_is_the_error_state_and_clears_a_needs_you_marker', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-'));
+  const base = { session_id: 'abcd1234', cwd: 'C:/work/demo' };
+  buildEvent({ ...base, hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'x' } }, {}, dir);
+  const ev = buildEvent({ ...base, hook_event_name: 'StopFailure', error: 'rate_limit', error_details: '429 Too Many Requests' }, {}, dir);
+  assert.equal(ev.state, 'error');
+  assert.equal(ev.cmd, 'Error: rate_limit');
+  assert.equal(ev.detail, '429 Too Many Requests');
+  assert.equal(fs.readdirSync(dir).filter((n) => n.endsWith('.needs')).length, 0);
+  assert.equal(buildEvent({ ...base, hook_event_name: 'StopFailure' }, {}, dir).cmd, 'Error: unknown');
+  assert.equal(buildEvent({ ...base, hook_event_name: 'StopFailure', error: 'x' }, { AGENTSDASH_MASK: '1' }, dir).detail, '');
 });
