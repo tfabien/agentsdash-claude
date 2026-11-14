@@ -95,7 +95,7 @@ While the hook waits, the terminal shows nothing: no answer before the delay, TE
 hook print nothing, and the terminal asks the question. `"question_wait_s"` in `~/.agentsdash/config.json` sets the delay: 60 seconds by
 default, at most 300, `0` turns the feature off. Questions of sub-agents and sessions with `AGENTSDASH_MASK=1` stay in the terminal.
 In the desktop app, its own dialog shows while the hook waits; an answer from the page closes it (checked 2026-11-14, app 5.11492.5).
-Not checked yet: an answer from the page in a terminal session.
+In a terminal session the dialog never shows: Claude Code prints the answer given on the page (checked 2026-11-14, Claude Code 2.1.322).
 
 ## Where the hub comes from
 
