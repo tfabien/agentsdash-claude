@@ -45,7 +45,7 @@ test('request_body_sends_labels_and_the_wait', async () => {
       { question: 'Which targets?', header: 'Targets', options: ['Web', 'iOS', 'Android'], multi: true },
     ],
   });
-  assert.equal(requestBody(P, 9999).wait_s, 300);
+  assert.equal(requestBody(P, 9999).wait_s, 600);
 });
 
 test('none_terminal_or_bad_picks_leave_the_terminal_to_ask', async () => {
@@ -85,11 +85,11 @@ test('answers_for_dedups_and_orders_multi_picks', () => {
 });
 
 test('wait_seconds', () => {
-  assert.equal(waitSeconds({}), 60);
+  assert.equal(waitSeconds({}), 600);
   assert.equal(waitSeconds({ question_wait_s: 0 }), 0);
-  assert.equal(waitSeconds({ question_wait_s: 1000 }), 300);
-  assert.equal(waitSeconds({ question_wait_s: -1 }), 60);
-  assert.equal(waitSeconds({ question_wait_s: '30' }), 60);
+  assert.equal(waitSeconds({ question_wait_s: 1000 }), 600);
+  assert.equal(waitSeconds({ question_wait_s: -1 }), 600);
+  assert.equal(waitSeconds({ question_wait_s: '30' }), 600);
 });
 
 test('hooks_json_runs_ask_on_ask_user_question_with_a_long_timeout', () => {
@@ -97,7 +97,7 @@ test('hooks_json_runs_ask_on_ask_user_question_with_a_long_timeout', () => {
   const askOf = (ev) => (hooks[ev] ?? []).find((h) => h.hooks[0].command.includes('ask.mjs'));
   assert.equal(askOf('PreToolUse'), undefined, 'a PreToolUse hook would hide the question while it waits');
   assert.equal(askOf('PermissionRequest').matcher, 'AskUserQuestion');
-  assert.ok(askOf('PermissionRequest').hooks[0].timeout > 300);
+  assert.ok(askOf('PermissionRequest').hooks[0].timeout > 600);
   for (const ev of ['PostToolUse', 'PostToolUseFailure', 'PermissionDenied']) {
     assert.equal(askOf(ev).matcher, 'AskUserQuestion', ev);
     assert.ok(askOf(ev).hooks[0].timeout <= 5, ev);
