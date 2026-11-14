@@ -53,6 +53,12 @@ test('wait_zero_skips_the_request', async () => {
   assert.equal(seen.length, 0);
 });
 
+test('ask_user_question_skips_the_request', async () => {
+  const seen = [];
+  assert.equal(await decide({ ...P, tool_name: 'AskUserQuestion' }, { host: 'h:1', waitS: 30, post: answering('allow', seen) }), 'none');
+  assert.equal(seen.length, 0);
+});
+
 test('wait_is_capped_at_120', async () => {
   const seen = [];
   await decide(P, { host: 'h:1', waitS: 9999, post: answering('none', seen) });
