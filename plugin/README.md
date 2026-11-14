@@ -36,7 +36,7 @@ A create after a fully done list starts a new list. Sub-agents' own task lists a
 
 ### Prompts
 
-The screen can only show questions that go through `AskUserQuestion` and plans built from task-list tool calls.
+The screen shows questions that go through `AskUserQuestion` and the `ask` and buttons of the desktop app's `wrap_up` box (kept until the next prompt), and plans built from task-list tool calls.
 `scripts/session_prompts.mjs` (hooks `SessionStart` and `UserPromptSubmit`) asks Claude to do both. It adds text to every
 session. It is on by default; turn it off with `AGENTSDASH_PROMPTS=0` or `{"prompts": false}` in `~/.agentsdash/config.json`
 (the variable wins over the file). `SessionStart` adds three rules (ask through `AskUserQuestion`, create a task list

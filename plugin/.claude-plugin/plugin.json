@@ -1,6 +1,6 @@
 {
   "name": "agentsdash",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Agent dashboard in your browser: every Claude Code session, sub-agent, plan and question on one screen, with optional ESP32 devices. Needs Node.js >= 18.",
   "author": { "name": "agentsdash" }
 }
