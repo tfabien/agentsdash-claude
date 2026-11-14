@@ -112,6 +112,18 @@ test('ask_user_question_sends_question_and_options', () => {
   assert.equal(build(payload(LEAD, 'PostToolUse', { tool_name: 'AskUserQuestion', tool_input: answered })).state, 'working');
 });
 
+test('wrap_up_ask_shows_as_a_question_that_survives_stop_until_the_next_prompt', () => {
+  const { build } = builder();
+  const ti = { recap: 'Done.', ask: 'Commit and open the PRs?', actions: [{ action: 'commit' }, { label: 'Not now' }] };
+  const ev = build(payload(LEAD, 'PreToolUse', { tool_name: 'mcp__ccd_turn__wrap_up', tool_input: ti }));
+  assert.deepEqual([ev.state, ev.question, ev.options], ['needs_you', 'Commit and open the PRs?', 'Commit|Not now']);
+  assert.equal(build(payload(LEAD, 'PostToolUse', { tool_name: 'mcp__ccd_turn__wrap_up', tool_input: ti })), null);
+  assert.equal(build(payload(LEAD, 'Stop', {})), null);
+  assert.equal(build(payload(LEAD, 'UserPromptSubmit', { prompt: 'ok' })).state, 'working');
+  const noAsk = build(payload(LEAD, 'PreToolUse', { tool_name: 'mcp__ccd_turn__wrap_up', tool_input: { recap: 'x' } }));
+  assert.equal(noAsk.state, 'working');
+});
+
 test('permission_request_needs_you_and_posttooluse_clears', () => {
   const { build, dir } = builder();
   const ask = build(payload(SUB, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'rm -rf build' } }));

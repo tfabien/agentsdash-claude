@@ -57,6 +57,18 @@ function askParts(input) {
   return [String(q.question ?? ''), labels.slice(0, 4).map((l) => tidy(l).replace(/\|/g, '/')).join('|')];
 }
 
+const WRAP_UP = 'mcp__ccd_turn__wrap_up';
+const ACTION_LABELS = { commit: 'Commit', create_pr: 'Create PR', merge: 'Merge', fix_ci: 'Fix CI', address_comments: 'Address comments',
+  resolve_conflicts: 'Resolve conflicts', verify: 'Verify', archive: 'Archive', new_session: 'New session' };
+
+/** [question, options] of the desktop app's wrap_up box: its ask and its buttons (reply label or app action name). */
+function wrapUpParts(input) {
+  const ti = input && typeof input === 'object' ? input : {};
+  const acts = Array.isArray(ti.actions) ? ti.actions : [];
+  const labels = acts.map((a) => (a && typeof a === 'object' ? String(a.label || ACTION_LABELS[a.action] || a.action || '') : '')).filter(Boolean);
+  return [String(ti.ask ?? ''), labels.slice(0, 4).map((l) => tidy(l).replace(/\|/g, '/')).join('|')];
+}
+
 export function markerPath(dir, sessionId, agent) {
   return path.join(dir, `${alnum(sessionId).slice(0, 12) || 'session'}-${agent}.needs`);
 }
@@ -94,7 +106,7 @@ function sameCall(key, p) {
   const i = key.indexOf('|');
   const name = key.slice(0, i);
   if ((p.tool_name ?? '') !== name) return false;
-  if (name === 'AskUserQuestion') return true;      // PostToolUse may carry the answers in tool_input: the hash would not match
+  if (name === 'AskUserQuestion' || name === WRAP_UP) return true;      // PostToolUse may carry the answers in tool_input: the hash would not match
   return !('tool_input' in p) || callKey(p) === key;
 }
 
@@ -145,6 +157,15 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
         return ev;
       }
     }
+    if (name === WRAP_UP && !mask && !agentId) {
+      const [question, options] = wrapUpParts(p.tool_input);
+      if (question) {
+        const ev = event('needs_you', 'Question', '');
+        ev.question = tidy(question);
+        ev.options = options;
+        return ev;
+      }
+    }
     if (name === 'SubagentHandback') return event(state, 'Reporting back');
     const [arg, detail] = toolParts(name, p.tool_input);
     return event(state, prefix + (mask ? name : `${name} ${arg}`), detail);
@@ -162,6 +183,10 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
       setMarker(marker, callKey(p));
       return toolEvent('needs_you');
     }
+    if (p.tool_name === WRAP_UP && !agentId && !mask && wrapUpParts(p.tool_input)[0]) {
+      setMarker(marker, `${WRAP_UP}|ask`);                    // the box waits for the user after the turn ends: Stop keeps it
+      return toolEvent('needs_you');
+    }
     if (readMarker(marker) !== null) return null;             // a parallel call starts while a prompt waits: stay "needs you"
     return toolEvent('working');
   }
@@ -171,7 +196,9 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
   }
   if (CLEARING_EVENTS.has(hook)) {
     const key = readMarker(marker);
-    if (key === null || !sameCall(key, p)) return null;       // another (parallel) call finished: the prompt still waits
+    if (key === null || !sameCall(key, p)) return null;
+    if (key === `${WRAP_UP}|ask`) return null;                // the wrap_up question stays until the user answers (next prompt)
+          // another (parallel) call finished: the prompt still waits
     clearMarker(marker);
     return event('working', hook !== 'PermissionDenied' ? 'Resumed' : 'Denied, continuing');
   }
@@ -198,6 +225,7 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
     return null;
   }
   if (hook === 'Stop') {
+    if (readMarker(marker) === `${WRAP_UP}|ask`) return null;     // keep the wrap_up question on screen
     clearMarker(marker);
     const ev = event('your_turn', 'Done, waiting for you');
     if (!mask) Object.assign(ev, replyExcerpts(p.last_assistant_message));      // the hub page shows the one the user picked

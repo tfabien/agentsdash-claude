@@ -7,7 +7,7 @@
       "name": "agentsdash",
       "source": "./plugin",
       "description": "Agent dashboard in your browser: every Claude Code session, sub-agent, plan and question on one screen (optional ESP32 devices).",
-      "version": "0.4.1"
+      "version": "0.4.2"
     }
   ]
 }
