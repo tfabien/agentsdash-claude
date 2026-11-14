@@ -35,7 +35,7 @@ const CLEARING_EVENTS = new Set(['PostToolUse', 'PostToolUseFailure', 'Permissio
 const alnum = (s) => String(s ?? '').replace(/[^A-Za-z0-9]/g, '');
 
 /** [short argument, detail] of a tool call, e.g. ['app.py', 'src/app.py'] or ['git status', 'git status']. */
-function toolParts(name, input) {
+export function toolParts(name, input) {
   const ti = input && typeof input === 'object' ? input : {};
   if (['Edit', 'Write', 'Read', 'NotebookEdit', 'MultiEdit'].includes(name)) {
     const p = String(ti.file_path || ti.notebook_path || '');
