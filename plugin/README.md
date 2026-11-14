@@ -75,6 +75,14 @@ Quotas are only reported to Pro/Max subscribers.
 The context estimate from transcripts assumes a 1M window (desktop sessions); set `"context_window": 200000` in
 `~/.agentsdash/config.json` for 200k sessions.
 
+## Allow or Deny from the screen
+
+When Claude Code asks for a permission, `scripts/permission.mjs` (a second `PermissionRequest` hook, next to `notify.mjs`) posts `POST /permission`
+and waits. The hub page shows ALLOW and DENY on the session tile; a tap answers the prompt in Claude Code. No tap before the delay, a hub that is
+down, a core older than 0.6.0 or an answer given in the terminal first: the hook prints nothing and the terminal prompt decides.
+`"permission_wait_s"` in `~/.agentsdash/config.json` sets the delay: 30 seconds by default, at most 120, `0` turns the feature off.
+`AGENTSDASH_MASK=1` sends the tool name only. The phone page is read-only and has no buttons.
+
 ## Where the hub comes from
 
 The hooks start the hub (the core) themselves. They look for it in this order (first match wins):
