@@ -240,13 +240,24 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
   return null;
 }
 
-/** Path of a sub-agent's own transcript: agent_transcript_path (SubagentStop) or derived from the lead's path. */
+/** Path of a sub-agent's own transcript: agent_transcript_path (SubagentStop) or derived from the lead's path,
+ * `<lead>/subagents/agent-<id>.jsonl`, or `<lead>/subagents/workflows/<run>/agent-<id>.jsonl` for a Workflow agent. */
 function subagentTranscript(p) {
   if (p.agent_transcript_path) return String(p.agent_transcript_path);
   if (!p.transcript_path || !p.agent_id) return null;
   const lead = String(p.transcript_path);
-  const base = lead.endsWith('.jsonl') ? lead.slice(0, -'.jsonl'.length) : lead;
-  return path.join(base, 'subagents', `agent-${p.agent_id}.jsonl`);
+  const dir = path.join(lead.endsWith('.jsonl') ? lead.slice(0, -'.jsonl'.length) : lead, 'subagents');
+  const name = `agent-${p.agent_id}.jsonl`;
+  const direct = path.join(dir, name);
+  if (fs.existsSync(direct)) return direct;
+  try {
+    const runs = path.join(dir, 'workflows');
+    for (const run of fs.readdirSync(runs)) {
+      const file = path.join(runs, run, name);
+      if (fs.existsSync(file)) return file;
+    }
+  } catch { /* no workflow folder */ }
+  return direct;
 }
 
 /** Add token counts (and, for the lead, session total, context and title) read from the transcripts.
@@ -263,12 +274,15 @@ export function addUsage(ev, p, dir, mask = false, windowDefault = 1000000) {
     saveCache(dir, session4, cache);
     const out = { ...ev, tok: entry.tokens };
     if (entry.model) out.model = tidy(entry.model);
-    if (!isSub) {
+    if (entry.last_ctx > 0) {                                   // a sub-agent has its own context
+      out.ctx_k = Math.round(entry.last_ctx / 1000);
+      out.ctx_pct = Math.round((100 * entry.last_ctx) / contextWindow(entry.last_ctx, entry.model, windowDefault));
+    }
+    if (isSub) {
+      const prompt = tidy(entry.prompt || '');
+      if (prompt && !mask) out.prompt = prompt;
+    } else {
       out.stok = Object.values(cache).reduce((sum, e) => sum + (e && typeof e === 'object' ? e.tokens || 0 : 0), 0);
-      if (entry.last_ctx > 0) {
-        out.ctx_k = Math.round(entry.last_ctx / 1000);
-        out.ctx_pct = Math.round((100 * entry.last_ctx) / contextWindow(entry.last_ctx, entry.model, windowDefault));
-      }
       if (entry.title && !mask) {
         const title = tidy(entry.title);
         if (title) out.title = title;

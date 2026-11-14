@@ -16,11 +16,36 @@ import path from 'node:path';
 const MAX_READ = 4 * 1024 * 1024;
 const SEEN_KEEP = 50;
 
-export const emptyEntry = () => ({ offset: 0, size: 0, tokens: 0, last_ctx: 0, model: '', title: '', seen: [], partial: false });
+export const emptyEntry = () => ({ offset: 0, size: 0, tokens: 0, last_ctx: 0, model: '', title: '', prompt: '', seen: [], partial: false });
+
+const PROMPT_MAX = 300;
+const WF_REQUEST = '[Workflow harness — user request]';
+const WF_TASK = '[Workflow harness — computed task]';
+
+/** Text of a user message: a string, or the text parts of a content array (tool results have none). */
+function userText(msg) {
+  if (!msg || typeof msg !== 'object') return '';
+  if (typeof msg.content === 'string') return msg.content;
+  if (!Array.isArray(msg.content)) return '';
+  return msg.content.filter((p) => p && p.type === 'text' && typeof p.text === 'string').map((p) => p.text).join('\n');
+}
+
+/** The task a sub-agent was given: its first user message. A Workflow agent gets two framed messages:
+ * the relayed user request is skipped, the computed task keeps only its indented text. */
+export function promptOf(text) {
+  let t = String(text || '');
+  if (t.startsWith(WF_REQUEST)) return '';
+  if (t.startsWith(WF_TASK)) {
+    const at = t.indexOf('\n');
+    t = at < 0 ? '' : t.slice(at + 1).split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n');
+  }
+  return t.trim().slice(0, PROMPT_MAX);
+}
 
 function apply(entry, record) {
   const kind = record.type;
-  if (kind === 'custom-title' && record.customTitle) entry.title = String(record.customTitle);
+  if (kind === 'user' && !entry.prompt && !entry.last_ctx && !entry.partial) entry.prompt = promptOf(userText(record.message));
+  else if (kind === 'custom-title' && record.customTitle) entry.title = String(record.customTitle);
   else if (kind === 'ai-title' && record.aiTitle) entry.title = String(record.aiTitle);
   else if (kind === 'assistant') {
     const msg = record.message;

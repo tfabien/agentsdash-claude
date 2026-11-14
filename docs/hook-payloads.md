@@ -13,7 +13,9 @@ inside a sub-agent** (observed: `agent_id` = 17 hex chars such as `aa0bc7f345def
 `general-purpose`). The **lead has neither field**.
 Inside a sub-agent, `transcript_path` is still the **lead's** transcript; the sub-agent's own transcript is
 `<transcript_path without .jsonl>/subagents/agent-<agent_id>.jsonl` (same value as `agent_transcript_path` on `SubagentStop`,
-checked on a dump 2026-11-08). Nothing in any payload names a parent: the parent of a
+checked on a dump 2026-11-08). A Workflow agent's transcript sits one level down, in
+`subagents/workflows/<run id>/agent-<agent_id>.jsonl` (seen 2026-11-14); its first two user messages are framed
+`[Workflow harness — user request]` and `[Workflow harness — computed task]` (the task text indented by 2 spaces). Nothing in any payload names a parent: the parent of a
 sub-agent is the session lead (same `session_id`).
 
 ## Per hook

@@ -282,8 +282,47 @@ test('subagent_event_uses_its_own_transcript', () => {
   t.write(t.sub, usageLine('s1', 100, 0, 0, 20));
   const ev = t.add(t.subPayload());
   assert.equal(ev.tok, 120);
-  assert.equal('ctx_pct' in ev, false);
+  assert.equal(ev.model, 'claude-opus-5-5');
   assert.equal('stok' in ev, false);
+  assert.equal('title' in ev, false);
+});
+
+test('subagent_event_has_its_own_context', () => {
+  const t = usageSetup();
+  t.write(t.lead, usageLine('m1', 2, 6051, 145121, 460));
+  t.write(t.sub, usageLine('s1', 2, 4000, 36000, 50));
+  const ev = t.add(t.subPayload(), false, 200000);
+  assert.deepEqual([ev.ctx_k, ev.ctx_pct], [40, 20]);
+});
+
+const userLine = (content) => `${JSON.stringify({ type: 'user', message: { role: 'user', content } })}\n`;
+
+test('subagent_event_carries_its_prompt', () => {
+  const t = usageSetup();
+  t.write(t.sub, userLine('Find the hub routes\n  and list them'));
+  t.write(t.sub, usageLine('s1', 100, 0, 0, 20));
+  t.write(t.sub, userLine([{ type: 'tool_result', content: 'x' }]));
+  assert.equal(t.add(t.subPayload()).prompt, 'Find the hub routes and list them');
+  assert.equal('prompt' in t.add(t.subPayload(), true), false);
+  assert.equal('prompt' in t.add(t.leadPayload()), false);
+});
+
+test('workflow_subagent_prompt_is_the_computed_task', () => {
+  const t = usageSetup();
+  t.write(t.sub, userLine('[Workflow harness — user request] The harness relays:\n  do a review'));
+  t.write(t.sub, userLine('[Workflow harness — computed task] The computed task text follows:\n  Review one area.\n  Area: web-themes'));
+  assert.equal(t.add(t.subPayload()).prompt, 'Review one area. Area: web-themes');
+});
+
+test('workflow_subagent_transcript_is_found_under_its_workflow_folder', () => {
+  const t = usageSetup();
+  const wf = path.join(path.dirname(t.lead), 'abcd1234-0000', 'subagents', 'workflows', 'wf_a507d610-9e5', 'agent-ab12.jsonl');
+  fs.mkdirSync(path.dirname(wf), { recursive: true });
+  t.write(wf, usageLine('w1', 2, 4000, 6000, 30));
+  const ev = t.add(t.subPayload({ agent_id: 'ab12' }));
+  assert.equal(ev.tok, 4032);
+  assert.equal(ev.model, 'claude-opus-5-5');
+  assert.equal(ev.ctx_k, 10);
 });
 
 test('session_total_includes_subagents', () => {
