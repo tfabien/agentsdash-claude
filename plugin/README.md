@@ -17,6 +17,7 @@ One `POST http://<hub>/event` per hook (wire format v2, JSON):
 | `PermissionRequest`, `Notification` (`permission_prompt`, `elicitation_*`, `agent_needs_input`) | `needs_you` | `Approve? Bash ...` / the message |
 | `PostToolUse`, `PostToolUseFailure`, `PermissionDenied` | `working` | `Resumed` / `Denied, continuing` (sent only when they clear a "needs you") |
 | `Stop` | `your_turn` | `Done, waiting for you` (plus `reply_first` and `reply_last`, the first and last paragraph of the reply, up to 300 characters; the hub page shows the one chosen in Settings, "Reply when it is your turn") |
+| `StopFailure` | `error` | `Error: <type>` (`rate_limit`, `authentication_failed`, `billing_error`, `server_error`, ...; `detail` = the error details). The turn ended on an API error; the next prompt clears it |
 | `SubagentStart` / `SubagentStop` | `working` / `done` | `Started` / the sub-agent's last message |
 | `SessionEnd` | `done` | `Session ended` |
 

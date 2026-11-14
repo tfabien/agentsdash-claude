@@ -43,6 +43,7 @@ Observed order for one lead turn with two sub-agents: `SessionStart`, `UserPromp
   "approved" hook: a long command run after an approval keeps the agent orange until it finishes (known limit).
 - A lead with at least one sub-agent not done is "waiting on sub-agents" **even after a `Stop`**.
 - Prompts starting with `<task-notification>` are reports, not user prompts; `SubagentHandback` is not shown as a command.
+- `StopFailure` (turn ended on an API error; payload `error` = `rate_limit`, `authentication_failed`, `billing_error`, `invalid_request`, `server_error`, `max_output_tokens` or `unknown`, plus `error_details` and `last_assistant_message`) is the only `error` state the plugin sends. A failed tool (`PostToolUseFailure`) is routine and only clears a "needs you"; the user's own interrupt is not an error.
 - `Stop` means "your turn" (for a lead with no running sub-agent). `Notification` `idle_prompt` is **not sent** by the plugin since 0.4: it repeats while a session is idle and brought back sessions the hub had dropped or the user had hidden.
 
 ## Captured 2026-11-08 (interactive session, `--permission-mode default`)

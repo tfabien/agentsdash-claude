@@ -231,6 +231,11 @@ export function buildEvent(p, env = process.env, dir = stateDir(env)) {
     if (!mask) Object.assign(ev, replyExcerpts(p.last_assistant_message));      // the hub page shows the one the user picked
     return ev;
   }
+  if (hook === 'StopFailure') {                                   // the turn ended on an API error: rate limit, authentication, billing, server...
+    clearMarker(marker);
+    const kind = tidy(p.error || 'unknown');
+    return event('error', `Error: ${kind}`, p.error_details || p.last_assistant_message || '');
+  }
   if (hook === 'SessionEnd') { clearMarker(marker); return event('done', 'Session ended'); }
   return null;
 }

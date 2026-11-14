@@ -35,6 +35,8 @@ export const PAYLOADS = [
   hook(B, 'PostToolUse', { tool_name: 'AskUserQuestion', tool_input: { ...ask, answers: { 'Which scope?': 'Minimal' } } }),
   hook(A, 'Stop', { last_assistant_message: 'Login fixed, tests pass.\n\nNext: review the diff.' }),
   hook(B, 'Stop', { last_assistant_message: 'Release plan written.' }),
+  hook(B, 'UserPromptSubmit', { prompt: 'Retry the release plan' }),
+  hook(B, 'StopFailure', { error: 'rate_limit', error_details: '429 Too Many Requests', last_assistant_message: 'API Error: Rate limit reached' }),
   hook(A, 'SessionEnd'),
 ];
 
