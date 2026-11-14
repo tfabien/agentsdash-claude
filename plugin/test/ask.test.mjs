@@ -67,7 +67,6 @@ test('subagent_mask_and_wait_zero_skip_the_request', async () => {
   const post = answering({ picks: [[0], [0]] }, seen);
   assert.equal(await ask({ ...P, agent_id: 'sub1' }, { host: 'h:1', waitS: 60, post, env: {} }), null);
   assert.equal(await ask(P, { host: 'h:1', waitS: 60, post, env: { AGENTSDASH_MASK: '1' } }), null);
-  assert.equal(await ask(P, { host: 'h:1', waitS: 60, post, env: { CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' } }), null);
   assert.equal(await ask(P, { host: 'h:1', waitS: 0, post, env: {} }), null);
   assert.equal(seen.length, 0);
 });
@@ -106,4 +105,11 @@ test('script_prints_nothing_when_the_hub_is_down', () => {
   });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
+});
+
+test('desktop_app_sessions_ask_the_hub', async () => {
+  const seen = [];
+  const post = answering({ picks: [[0], [0]] }, seen);
+  assert.ok(await ask(P, { host: 'h:1', waitS: 60, post, env: { CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' } }));
+  assert.equal(seen.length, 1);
 });

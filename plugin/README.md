@@ -94,9 +94,8 @@ shows the dialog. Free text ("Other") is only in the terminal.
 While the hook waits, the terminal shows nothing: no answer before the delay, TERMINAL, a hub that is down or a core older than 0.7.0 make the
 hook print nothing, and the terminal asks the question. `"question_wait_s"` in `~/.agentsdash/config.json` sets the delay: 60 seconds by
 default, at most 300, `0` turns the feature off. Questions of sub-agents and sessions with `AGENTSDASH_MASK=1` stay in the terminal.
-The desktop app is left out: it shows its own dialog while the hook waits and keeps it open after an answer from the page (checked
-2026-11-14, app 5.11492.5). The hook answer reaches Claude there; the open dialog would be a second, stale place to answer.
-Not checked yet: a terminal session.
+In the desktop app, its own dialog shows while the hook waits; an answer from the page closes it (checked 2026-11-14, app 5.11492.5).
+Not checked yet: an answer from the page in a terminal session.
 
 ## Where the hub comes from
 
