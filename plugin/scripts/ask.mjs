@@ -10,6 +10,8 @@
  *
  * Wait: "question_wait_s" in ~/.agentsdash/config.json, default 60 seconds, 0 turns the feature off, at most 300 (hooks.json: timeout 310).
  * Sub-agent calls and AGENTSDASH_MASK=1 are left to the terminal (notify.mjs does not send their question either).
+ * The desktop app (CLAUDE_CODE_ENTRYPOINT=claude-desktop) shows its own dialog while the hook waits and keeps it open after the hook
+ * answers (seen 2026-11-14, app 5.11492.5): two places to answer and a stale dialog, so the hook stays out of desktop sessions.
  */
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -67,7 +69,7 @@ export function outputFor(input, answers) {
 
 /** Ask the hub; the `answers` object, or null. Never throws. */
 export async function ask(p, { host, waitS, post: send = post, env = process.env }) {
-  if (!(waitS > 0) || p.agent_id || envVar('MASK', env)) return null;
+  if (!(waitS > 0) || p.agent_id || envVar('MASK', env) || env.CLAUDE_CODE_ENTRYPOINT === 'claude-desktop') return null;
   const questions = questionsOf(p.tool_input);
   if (!questions) return null;
   try {

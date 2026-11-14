@@ -67,6 +67,7 @@ test('subagent_mask_and_wait_zero_skip_the_request', async () => {
   const post = answering({ picks: [[0], [0]] }, seen);
   assert.equal(await ask({ ...P, agent_id: 'sub1' }, { host: 'h:1', waitS: 60, post, env: {} }), null);
   assert.equal(await ask(P, { host: 'h:1', waitS: 60, post, env: { AGENTSDASH_MASK: '1' } }), null);
+  assert.equal(await ask(P, { host: 'h:1', waitS: 60, post, env: { CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' } }), null);
   assert.equal(await ask(P, { host: 'h:1', waitS: 0, post, env: {} }), null);
   assert.equal(seen.length, 0);
 });
