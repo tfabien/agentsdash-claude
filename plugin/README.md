@@ -87,15 +87,17 @@ permission to show its dialog, and a tap would not answer the question.
 
 ## Answer a question from the screen
 
-When Claude asks with `AskUserQuestion`, `scripts/ask.mjs` (a `PreToolUse` hook on that tool, next to `notify.mjs`) posts `POST /question`
-with every question and waits. The hub page shows one question at a time on the session tile: one button per option, SEND for a multi choice,
-TERMINAL to answer in the terminal instead. The last answer goes back to Claude Code as `answers` of the tool input, so the terminal never
-shows the dialog. Free text ("Other") is only in the terminal.
-While the hook waits, the terminal shows nothing: no answer before the delay, TERMINAL, a hub that is down or a core older than 0.7.0 make the
-hook print nothing, and the terminal asks the question. `"question_wait_s"` in `~/.agentsdash/config.json` sets the delay: 60 seconds by
-default, at most 300, `0` turns the feature off. Questions of sub-agents and sessions with `AGENTSDASH_MASK=1` stay in the terminal.
-In the desktop app, its own dialog shows while the hook waits; an answer from the page closes it (checked 2026-11-14, app 5.11492.5).
-In a terminal session the dialog never shows: Claude Code prints the answer given on the page (checked 2026-11-14, Claude Code 2.1.322).
+When Claude asks with `AskUserQuestion`, the terminal or the app shows the question as usual, and `scripts/ask.mjs` (a `PermissionRequest`
+hook on that tool) posts it to `POST /question` at the same time. The hub page shows one question at a time on the session tile: one button
+per option, SEND for a multi choice, TERMINAL to hand it back. Answer on either side:
+- An answer on the page goes back to Claude Code as `answers` of the tool input, and the terminal or the app closes its dialog.
+- An answer in the terminal or the app ends the tool: `ask.mjs` then posts `POST /question/release` (on `PostToolUse`, `PostToolUseFailure`
+  or `PermissionDenied`) and the tile drops its buttons. A core older than 0.7.5 lets them go at the end of the turn.
+
+Free text ("Other") is only in the terminal or the app. `"question_wait_s"` in `~/.agentsdash/config.json` sets how long the tile keeps its
+buttons: 60 seconds by default, at most 300, `0` turns the feature off. Questions of sub-agents and sessions with `AGENTSDASH_MASK=1` stay off
+the page. Checked 2026-11-14 with Claude Code 2.1.325 in a terminal: the question shows in both places, and either answer closes the other.
+A session started before the plugin update keeps its old hooks until it restarts.
 
 ## Where the hub comes from
 
