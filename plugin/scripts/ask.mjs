@@ -11,7 +11,8 @@
  * On PostToolUse, PostToolUseFailure and PermissionDenied of AskUserQuestion (answered or cancelled there), it posts
  * /question/release so the tile drops its buttons at once (a core older than 0.7.5 answers 404: the tile lets go at the end of the turn).
  *
- * Wait: "question_wait_s" in ~/.agentsdash/config.json, default 60 seconds, 0 turns the feature off, at most 300 (hooks.json: timeout 310).
+ * Wait: "question_wait_s" in ~/.agentsdash/config.json, default 600 seconds, 0 turns the feature off, at most 600 (hooks.json: timeout 610).
+ * The terminal or the app shows the question meanwhile, so the wait only bounds a stuck hook.
  * Sub-agent calls and AGENTSDASH_MASK=1 are left to the terminal (notify.mjs does not send their question either).
  * Checked 2026-11-14 with Claude Code 2.1.325 in a terminal: the question shows in both places, either answer closes the other.
  */
@@ -20,11 +21,11 @@ import { pathToFileURL } from 'node:url';
 import { envVar, hubHost, pluginConfig } from './common.mjs';
 import { post } from './permission.mjs';
 
-export const DEFAULT_WAIT_S = 60;
-export const MAX_WAIT_S = 300;
+export const DEFAULT_WAIT_S = 600;
+export const MAX_WAIT_S = 600;
 const alnum = (s) => String(s ?? '').replace(/[^A-Za-z0-9]/g, '');
 
-/** Seconds to wait for the page: the config value (0 = off), capped at 300; the default for a missing or invalid value. */
+/** Seconds to wait for the page: the config value (0 = off), capped at 600; the default for a missing or invalid value. */
 export function waitSeconds(cfg) {
   const v = cfg?.question_wait_s;
   if (!Number.isFinite(v) || v < 0) return DEFAULT_WAIT_S;

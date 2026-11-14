@@ -95,7 +95,7 @@ per option, SEND for a multi choice, TERMINAL to hand it back. Answer on either 
   or `PermissionDenied`) and the tile drops its buttons. A core older than 0.7.5 lets them go at the end of the turn.
 
 Free text ("Other") is only in the terminal or the app. `"question_wait_s"` in `~/.agentsdash/config.json` sets how long the tile keeps its
-buttons: 60 seconds by default, at most 300, `0` turns the feature off. Questions of sub-agents and sessions with `AGENTSDASH_MASK=1` stay off
+buttons: 600 seconds by default, at most 600, `0` turns the feature off (the question stays in the terminal or the app all along). Questions of sub-agents and sessions with `AGENTSDASH_MASK=1` stay off
 the page. Checked 2026-11-14 with Claude Code 2.1.325 in a terminal: the question shows in both places, and either answer closes the other.
 A session started before the plugin update keeps its old hooks until it restarts.
 
