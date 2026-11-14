@@ -9,6 +9,7 @@
  * notify.mjs runs on the same hook and keeps its own rule (never blocks, 1.5 s): this script is the one that waits.
  * Wait: "permission_wait_s" in ~/.agentsdash/config.json, default 30 seconds, 0 turns the feature off, at most 120.
  * AGENTSDASH_MASK=1 sends the tool name only (no command, no path).
+ * AskUserQuestion is skipped: Allow or Deny does not answer a question (the desktop app and the terminal ask permission to show its dialog).
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -67,7 +68,7 @@ export function post(host, route, body, timeoutMs) {
 
 /** Ask the hub; 'allow', 'deny' or 'none'. Never throws. */
 export async function decide(p, { host, waitS, post: send = post, env = process.env }) {
-  if (!(waitS > 0)) return 'none';
+  if (!(waitS > 0) || p.tool_name === 'AskUserQuestion') return 'none';
   try {
     const wait = Math.min(MAX_WAIT_S, waitS);
     const res = await send(host, '/permission', JSON.stringify(requestBody(p, wait, Boolean(envVar('MASK', env)))), (wait + 2) * 1000);
