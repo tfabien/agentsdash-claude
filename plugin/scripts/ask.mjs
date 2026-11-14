@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 /*
- * Claude Code PreToolUse hook on AskUserQuestion -> agent hub: let the hub page answer the questions.
+ * Claude Code PermissionRequest hook on AskUserQuestion -> agent hub: let the hub page answer the questions too.
  *
- * Posts the questions to http://<host>/question and waits (the hub holds the response until the page answers, TERMINAL, or a delay).
- * The hub returns option indexes; this script maps them back to the labels and question texts it received and prints
- * permissionDecision "allow" with updatedInput = the whole tool input plus `answers` (question text -> label, multi-select labels
- * joined with ", "). Anything else (hub down, a core older than 0.7.0, no answer, TERMINAL, garbled answer) prints nothing and
- * exits 0, so the terminal asks the question. While this script waits, the terminal shows nothing: keep the wait short.
+ * Claude Code shows the question in the terminal or the app while this script waits, so either side answers. The script posts the
+ * questions to http://<host>/question and waits (the hub holds the response until the page answers, TERMINAL, or a delay).
+ * The hub returns option indexes; this script maps them back to the labels and question texts it received and prints the
+ * decision "allow" with updatedInput = the whole tool input plus `answers` (question text -> label, multi-select labels joined
+ * with ", "). Anything else (hub down, a core older than 0.7.0, no answer, TERMINAL, garbled answer) prints nothing and exits 0:
+ * the question stays in the terminal or the app.
+ * On PostToolUse, PostToolUseFailure and PermissionDenied of AskUserQuestion (answered or cancelled there), it posts
+ * /question/release so the tile drops its buttons at once (a core older than 0.7.5 answers 404: the tile lets go at the end of the turn).
  *
  * Wait: "question_wait_s" in ~/.agentsdash/config.json, default 60 seconds, 0 turns the feature off, at most 300 (hooks.json: timeout 310).
  * Sub-agent calls and AGENTSDASH_MASK=1 are left to the terminal (notify.mjs does not send their question either).
- * The desktop app shows its own dialog while the hook waits; an answer from the page closes it (checked 2026-11-14, app 5.11492.5,
- * once permission.mjs stopped asking Allow or Deny for this tool).
+ * Checked 2026-11-14 with Claude Code 2.1.325 in a terminal: the question shows in both places, either answer closes the other.
  */
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -61,10 +63,10 @@ export function answersFor(questions, picks) {
   return answers;
 }
 
-/** The JSON a PreToolUse hook prints to answer the questions; null when the terminal should ask. */
+/** The JSON a PermissionRequest hook prints to answer the questions; null when the terminal or the app should ask. */
 export function outputFor(input, answers) {
   if (!answers) return null;
-  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { ...input, answers } } });
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow', updatedInput: { ...input, answers } } } });
 }
 
 /** Ask the hub; the `answers` object, or null. Never throws. */
@@ -82,6 +84,19 @@ export async function ask(p, { host, waitS, post: send = post, env = process.env
   }
 }
 
+const RELEASE_EVENTS = new Set(['PostToolUse', 'PostToolUseFailure', 'PermissionDenied']);
+
+/** Tell the hub the question ran (answered or cancelled in the terminal or the app): the tile lets go. Never throws, 1.5 s at most. */
+export async function release(p, { host, post: send = post, env = process.env }) {
+  if (p.agent_id || envVar('MASK', env)) return false;
+  try {
+    const res = await send(host, '/question/release', JSON.stringify({ session: alnum(p.session_id).slice(0, 4), agent: 'lead' }), 1500);
+    return res?.status === 200;
+  } catch {
+    return false;
+  }
+}
+
 function readStdin() {
   return new Promise((resolve) => {
     const chunks = [];
@@ -94,8 +109,10 @@ function readStdin() {
 async function main() {
   let p;
   try { p = JSON.parse(await readStdin()); } catch { return; }
-  if (!p || typeof p !== 'object' || p.hook_event_name !== 'PreToolUse' || p.tool_name !== 'AskUserQuestion') return;
+  if (!p || typeof p !== 'object' || p.tool_name !== 'AskUserQuestion') return;
   const env = process.env;
+  if (RELEASE_EVENTS.has(p.hook_event_name)) { await release(p, { host: hubHost(env), env }); return; }
+  if (p.hook_event_name !== 'PermissionRequest') return;
   const out = outputFor(p.tool_input, await ask(p, { host: hubHost(env), waitS: waitSeconds(pluginConfig(env)), env }));
   if (out) process.stdout.write(`${out}\n`);
 }

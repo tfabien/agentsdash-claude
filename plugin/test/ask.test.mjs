@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { ask, answersFor, outputFor, requestBody, waitSeconds } from '../scripts/ask.mjs';
+import { ask, answersFor, outputFor, release, requestBody, waitSeconds } from '../scripts/ask.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const INPUT = {
@@ -14,7 +14,7 @@ const INPUT = {
   ],
   metadata: { source: 'x' },
 };
-const P = { hook_event_name: 'PreToolUse', session_id: 'abcdef12', tool_name: 'AskUserQuestion', tool_input: INPUT, cwd: '/x/proj' };
+const P = { hook_event_name: 'PermissionRequest', session_id: 'abcdef12', tool_name: 'AskUserQuestion', tool_input: INPUT, cwd: '/x/proj' };
 const answering = (reply, seen = []) => async (host, route, body, timeoutMs) => {
   seen.push({ host, route, body: JSON.parse(body), timeoutMs });
   return { status: 200, text: JSON.stringify(reply) };
@@ -28,7 +28,7 @@ test('picks_become_answers_keyed_by_question_text', async () => {
 test('output_allows_with_the_whole_input_plus_answers', () => {
   const out = JSON.parse(outputFor(INPUT, { 'Which framework?': 'React', 'Which targets?': 'iOS' }));
   assert.deepEqual(out, {
-    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { ...INPUT, answers: { 'Which framework?': 'React', 'Which targets?': 'iOS' } } },
+    hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow', updatedInput: { ...INPUT, answers: { 'Which framework?': 'React', 'Which targets?': 'iOS' } } } },
   });
   assert.equal(outputFor(INPUT, null), null);
 });
@@ -94,9 +94,14 @@ test('wait_seconds', () => {
 
 test('hooks_json_runs_ask_on_ask_user_question_with_a_long_timeout', () => {
   const hooks = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'hooks', 'hooks.json'), 'utf8')).hooks;
-  const entry = hooks.PreToolUse.find((h) => h.hooks[0].command.includes('ask.mjs'));
-  assert.equal(entry.matcher, 'AskUserQuestion');
-  assert.ok(entry.hooks[0].timeout > 300);
+  const askOf = (ev) => (hooks[ev] ?? []).find((h) => h.hooks[0].command.includes('ask.mjs'));
+  assert.equal(askOf('PreToolUse'), undefined, 'a PreToolUse hook would hide the question while it waits');
+  assert.equal(askOf('PermissionRequest').matcher, 'AskUserQuestion');
+  assert.ok(askOf('PermissionRequest').hooks[0].timeout > 300);
+  for (const ev of ['PostToolUse', 'PostToolUseFailure', 'PermissionDenied']) {
+    assert.equal(askOf(ev).matcher, 'AskUserQuestion', ev);
+    assert.ok(askOf(ev).hooks[0].timeout <= 5, ev);
+  }
 });
 
 test('script_prints_nothing_when_the_hub_is_down', () => {
@@ -112,4 +117,23 @@ test('desktop_app_sessions_ask_the_hub', async () => {
   const post = answering({ picks: [[0], [0]] }, seen);
   assert.ok(await ask(P, { host: 'h:1', waitS: 60, post, env: { CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' } }));
   assert.equal(seen.length, 1);
+});
+
+test('release_posts_session_and_lead_and_skips_subagents_and_mask', async () => {
+  const seen = [];
+  const send = async (host, route, body) => { seen.push([route, JSON.parse(body)]); return { status: 200, text: 'ok' }; };
+  assert.equal(await release({ ...P, hook_event_name: 'PostToolUse' }, { host: 'h:1', post: send, env: {} }), true);
+  assert.deepEqual(seen, [['/question/release', { session: 'abcd', agent: 'lead' }]]);
+  assert.equal(await release({ ...P, agent_id: 'sub1' }, { host: 'h:1', post: send, env: {} }), false);
+  assert.equal(await release(P, { host: 'h:1', post: send, env: { AGENTSDASH_MASK: '1' } }), false);
+  assert.equal(seen.length, 1);
+  assert.equal(await release(P, { host: 'h:1', post: async () => ({ status: 404 }), env: {} }), false, 'older core');
+});
+
+test('script_on_post_tool_use_prints_nothing', () => {
+  const r = spawnSync(process.execPath, [path.join(HERE, '..', 'scripts', 'ask.mjs')], {
+    input: JSON.stringify({ ...P, hook_event_name: 'PostToolUse' }), env: { ...process.env, AGENTSDASH_HOST: '127.0.0.1:1' }, encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
 });
