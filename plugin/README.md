@@ -84,6 +84,17 @@ down, a core older than 0.6.0 or an answer given in the terminal first: the hook
 `"permission_wait_s"` in `~/.agentsdash/config.json` sets the delay: 30 seconds by default, at most 120, `0` turns the feature off.
 `AGENTSDASH_MASK=1` sends the tool name only. The phone page is read-only and has no buttons.
 
+## Answer a question from the screen
+
+When Claude asks with `AskUserQuestion`, `scripts/ask.mjs` (a `PreToolUse` hook on that tool, next to `notify.mjs`) posts `POST /question`
+with every question and waits. The hub page shows one question at a time on the session tile: one button per option, SEND for a multi choice,
+TERMINAL to answer in the terminal instead. The last answer goes back to Claude Code as `answers` of the tool input, so the terminal never
+shows the dialog. Free text ("Other") is only in the terminal.
+While the hook waits, the terminal shows nothing: no answer before the delay, TERMINAL, a hub that is down or a core older than 0.7.0 make the
+hook print nothing, and the terminal asks the question. `"question_wait_s"` in `~/.agentsdash/config.json` sets the delay: 60 seconds by
+default, at most 300, `0` turns the feature off. Questions of sub-agents and sessions with `AGENTSDASH_MASK=1` stay in the terminal.
+Not checked yet on a real session: that the hook answer closes the dialog in a terminal session and in the desktop app.
+
 ## Where the hub comes from
 
 The hooks start the hub (the core) themselves. They look for it in this order (first match wins):
