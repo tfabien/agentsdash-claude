@@ -11,9 +11,9 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { envVar, pluginConfig, stateDir } from './common.mjs';
-import { bumpCalls, bumpIdle, readIdle, readPlan, resetIdle } from './plan_tracker.mjs';
+import { PLAN_STALE_MS, bumpCalls, bumpIdle, readIdle, readPlan, resetIdle } from './plan_tracker.mjs';
 
-export const STALE_MS = 10 * 60 * 1000;
+export const STALE_MS = PLAN_STALE_MS;
 export const NUDGE_EVERY = 8;        // tool calls without a plan change between two reminders (first one at the same count)
 export const IDLE_NUDGE_AT = 3;      // tool calls of a turn without any task list before the "create one" reminder
 export const GUARD_AFTER = 4;        // tool calls of a turn without any task list before the guard denies the next one

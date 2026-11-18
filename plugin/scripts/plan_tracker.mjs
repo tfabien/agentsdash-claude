@@ -15,6 +15,7 @@ const DESKTOP_TOOL = 'mcp__ccd_turn__update_plan';     // the desktop app's task
 const DESKTOP_WRAP_UP = 'mcp__ccd_turn__wrap_up';       // the desktop app closes the task list of a turn with it
 const LOCK_WAIT_MS = 2000;      // give up waiting for the lock after this (the event goes out without a plan update)
 const LOCK_STALE_MS = 10000;
+export const PLAN_STALE_MS = 10 * 60 * 1000;   // a plan with open steps unchanged for this long is stale
 const PLAN_MAX_AGE_MS = 6 * 3600 * 1000;    // a list untouched for this long belongs to a finished piece of work    // a lock older than this was left by a killed process
 
 const clean = (text) => tidy(text);
@@ -186,6 +187,16 @@ function dropStale(file, hook) {
   if (stale) { try { fs.unlinkSync(file); } catch { /* nothing to drop */ } }
 }
 
+/** Adds plan_stale (boolean, always present with a plan so the hub can clear it): open steps and no plan change for PLAN_STALE_MS. */
+function withStale(out, file) {
+  if (!out || !out.plan_total) return out;
+  const [tasks, , meta] = load(file);
+  let age = 0;
+  try { age = Date.now() - (meta.at ?? fs.statSync(file).mtimeMs); } catch { /* no state file: fresh */ }
+  out.plan_stale = tasks.some((t) => t.status !== 'completed') && age >= PLAN_STALE_MS;
+  return out;
+}
+
 export function update(dir, payload) {
   if (payload.agent_id) return null;                              // sub-agents' own task lists are not the session plan
   const file = statePath(dir, payload.session_id);
@@ -193,7 +204,7 @@ export function update(dir, payload) {
   const hadFile = fs.existsSync(file);
   dropStale(file, payload.hook_event_name);
   if (hadFile && !fs.existsSync(file)) return { plan_done: 0, plan_total: 0, plan_cur: '', plan_next: '', plan_items: [] };     // tell the hub to clear it
-  if (payload.hook_event_name !== 'PostToolUse' || !name) return fields(...load(file));
+  if (payload.hook_event_name !== 'PostToolUse' || !name) return withStale(fields(...load(file)), file);
   fs.mkdirSync(dir, { recursive: true });
   return withLock(file, () => {
     let [tasks, had] = load(file);
@@ -204,6 +215,6 @@ export function update(dir, payload) {
       had = had || next.length > 0;
       save(file, tasks, had);                                    // resets the "plan not updated" counter
     }
-    return fields(tasks, had);
+    return withStale(fields(tasks, had), file);
   });
 }

@@ -30,7 +30,7 @@ Payloads are read as UTF-8 (Windows defaults stdin to cp1252); text is sent whol
 `scripts/plan_tracker.mjs` rebuilds the session's task list from its task-list tool calls (PostToolUse of
 `TaskCreate`/`TaskUpdate` in the CLI, `TodoWrite`, the desktop app's `update_plan` with `items`, `advance`, `done`,
 `start`) and keeps it in `<temp>/agentsdash/plan-<session>.json`. Every lead event then carries
-`plan_done`, `plan_total`, `plan_cur` (task in progress) and `plan_next` (first pending task, titles <= 47 chars). With several tasks in progress, `plan_cur` joins their titles with " + " and `plan_state` has one character per task (`d` done, `r` running, `p` pending): the screen pulses every running segment.
+`plan_done`, `plan_total`, `plan_cur` (task in progress) and `plan_next` (first pending task, titles <= 47 chars). With several tasks in progress, `plan_cur` joins their titles with " + " and `plan_state` has one character per task (`d` done, `r` running, `p` pending): the screen pulses every running segment. `plan_stale` (boolean, sent with every plan) is true when steps are open and the plan has not changed for 10 minutes; the hub must read it to flag the tile (core change pending).
 
 `AskUserQuestion` (lead only) sends `needs_you` with `question` (<= 120 characters) and `options` (up to 4 labels joined by `|`); the screen shows them full width until the answer (`PostToolUse`).
 A create after a fully done list starts a new list. Sub-agents' own task lists are ignored.

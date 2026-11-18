@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { update as rawUpdate, statePath, fields as rawFields } from '../scripts/plan_tracker.mjs';
-const noItems = (o) => { if (o) delete o.plan_items; return o; };          // the step list is checked by the model tests
+const noItems = (o) => { if (o) { delete o.plan_items; delete o.plan_stale; } return o; };          // the step list is checked by the model tests, plan_stale by its own test
 const update = (d, p) => noItems(rawUpdate(d, p));
 const fields = (t, h) => noItems(rawFields(t, h));
 
@@ -145,4 +145,20 @@ test('stop_clears_a_finished_plan_and_keeps_an_open_one', () => {
   update(dir, upd('2', 'completed'));
   assert.deepEqual(update(dir, stop), { plan_done: 0, plan_total: 0, plan_cur: '', plan_next: '' });
   assert.equal(fs.existsSync(statePath(dir, stop.session_id)), false);
+});
+
+test('plan_stale: true once open steps sit unchanged for PLAN_STALE_MS, false after a change', () => {
+  const dir = tmp();
+  const created = rawUpdate(dir, create('A', '1'));
+  assert.equal(created.plan_stale, false);
+  const file = statePath(dir, create('A', '1').session_id);
+  const old = new Date(Date.now() - 11 * 60 * 1000);
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (data.at !== undefined) data.at = old.getTime();
+  fs.writeFileSync(file, JSON.stringify(data));
+  fs.utimesSync(file, old, old);
+  const prompt = { ...fixture('cli_create'), hook_event_name: 'UserPromptSubmit' };
+  delete prompt.tool_name;
+  assert.equal(rawUpdate(dir, prompt).plan_stale, true);
+  assert.equal(rawUpdate(dir, create('B', '2')).plan_stale, false);
 });
