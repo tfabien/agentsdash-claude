@@ -154,3 +154,22 @@ test('local_mode_replaces_a_hub_from_another_script', async () => {
 test('non_loopback_host_is_never_touched', async () => {
   assert.equal(await restartStaleHub({ host: '192.168.1.5:8765', env: {}, siblingScript: null }), false);
 });
+
+test('failed_hub_start_is_remembered_and_not_retried_for_30_s', async () => {
+  const home = tmp();
+  const hub = path.join(home, 'hub.mjs');
+  put(hub, 'process.exit(1);');                  // a hub that dies at once: /health never answers
+  const env = { AGENTSDASH_USER_HOME: home, AGENTSDASH_STATE_DIR: path.join(home, 'state') };
+  const host = `127.0.0.1:${await freePort()}`;
+  assert.equal(await postToHub('/event', { v: 2 }, { host, env, hubScript: hub }), false);
+  const stamp = path.join(home, 'state', 'hub_start_failed.stamp');
+  assert.ok(fs.existsSync(stamp), 'failure stamp written');
+  const t0 = Date.now();
+  assert.equal(await postToHub('/event', { v: 2 }, { host, env, hubScript: hub }), false);
+  assert.ok(Date.now() - t0 < 300, 'second post skips the 400 ms start wait');
+  const old = new Date(Date.now() - 60000);
+  fs.utimesSync(stamp, old, old);
+  const t1 = Date.now();
+  await postToHub('/event', { v: 2 }, { host, env, hubScript: hub });
+  assert.ok(Date.now() - t1 >= 350, 'after the backoff the start is tried again');
+});

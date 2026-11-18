@@ -14,6 +14,8 @@ const INSTALLER = path.join(HERE, 'core_install.mjs');
 const INSTALL_EVERY_S = 600;
 const UPDATE_EVERY_S = 86400;                                            // an installed core is looked up against the latest release once a day
 const SPAWN_WAIT_MS = 400;
+const SPAWN_BACKOFF_S = 30;                                              // after a start that never answered /health, do not try again for this long
+const SPAWN_FAIL_STAMP = 'hub_start_failed.stamp';
 
 const isLoopback = (host) => /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host);
 
@@ -151,9 +153,19 @@ export async function restartStaleHub({ host, env = process.env, hubScript, sibl
   } catch { return false; }
 }
 
+/** True when a hub start failed less than SPAWN_BACKOFF_S ago: the hook skips the 400 ms wait and drops the event. */
+export function startFailedRecently(env = process.env, now = Date.now()) {
+  try { return now - fs.statSync(path.join(stateDir(env), SPAWN_FAIL_STAMP)).mtimeMs < SPAWN_BACKOFF_S * 1000; } catch { return false; }
+}
+function markStartFailed(env) {
+  try { const dir = stateDir(env); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, SPAWN_FAIL_STAMP), String(Date.now())); } catch { /* no backoff then */ }
+}
+function clearStartFailure(env) { try { fs.unlinkSync(path.join(stateDir(env), SPAWN_FAIL_STAMP)); } catch { /* none */ } }
+
 /**
  * POST `body` (object) to http://<host><route>. When the hub is not running (connection refused) and the host is
- * this machine, start it detached, wait up to 400 ms for /health and retry once.
+ * this machine, start it detached, wait up to 400 ms for /health and retry once;
+ * when that start fails, later posts skip it for 30 s (hub_start_failed.stamp).
  * @returns {Promise<boolean>} true when the hub accepted it.
  */
 export async function postToHub(route, body, { host, timeoutMs = 1500, spawnHub: allowSpawn = true, hubScript, env = process.env, siblingScript, spawnFn } = {}) {
@@ -161,11 +173,12 @@ export async function postToHub(route, body, { host, timeoutMs = 1500, spawnHub:
     const deadline = Date.now() + timeoutMs;
     const data = JSON.stringify(body);
     let r = await tryPost(host, route, data, deadline);
-    if (!r.ok && r.refused && allowSpawn && isLoopback(host)) {
+    if (!r.ok && r.refused && allowSpawn && isLoopback(host) && !startFailedRecently(env)) {
       const core = findCore({ env, hubScript, ...(siblingScript === undefined ? {} : { siblingScript }) });
       if (core) {
         spawnHub(core.script);
-        if (await waitForHealth(host, Math.min(deadline, Date.now() + SPAWN_WAIT_MS))) r = await tryPost(host, route, data, deadline);
+        if (await waitForHealth(host, Math.min(deadline, Date.now() + SPAWN_WAIT_MS))) { r = await tryPost(host, route, data, deadline); clearStartFailure(env); }
+        else markStartFailed(env);
       } else maybeStartInstaller({ dir: stateDir(env), now: Date.now() / 1000, env, ...(spawnFn ? { spawnFn } : {}) });   // no core yet: download one, this event is dropped
     }
     if (r.ok && allowSpawn && isLoopback(host)) maybeStartUpdate({ env, hubScript, siblingScript, spawnFn });

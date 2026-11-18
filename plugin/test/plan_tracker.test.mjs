@@ -126,6 +126,15 @@ test('stale_lock_from_a_killed_process_is_removed', () => {
   assert.equal(fs.existsSync(lock), false);
 });
 
+test('held_lock_delays_the_update_by_less_than_half_a_second', () => {
+  const dir = tmp();
+  const p = create('A', '1');
+  fs.writeFileSync(`${statePath(dir, p.session_id)}.lock`, '');      // a fresh lock that nobody releases
+  const t0 = Date.now();
+  assert.equal(update(dir, p).plan_total, 1);
+  assert.ok(Date.now() - t0 < 500);
+});
+
 test('two_running_steps_send_per_task_states', () => {
   const tasks = [['A', 'completed'], ['B', 'in_progress'], ['C', 'in_progress'], ['D', 'pending']].map(([title, status]) => ({ title, status }));
   const out = fields(tasks, true);
