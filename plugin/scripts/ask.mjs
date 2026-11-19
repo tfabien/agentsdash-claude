@@ -6,7 +6,7 @@
  * questions to http://<host>/question and waits (the hub holds the response until the page answers, TERMINAL, or a delay).
  * The hub returns option indexes; this script maps them back to the labels and question texts it received and prints the
  * decision "allow" with updatedInput = the whole tool input plus `answers` (question text -> label, multi-select labels joined
- * with ", "). Anything else (hub down, a core older than 0.7.0, no answer, TERMINAL, garbled answer) prints nothing and exits 0:
+ * with ", "). Anything else (hub down, a core older than 0.7.0, no answer, an empty text, TERMINAL, garbled answer) prints nothing and exits 0:
  * the question stays in the terminal or the app.
  * On PostToolUse, PostToolUseFailure and PermissionDenied of AskUserQuestion (answered or cancelled there), it posts
  * /question/release so the tile drops its buttons at once (a core older than 0.7.5 answers 404: the tile lets go at the end of the turn).
@@ -57,6 +57,11 @@ export function answersFor(questions, picks) {
   const answers = {};
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i], p = picks[i];
+    if (typeof p === 'string') {                  // a free text typed on the page (core 0.9.0, setting question_free_text): the answer as is
+      if (!p.trim()) return null;
+      answers[q.question] = p.trim();
+      continue;
+    }
     if (!Array.isArray(p) || p.length < 1 || (q.multiSelect !== true && p.length !== 1)) return null;
     if (!p.every((k) => Number.isInteger(k) && k >= 0 && k < q.options.length)) return null;
     answers[q.question] = [...new Set(p)].sort((a, b) => a - b).map((k) => q.options[k].label).join(', ');

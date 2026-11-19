@@ -137,3 +137,8 @@ test('script_on_post_tool_use_prints_nothing', () => {
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
 });
+
+test('answersFor_takes_a_free_text_pick_as_the_answer', () => {
+  assert.deepEqual(answersFor(INPUT.questions, ['  my own  ', [0, 1]]), { 'Which framework?': 'my own', 'Which targets?': 'Web, iOS' });
+  assert.equal(answersFor(INPUT.questions, ['   ', [0]]), null);
+});
